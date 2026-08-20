@@ -20,6 +20,8 @@
   --cm-comment-bg: #fffbe6;
   --cm-comment-marker: #c08a00;
   --cm-search-bg: rgba(255, 210, 0, 0.35);
+  --cm-header-current-bg: #e8e8e8;
+  --cm-header-active-bg: #d4e2fb;
   --cm-notification-accent: #3478f6;
   --cm-loading-bg: rgba(255, 255, 255, 0.72);
   --cm-diff-changed-bg: rgba(255, 196, 0, 0.18);
@@ -184,6 +186,23 @@
   background: var(--cm-cell-bg);
   color: var(--cm-header-fg);
   cursor: pointer;
+}
+
+/* Text that does not fit, cut with an ellipsis rather than wrapped. */
+.cm-grid .cm-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A header the selection passes through, and one whose whole line is selected. */
+.cm-grid .ht__highlight {
+  background: var(--cm-header-current-bg);
+}
+
+.cm-grid .ht__active_highlight {
+  background: var(--cm-header-active-bg);
+  font-weight: 600;
 }
 
 /* The pop-up menu, shared by the context menu and the dropdown menu. */
@@ -636,6 +655,8 @@
     --cm-comment-bg: #2b2b1f;
     --cm-comment-marker: #d0a000;
     --cm-search-bg: rgba(255, 210, 0, 0.22);
+    --cm-header-current-bg: #333;
+    --cm-header-active-bg: #2a3f63;
     --cm-notification-accent: #5a96ff;
     --cm-loading-bg: rgba(26, 26, 26, 0.72);
     --cm-diff-changed-bg: rgba(255, 196, 0, 0.14);

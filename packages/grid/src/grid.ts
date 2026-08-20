@@ -45,6 +45,14 @@ import { SizeMap } from './sizes.js';
 import { View } from './view.js';
 import type { CellRenderContext, ColHeaderCell } from './view.js';
 
+/**
+ * How far beyond the viewport the grid draws when nothing says otherwise.
+ *
+ * Three rows and columns is enough that a scroll does not show a blank seam
+ * before the next frame, and few enough that it is not worth measuring.
+ */
+const DEFAULT_OVERSCAN = 3;
+
 /** How the grid was told to change something, for the `afterChange` hook. */
 export type ChangeSource =
   | 'edit'
@@ -94,6 +102,8 @@ export class Grid {
   #editing: Coords | null = null;
   #invalid = new CellSet();
   #listening = true;
+  /** Listeners on things the grid does not own, so `destroy` can take them off. */
+  #listeners: Array<() => void> = [];
   #plugins = new Map<string, BasePlugin>();
   /**
    * Columns and rows whose size a person chose.
@@ -643,6 +653,30 @@ export class Grid {
   }
 
   /**
+   * How wide the row-header area is, in pixels.
+   *
+   * An array configures one width per header *column*. This grid draws a single
+   * row-header column, so an array is read as the total width it should take —
+   * which keeps a layout sized for several of them from collapsing.
+   */
+  getRowHeaderWidth(): number {
+    const setting = this.getSettings().rowHeaderWidth;
+    if (Array.isArray(setting)) {
+      return setting.reduce((total, width) => total + (width ?? 0), 0) || DEFAULT_ROW_HEADER_WIDTH;
+    }
+    return typeof setting === 'number' ? setting : DEFAULT_ROW_HEADER_WIDTH;
+  }
+
+  /** How tall one level of the column header is. */
+  getColHeaderHeight(level = 0): number {
+    const setting = this.getSettings().columnHeaderHeight;
+    if (Array.isArray(setting)) {
+      return setting[level] ?? DEFAULT_ROW_HEIGHT;
+    }
+    return typeof setting === 'number' ? setting : DEFAULT_ROW_HEIGHT;
+  }
+
+  /**
    * Whether a row is hidden — present in the data but not drawn.
    *
    * Hidden is not the same as trimmed: a hidden row still counts, still holds
@@ -739,6 +773,12 @@ export class Grid {
   }
 
   deselectCell(): void {
+    // Nothing selected is already the answer. Redrawing anyway would be free
+    // for one grid and quadratic for a page holding several, since a click
+    // anywhere reaches every one of them.
+    if (this.#selection.isEmpty) {
+      return;
+    }
     this.#selection.clear();
     this.hooks.run('afterDeselect', undefined);
     this.render();
@@ -943,6 +983,10 @@ export class Grid {
       plugin.destroy();
     }
     this.#plugins.clear();
+    for (const remove of this.#listeners) {
+      remove();
+    }
+    this.#listeners = [];
     this.#view?.destroy();
     this.#view = null;
     this.#destroyed = true;
@@ -1013,7 +1057,9 @@ export class Grid {
   }
 
   #applySizeSettings(settings: GridSettings): void {
-    const { colWidths, rowHeights } = settings;
+    const { colWidths } = settings;
+    // `minRowHeights` is Handsontable's alias for `rowHeights`, not a floor.
+    const rowHeights = settings.rowHeights ?? settings.minRowHeights;
     if (typeof colWidths === 'number') {
       this.#colSizes.defaultSize = colWidths;
     } else if (Array.isArray(colWidths)) {
@@ -1309,7 +1355,10 @@ export class Grid {
   }
 
   #commitEditor(value: string, moveBy?: Coords): void {
-    this.closeEditor(true, moveBy ?? { row: 1, col: 0 });
+    // Where Enter goes after a commit is `enterMoves`, the same setting that
+    // decides where it goes when it is not editing.
+    const step = (this.getSettings().enterMoves as Coords | undefined) ?? { row: 1, col: 0 };
+    this.closeEditor(true, moveBy ?? step);
   }
 
   /** Where to put the editor, in the view's coordinates. */
@@ -1539,11 +1588,28 @@ export class Grid {
       return;
     }
     if (this.getSettings().enterBeginsEditing === false) {
-      this.#selection.moveBy(shift ? -1 : 1, 0);
-      this.#afterSelection();
+      this.#moveAfterEnter(shift);
       return;
     }
     this.beginEditing(highlight.row, highlight.col);
+  }
+
+  /**
+   * Where Enter goes.
+   *
+   * `enterMoves` is a step rather than a direction, so Enter can be made to
+   * walk across a row instead of down a column — which is how someone entering
+   * a wide record types it in one pass. Shift reverses it.
+   */
+  #moveAfterEnter(shift: boolean): void {
+    const step = (this.getSettings().enterMoves as Coords | undefined) ?? { row: 1, col: 0 };
+    const direction = shift ? -1 : 1;
+    this.#selection.moveBy(
+      step.row * direction,
+      step.col * direction,
+      this.getSettings().autoWrapCol === true,
+    );
+    this.#afterSelection();
   }
 
   /**
@@ -1634,6 +1700,43 @@ export class Grid {
         this.beginEditing(coords.row, coords.col);
       }
     });
+
+    // Clicking away drops the selection, unless the page says otherwise. A
+    // grid inside a form usually wants to keep it: the click that moved focus
+    // to a field next to the grid should not lose the cell being worked on.
+    this.#onDocument('mousedown', (event: Event) => {
+      const target = event.target as HTMLElement | null;
+      // The path as it was when the event was dispatched, not where the nodes
+      // are now: selecting a cell redraws the table, so by the time the event
+      // reaches the document the cell that was clicked has been replaced and
+      // `contains` would call every click an outside click.
+      const path = event.composedPath?.() ?? [];
+      const inside = path.includes(view.wrapper) || (target !== null && view.wrapper.contains(target));
+      if (!this.#listening || !target || inside) {
+        return;
+      }
+      const setting = this.getSettings().outsideClickDeselects;
+      const deselects = typeof setting === 'function' ? setting(target) : setting !== false;
+      if (deselects) {
+        this.deselectCell();
+      }
+    });
+  }
+
+  /**
+   * Registers a listener on the page, removed when the grid is destroyed.
+   *
+   * Anything outside the grid's own elements has to be unhooked by hand: the
+   * page outlives the grid, so a listener left on it keeps a destroyed grid
+   * alive and answering.
+   */
+  #onDocument(type: string, handler: (event: Event) => void): void {
+    const target = this.#view?.root.ownerDocument;
+    if (!target) {
+      return;
+    }
+    target.addEventListener(type, handler);
+    this.#listeners.push(() => target.removeEventListener(type, handler));
   }
 
   /**
@@ -1667,13 +1770,25 @@ export class Grid {
         0,
       rowHeader: (row) => (this.hasRowHeaders() ? this.getRowHeader(row) : null),
       colHeaderRows: (firstCol, lastCol) => this.getColHeaderRows(firstCol, lastCol),
-      rowHeaderWidth: () => (this.hasRowHeaders() ? DEFAULT_ROW_HEADER_WIDTH : 0),
-      colHeaderHeight: () =>
-        this.hasColHeaders() ? DEFAULT_ROW_HEIGHT * this.countColHeaderLevels() : 0,
+      rowHeaderWidth: () => (this.hasRowHeaders() ? this.getRowHeaderWidth() : 0),
+      colHeaderHeight: () => {
+        if (!this.hasColHeaders()) {
+          return 0;
+        }
+        let total = 0;
+        for (let level = 0; level < this.countColHeaderLevels(); level += 1) {
+          total += this.getColHeaderHeight(level);
+        }
+        return total;
+      },
+      colHeaderLevelHeight: (level) =>
+        this.hasColHeaders() ? this.getColHeaderHeight(level) : 0,
       renderColHeader: (th, cell) => {
+        this.#markHeader(th, { col: cell.col });
         this.hooks.run('afterGetColHeader', undefined, cell.col, th, cell.level);
       },
       renderRowHeader: (th, row) => {
+        this.#markHeader(th, { row });
         this.hooks.run('afterGetRowHeader', undefined, row, th);
       },
       ariaTags: () => this.getSettings().ariaTags !== false,
@@ -1682,6 +1797,28 @@ export class Grid {
         (this.getSettings().themeName as string | undefined) ??
         (this.getSettings().theme as string | undefined) ??
         null,
+      tableClassName: () => {
+        const setting = this.getSettings().tableClassName;
+        if (Array.isArray(setting)) {
+          return setting;
+        }
+        return typeof setting === 'string' ? setting.split(/\s+/).filter(Boolean) : [];
+      },
+      size: () => {
+        const { width, height, preventOverflow } = this.getSettings();
+        // A bare number is pixels; anything else is CSS as written, so `75%`
+        // and `50vh` work without the grid having to understand them.
+        const css = (value: unknown): string | null =>
+          typeof value === 'number' ? `${value}px` : typeof value === 'string' ? value : null;
+        return {
+          width: css(width),
+          height: css(height),
+          preventOverflow:
+            preventOverflow === 'horizontal' || preventOverflow === 'vertical'
+              ? preventOverflow
+              : false,
+        };
+      },
       prepare: (startRow, endRow, startCol, endCol) => {
         this.#ensureVisible(startRow, endRow, startCol, endCol);
         // The one point where the window about to be drawn is known. A plugin
@@ -1695,15 +1832,96 @@ export class Grid {
         });
       },
       renderCell: (context) => this.#renderCell(context),
-      overscan: () => 3,
+      overscan: () => ({
+        rows: this.#overscanOf('row'),
+        cols: this.#overscanOf('column'),
+      }),
     });
     this.#view.layout.setOrder((this.getSettings().layout as LayoutSettings | undefined) ?? {});
     this.render();
   }
 
+  /**
+   * Which layers of the selection are drawn.
+   *
+   * Handsontable names three — the focused cell, the range around it, the
+   * headers — and lets any of them be switched off. They are separate because
+   * they answer different questions: where am I, what have I got, and which
+   * column is that.
+   */
+  #showsSelection(layer: 'current' | 'area' | 'header'): boolean {
+    const setting = this.getSettings().disableVisualSelection;
+    if (setting === true) {
+      return false;
+    }
+    if (setting === false || setting === undefined) {
+      return true;
+    }
+    const off = Array.isArray(setting) ? setting : [setting];
+    return !off.includes(layer);
+  }
+
+  /**
+   * Puts the highlight classes on a header.
+   *
+   * *Current* is the header the selection passes through; *active* is one whose
+   * whole row or column is selected. They are different states and Handsontable
+   * gives them different classes, because "the selection is somewhere in this
+   * column" and "this column is selected" mean different things to a reader.
+   */
+  #markHeader(th: HTMLTableCellElement, at: { row?: number; col?: number }): void {
+    const settings = this.getSettings();
+    const highlight = this.#selection.highlight;
+    if (!highlight) {
+      return;
+    }
+    if (!this.#showsSelection('header')) {
+      return;
+    }
+    const isCurrent = at.col !== undefined ? highlight.col === at.col : highlight.row === at.row;
+    if (isCurrent) {
+      th.classList.add(String(settings.currentHeaderClassName ?? 'ht__highlight'));
+    }
+    const whole =
+      at.col !== undefined
+        ? this.#selection.isColumnSelected(at.col)
+        : this.#selection.isRowSelected(at.row ?? -1);
+    if (whole) {
+      th.classList.add(String(settings.activeHeaderClassName ?? 'ht__active_highlight'));
+    }
+    const extra = settings.headerClassName;
+    if (extra) {
+      for (const name of String(extra).split(/\s+/).filter(Boolean)) {
+        th.classList.add(name);
+      }
+    }
+  }
+
+  /**
+   * How far beyond the viewport to draw, on one axis.
+   *
+   * `renderAll*` turns virtualization off outright. Otherwise `auto` is a small
+   * fixed margin — enough to hide the seam while scrolling and not so much that
+   * a wide grid draws columns nobody will look at.
+   */
+  #overscanOf(axis: 'row' | 'column'): number | 'all' {
+    const settings = this.getSettings();
+    const all = axis === 'row' ? settings.renderAllRows : settings.renderAllColumns;
+    if (all === true) {
+      return 'all';
+    }
+    const offset =
+      axis === 'row' ? settings.viewportRowRenderingOffset : settings.viewportColumnRenderingOffset;
+    if (offset === 'auto' || offset === undefined) {
+      return DEFAULT_OVERSCAN;
+    }
+    return typeof offset === 'number' ? Math.max(offset, 0) : DEFAULT_OVERSCAN;
+  }
+
   /** Fills in one cell of the view. */
   #renderCell(context: CellRenderContext): void {
     const { row, col, td } = context;
+    const settings = this.getSettings();
     const meta = this.getCellMeta(row, col);
     const cell = this.getCell(row, col);
 
@@ -1729,12 +1947,28 @@ export class Grid {
     if (this.#invalid.has(row, col)) {
       td.classList.add(String(meta.invalidCellClassName ?? 'htInvalid'));
     }
-    if (this.#selection.includes({ row, col })) {
+    if (this.#showsSelection('area') && this.#selection.includes({ row, col })) {
       td.classList.add('cm-selected');
     }
     const highlight = this.#selection.highlight;
-    if (highlight && highlight.row === row && highlight.col === col) {
-      td.classList.add('cm-current');
+    if (highlight) {
+      if (this.#showsSelection('current') && highlight.row === row && highlight.col === col) {
+        td.classList.add('cm-current');
+      }
+      // Whole-row and whole-column highlighting, off unless a class is named:
+      // marking every cell of the row costs a class per cell, so it happens
+      // only when someone asked for it.
+      const rowClass = settings.currentRowClassName;
+      if (rowClass && highlight.row === row) {
+        td.classList.add(String(rowClass));
+      }
+      const colClass = settings.currentColClassName;
+      if (colClass && highlight.col === col) {
+        td.classList.add(String(colClass));
+      }
+    }
+    if (settings.textEllipsis) {
+      td.classList.add('cm-ellipsis');
     }
     this.hooks.run('afterRenderer', undefined, td, row, col, cell, meta);
   }

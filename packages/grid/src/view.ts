@@ -62,7 +62,10 @@ export interface ViewModel {
    */
   colHeaderRows(firstCol: number, lastCol: number): ColHeaderCell[][];
   rowHeaderWidth(): number;
+  /** The whole column-header area, however many levels deep it is. */
   colHeaderHeight(): number;
+  /** One level of it, so a nested header can give its rows different heights. */
+  colHeaderLevelHeight?(level: number): number;
   /** Called after a header cell is built, so a plugin can decorate it. */
   renderColHeader?(th: HTMLTableCellElement, cell: ColHeaderCell): void;
   /** The same for a row header. */
@@ -79,13 +82,32 @@ export interface ViewModel {
   direction?(): 'ltr' | 'rtl';
   /** A theme name, applied as a class on the root. */
   themeName?(): string | null;
+  /** Extra class names for the grid's own elements. */
+  tableClassName?(): string[];
+  /**
+   * The size the grid should take, as CSS.
+   *
+   * `null` means "whatever the container is", which is the default and the only
+   * thing that works when the page decides the layout.
+   */
+  size?(): { width: string | null; height: string | null; preventOverflow: 'horizontal' | 'vertical' | false };
   /** Called before drawing, so the data for the window can be fetched. */
   prepare(startRow: number, endRow: number, startCol: number, endCol: number): void;
   /** Fills in one cell. */
   renderCell(context: CellRenderContext): void;
   /** Extra rows and columns to draw beyond the viewport, to smooth scrolling. */
-  overscan(): number;
+  /**
+   * How many rows and columns to draw beyond the viewport.
+   *
+   * `all` draws every one there is — which is what a page that wants to print
+   * the grid, or search it with the browser's own find, has to have, and what
+   * makes a large grid unusable if switched on by accident.
+   */
+  overscan(): { rows: number | 'all'; cols: number | 'all' };
 }
+
+/** Marks a class as one the settings put there, so a later change can take it off. */
+const CUSTOM_CLASS_MARK = 'cm-custom-';
 
 /** Which pane an element belongs to. */
 type PaneName = 'main' | 'top' | 'left' | 'corner';
@@ -265,10 +287,18 @@ export class View {
     const rowRange = rows.rangeAt(this.scroller.scrollTop + frozenHeight, viewHeight);
     const colRange = cols.rangeAt(this.scroller.scrollLeft + frozenWidth, viewWidth);
 
-    const firstRow = Math.max(rowRange.first - overscan, fixedRows);
-    const lastRow = Math.min(rowRange.last + overscan, this.#model.rowCount() - 1);
-    const firstCol = Math.max(colRange.first - overscan, fixedCols);
-    const lastCol = Math.min(colRange.last + overscan, this.#model.colCount() - 1);
+    const firstRow =
+      overscan.rows === 'all' ? fixedRows : Math.max(rowRange.first - overscan.rows, fixedRows);
+    const lastRow =
+      overscan.rows === 'all'
+        ? this.#model.rowCount() - 1
+        : Math.min(rowRange.last + overscan.rows, this.#model.rowCount() - 1);
+    const firstCol =
+      overscan.cols === 'all' ? fixedCols : Math.max(colRange.first - overscan.cols, fixedCols);
+    const lastCol =
+      overscan.cols === 'all'
+        ? this.#model.colCount() - 1
+        : Math.min(colRange.last + overscan.cols, this.#model.colCount() - 1);
 
     this.#viewport = { firstRow, lastRow, firstCol, lastCol };
 
@@ -402,7 +432,9 @@ export class View {
       const levels = this.#model.colHeaderRows(firstCol, lastCol);
       levels.forEach((cells, level) => {
         const tr = this.#element('tr', CLASS.header) as unknown as HTMLTableRowElement;
-        tr.style.height = `${headerHeight / Math.max(levels.length, 1)}px`;
+        tr.style.height = `${
+          this.#model.colHeaderLevelHeight?.(level) ?? headerHeight / Math.max(levels.length, 1)
+        }px`;
         tr.dataset.level = String(level);
         if (this.#model.ariaTags?.() !== false) {
           tr.setAttribute('role', 'row');
@@ -501,6 +533,7 @@ export class View {
    * three are settings and settings change.
    */
   #applyChrome(): void {
+    this.#applySize();
     const direction = this.#model.direction?.() ?? 'ltr';
     this.root.dir = direction;
     this.root.classList.toggle(`${CLASS.root}--rtl`, direction === 'rtl');
@@ -514,6 +547,17 @@ export class View {
     if (theme) {
       this.root.classList.add(`cm-theme-${theme}`);
     }
+    // A marker class records which classes came from the settings, so changing
+    // the setting takes exactly those off again and leaves the grid's own —
+    // and anything the page added itself — alone.
+    for (const existing of [...this.root.classList]) {
+      if (existing.startsWith(CUSTOM_CLASS_MARK)) {
+        this.root.classList.remove(existing, existing.slice(CUSTOM_CLASS_MARK.length));
+      }
+    }
+    for (const name of this.#model.tableClassName?.() ?? []) {
+      this.root.classList.add(name, `${CUSTOM_CLASS_MARK}${name}`);
+    }
     if (this.#model.ariaTags?.() !== false) {
       this.root.setAttribute('role', 'grid');
       this.root.setAttribute('aria-rowcount', String(this.#model.rowCount()));
@@ -522,6 +566,31 @@ export class View {
       this.root.removeAttribute('role');
       this.root.removeAttribute('aria-rowcount');
       this.root.removeAttribute('aria-colcount');
+    }
+  }
+
+  /**
+   * Sizes the wrapper from the settings.
+   *
+   * Unset means the container decides, which is what a page laying the grid out
+   * with CSS expects. `preventOverflow` caps the grid at its parent instead, for
+   * a parent that has a size of its own and means it.
+   */
+  #applySize(): void {
+    const size = this.#model.size?.();
+    if (!size || !this.wrapper) {
+      return;
+    }
+    this.wrapper.style.width = size.width ?? '';
+    this.wrapper.style.height = size.height ?? '';
+    const parent = this.wrapper.parentElement;
+    if (size.preventOverflow && parent) {
+      const limit = size.preventOverflow === 'horizontal' ? 'maxWidth' : 'maxHeight';
+      const from = size.preventOverflow === 'horizontal' ? parent.clientWidth : parent.clientHeight;
+      this.wrapper.style[limit] = `${from}px`;
+    } else {
+      this.wrapper.style.maxWidth = '';
+      this.wrapper.style.maxHeight = '';
     }
   }
 

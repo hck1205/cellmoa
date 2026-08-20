@@ -182,7 +182,7 @@ export interface GridSettings {
   enterBeginsEditing?: boolean;
   enterMoves?: Coords | ((event: KeyboardEvent) => Coords);
   tabMoves?: Coords | ((event: KeyboardEvent) => Coords);
-  outsideClickDeselects?: boolean;
+  outsideClickDeselects?: boolean | ((target: HTMLElement) => boolean);
   selectionMode?: 'single' | 'range' | 'multiple';
   disableVisualSelection?: boolean | string | string[];
   fragmentSelection?: boolean | 'cell';
@@ -254,6 +254,8 @@ export interface GridSettings {
   themeName?: string;
   theme?: string;
   tableClassName?: string | string[];
+  /** Caps the grid at its parent's size in one direction. */
+  preventOverflow?: 'horizontal' | 'vertical' | false;
   currentRowClassName?: string;
   currentColClassName?: string;
   currentHeaderClassName?: string;
@@ -264,7 +266,7 @@ export interface GridSettings {
   placeholderCellClassName?: string;
   noWordWrapClassName?: string;
   headerClassName?: string;
-  textEllipsis?: number;
+  textEllipsis?: boolean;
 
   // --- internationalisation ---------------------------------------------
   language?: string;
