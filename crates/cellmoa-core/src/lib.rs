@@ -7,8 +7,10 @@
 //! replay features further up the stack can rely on it.
 
 pub mod edit;
+pub mod fingerprint;
 pub mod model;
 pub mod reference;
+pub mod sha256;
 pub mod value;
 
 pub use edit::{Actor, ActorKind, Commit, CommitKind, Document, EditError, Op};
