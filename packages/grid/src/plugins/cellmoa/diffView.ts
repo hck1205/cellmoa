@@ -9,6 +9,7 @@
  * Handsontable has no counterpart.
  */
 
+import { CellMap } from '../../cellMap.js';
 import { parseA1 } from '../../dataSource.js';
 import { BasePlugin, registerPlugin } from '../base.js';
 
@@ -51,7 +52,7 @@ export class DiffView extends BasePlugin {
   static override readonly pluginName: string = 'diffView';
 
   #changes: Change[] = [];
-  #byCell = new Map<string, Change>();
+  #byCell = new CellMap<Change>();
   #against: string | null = null;
 
   override isEnabled(): boolean {
@@ -62,7 +63,7 @@ export class DiffView extends BasePlugin {
     this.addHook(
       'afterRenderer',
       (_value: unknown, td: HTMLTableCellElement, row: number, col: number) => {
-        const change = this.#byCell.get(`${row}:${col}`);
+        const change = this.#byCell.get(row, col);
         if (!change) {
           return;
         }
@@ -106,7 +107,7 @@ export class DiffView extends BasePlugin {
         // rather than one per cell — which is the point of diffing on rows —
         // but on screen every cell in it is new.
         for (let col = 0; col < this.grid.countCols(); col += 1) {
-          this.#byCell.set(`${change.row}:${col}`, {
+          this.#byCell.set(change.row, col, {
             ...change,
             before: { value: '', present: false },
           });
@@ -115,7 +116,7 @@ export class DiffView extends BasePlugin {
       }
       const position = change.cell ? parseA1(change.cell) : null;
       if (position) {
-        this.#byCell.set(`${position.row}:${position.col}`, change);
+        this.#byCell.set(position.row, position.col, change);
       }
     }
     this.grid.render();
@@ -144,7 +145,7 @@ export class DiffView extends BasePlugin {
 
   /** The change at a cell, or `null`. */
   changeAt(row: number, col: number): Change | null {
-    return this.#byCell.get(`${row}:${col}`) ?? null;
+    return this.#byCell.get(row, col) ?? null;
   }
 
   /** Takes the marks off. */

@@ -59,3 +59,4 @@ export * from './dataProvider.js';
 
 // The features with no Handsontable counterpart, listed apart.
 export * from './cellmoa/index.js';
+export * from './ownedIndexes.js';

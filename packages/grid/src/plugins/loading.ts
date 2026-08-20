@@ -61,7 +61,10 @@ export class Loading extends BasePlugin {
       const text = doc.createElement('div');
       text.className = 'cm-loading-message';
       element.appendChild(text);
-      view.root.appendChild(element);
+      // The overlay layer, so the cover reaches the slots too — a pager you
+      // can still click while the grid is loading is a pager that will ask for
+      // a page nobody is waiting for.
+      view.overlay.appendChild(element);
       this.#element = element;
     }
     this.update(options);

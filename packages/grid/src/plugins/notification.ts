@@ -52,7 +52,7 @@ export class Notification extends BasePlugin {
     this.hide(id);
 
     const doc = view.root.ownerDocument;
-    const container = this.#ensureContainer(doc, view.root);
+    const container = this.#ensureContainer(doc, view.overlay);
     const element = doc.createElement('div');
     element.className = `cm-notification cm-notification--${options.type ?? 'info'}`;
     element.dataset['id'] = id;
@@ -111,11 +111,11 @@ export class Notification extends BasePlugin {
     return this.#shown.size;
   }
 
-  #ensureContainer(doc: Document, root: HTMLElement): HTMLElement {
+  #ensureContainer(doc: Document, overlay: HTMLElement): HTMLElement {
     if (!this.#container) {
       this.#container = doc.createElement('div');
       this.#container.className = 'cm-notifications';
-      root.appendChild(this.#container);
+      overlay.appendChild(this.#container);
     }
     return this.#container;
   }

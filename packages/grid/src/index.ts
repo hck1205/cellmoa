@@ -18,7 +18,15 @@ export type { PluginConstructor } from './plugins/base.js';
 export * from './plugins/index.js';
 export type { CellChange, ChangeSource, GridOptions } from './grid.js';
 
-export { DataSource, WriteConflict, cellRef, columnLetters, lettersToColumn, rangeRef } from './dataSource.js';
+export {
+  DataSource,
+  WriteConflict,
+  cellRef,
+  columnLetters,
+  lettersToColumn,
+  parseA1,
+  rangeRef,
+} from './dataSource.js';
 export type { Actor, AlterAction, Edit, SheetInfo, Window } from './dataSource.js';
 
 export { Hooks, EXTRA_HOOK_NAMES, HOOK_NAMES, isHookName } from './hooks.js';
@@ -81,6 +89,7 @@ export type { CellRenderContext, ColHeaderCell, ViewModel, Viewport } from './vi
 export { Menu, SEPARATOR, resolve } from './menu.js';
 export type { MenuHost, MenuItem, MenuSelection } from './menu.js';
 
+export { CellMap, CellSet } from './cellMap.js';
 export { LayoutManager, SLOT_ELEMENT_CLASS } from './layout.js';
 export type { LayoutSettings, SlotOptions, SlotSide } from './layout.js';
 

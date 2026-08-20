@@ -331,13 +331,9 @@ impl Session {
         let result = self.engine.apply_labeled(who.actor(), edits, revision, label, None);
         match result {
             Ok(()) => self.ok(json!({ "written": cells.len() })),
-            Err(EditError::RevisionConflict { expected, actual }) => Response::error_with(
-                "revision_conflict",
-                format!(
-                    "this edit was made against revision {expected}, but the workbook is at {actual}"
-                ),
-                json!({ "expected": expected, "revision": actual }),
-            ),
+            Err(EditError::RevisionConflict { expected, actual }) => {
+                Response::conflict(expected, actual)
+            }
             Err(e) => Response::error("cannot_write", e.to_string()),
         }
     }
@@ -399,14 +395,7 @@ impl Session {
         match self.engine.alter(who.actor(), change, revision, label) {
             Ok(()) => self.ok(json!({ "altered": true })),
             Err(AlterError::Edit(EditError::RevisionConflict { expected, actual })) => {
-                Response::error_with(
-                    "revision_conflict",
-                    format!(
-                        "this edit was made against revision {expected}, \
-                         but the workbook is at {actual}"
-                    ),
-                    json!({ "expected": expected, "revision": actual }),
-                )
+                Response::conflict(expected, actual)
             }
             Err(e) => Response::error("cannot_alter", e.to_string()),
         }

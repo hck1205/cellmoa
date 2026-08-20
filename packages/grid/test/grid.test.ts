@@ -228,10 +228,24 @@ describe('the grid', () => {
   it('destroys cleanly and stays destroyed', () => {
     grid.destroy();
     expect(grid.isDestroyed()).toBe(true);
-    expect(container.querySelector('.cm-grid')).toBeNull();
+    // Everything, not merely the table: the slots around it and whatever a
+    // plugin put in them go too, or the page keeps a status bar for a grid
+    // that no longer exists.
+    expect(container.innerHTML).toBe('');
     // Further calls are no-ops rather than crashes.
     grid.setDataAtCell(0, 0, 'x');
     grid.destroy();
+  });
+
+  it('takes the things around the grid with it', async () => {
+    const mounted = await mountGrid({
+      startRows: 6,
+      statusBar: true,
+      pagination: { pageSize: 2 },
+    });
+    expect(mounted.container.querySelector('.cm-status-bar')).not.toBeNull();
+    mounted.grid.destroy();
+    expect(mounted.container.innerHTML).toBe('');
   });
 });
 

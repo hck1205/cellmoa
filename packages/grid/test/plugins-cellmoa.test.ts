@@ -102,7 +102,7 @@ describe('revision conflicts', () => {
     grid.hooks.run('afterRevisionConflict', undefined, 7);
 
     expect(plugin.getRefusals().map((r) => r.revision)).toEqual([7]);
-    const notifications = grid.view?.root.querySelectorAll('.cm-notification');
+    const notifications = grid.view?.wrapper.querySelectorAll('.cm-notification');
     expect(notifications).toHaveLength(1);
     expect(notifications?.[0]?.textContent).toContain('revision 7');
   });
@@ -110,7 +110,7 @@ describe('revision conflicts', () => {
   it('stays quiet when it was asked to', async () => {
     const grid = await makeGrid({ conflicts: { notify: false }, notification: true });
     grid.hooks.run('afterRevisionConflict', undefined, 3);
-    expect(grid.view?.root.querySelectorAll('.cm-notification')).toHaveLength(0);
+    expect(grid.view?.wrapper.querySelectorAll('.cm-notification')).toHaveLength(0);
     // Still recorded, though: silence is about the message, not the fact.
     expect((grid.getPlugin('conflicts') as unknown as Conflicts).getRefusals()).toHaveLength(1);
   });

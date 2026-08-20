@@ -9,6 +9,7 @@
  * Handsontable has no counterpart for this.
  */
 
+import { CellMap } from '../../cellMap.js';
 import { BasePlugin, registerPlugin } from '../base.js';
 
 /** One entry in a cell's history, as the engine reports it. */
@@ -35,7 +36,7 @@ export class Provenance extends BasePlugin {
   static override readonly pluginName: string = 'provenance';
 
   /** Who last touched each cell, keyed `row:col`, rebuilt as cells are drawn. */
-  #lastActor = new Map<string, { kind: string; id: string }>();
+  #lastActor = new CellMap<{ kind: string; id: string }>();
   #panel: HTMLElement | null = null;
 
   override isEnabled(): boolean {
@@ -87,8 +88,7 @@ export class Provenance extends BasePlugin {
 
   /** Who last changed a cell, or `null` if nobody has. */
   lastActorOf(row: number, col: number): { kind: string; id: string } | null {
-    const key = `${row}:${col}`;
-    const cached = this.#lastActor.get(key);
+    const cached = this.#lastActor.get(row, col);
     if (cached) {
       return cached;
     }
@@ -97,7 +97,7 @@ export class Provenance extends BasePlugin {
     if (!last?.actor) {
       return null;
     }
-    this.#lastActor.set(key, last.actor);
+    this.#lastActor.set(row, col, last.actor);
     return last.actor;
   }
 

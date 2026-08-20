@@ -17,16 +17,44 @@ import type { MountOptions } from './helpers.js';
 const makeGrid = (settings: MountOptions = {}) =>
   mountGrid({ startRows: 4, startCols: 3, ...settings }).then((m) => m.grid);
 
+describe('where the floating UI lives', () => {
+  it('puts the modal, the toasts and the cover in the overlay layer', async () => {
+    const grid = await makeGrid({ statusBar: true });
+    const overlay = grid.view!.overlay;
+    (grid.getPlugin('dialog') as unknown as Dialog).show({ content: 'x' });
+    (grid.getPlugin('notification') as unknown as Notification).showMessage({
+      message: 'y',
+      timeout: 0,
+    });
+    (grid.getPlugin('loading') as unknown as Loading).show();
+
+    // The overlay spans the slots as well as the table, so a modal actually
+    // covers the status bar rather than leaving it clickable.
+    expect(overlay.querySelector('.cm-dialog-overlay')).not.toBeNull();
+    expect(overlay.querySelector('.cm-notifications')).not.toBeNull();
+    expect(overlay.querySelector('.cm-loading')).not.toBeNull();
+    expect(grid.view?.root.querySelector('.cm-dialog-overlay')).toBeNull();
+  });
+
+  it('keeps what is anchored to a cell inside the table', async () => {
+    const grid = await makeGrid({ emptyDataState: true, minRows: 0, startRows: 0 });
+    (grid.getPlugin('emptyDataState') as unknown as EmptyDataState).refresh();
+    // Positioned against the table's own coordinates: in the overlay it would
+    // sit one slot's height off.
+    expect(grid.view?.root.querySelector('.cm-empty-state')).not.toBeNull();
+  });
+});
+
 describe('the dialog plugin', () => {
   it('opens over the grid and takes the keyboard', async () => {
     const grid = await makeGrid();
     const plugin = grid.getPlugin('dialog') as unknown as Dialog;
     plugin.show({ content: 'Are you sure?' });
 
-    const box = grid.view?.root.querySelector('.cm-dialog');
+    const box = grid.view?.wrapper.querySelector('.cm-dialog');
     expect(box?.textContent).toBe('Are you sure?');
     expect(plugin.isVisible()).toBe(true);
-    expect(grid.view?.root.querySelector('[aria-modal="true"]')).not.toBeNull();
+    expect(grid.view?.wrapper.querySelector('[aria-modal="true"]')).not.toBeNull();
     expect(box?.ownerDocument.activeElement).toBe(box);
   });
 
@@ -56,7 +84,7 @@ describe('the dialog plugin', () => {
     const plugin = grid.getPlugin('dialog') as unknown as Dialog;
     plugin.show({ content: 'before' });
     plugin.update({ content: 'after' });
-    expect(grid.view?.root.querySelector('.cm-dialog')?.textContent).toBe('after');
+    expect(grid.view?.wrapper.querySelector('.cm-dialog')?.textContent).toBe('after');
   });
 
   it('reads a dismissed confirmation as "no"', async () => {
@@ -78,9 +106,9 @@ describe('the dialog plugin', () => {
     const grid = await makeGrid();
     const plugin = grid.getPlugin('dialog') as unknown as Dialog;
     plugin.show({ content: '<b>bold</b>' });
-    expect(grid.view?.root.querySelector('.cm-dialog b')).toBeNull();
+    expect(grid.view?.wrapper.querySelector('.cm-dialog b')).toBeNull();
     plugin.show({ content: '<b>bold</b>', contentType: 'html' });
-    expect(grid.view?.root.querySelector('.cm-dialog b')?.textContent).toBe('bold');
+    expect(grid.view?.wrapper.querySelector('.cm-dialog b')?.textContent).toBe('bold');
   });
 });
 
@@ -92,8 +120,8 @@ describe('the notification plugin', () => {
     plugin.showMessage({ message: 'second', timeout: 0, type: 'error' });
 
     expect(plugin.getQueueSize()).toBe(2);
-    expect(grid.view?.root.querySelectorAll('.cm-notification')).toHaveLength(2);
-    expect(grid.view?.root.querySelector('.cm-notification--error')).not.toBeNull();
+    expect(grid.view?.wrapper.querySelectorAll('.cm-notification')).toHaveLength(2);
+    expect(grid.view?.wrapper.querySelector('.cm-notification--error')).not.toBeNull();
   });
 
   it('replaces a message shown again under the same id', async () => {
@@ -102,7 +130,7 @@ describe('the notification plugin', () => {
     plugin.showMessage({ id: 'save', message: 'saving', timeout: 0 });
     plugin.showMessage({ id: 'save', message: 'saved', timeout: 0 });
     expect(plugin.getQueueSize()).toBe(1);
-    expect(grid.view?.root.querySelector('.cm-notification-text')?.textContent).toBe('saved');
+    expect(grid.view?.wrapper.querySelector('.cm-notification-text')?.textContent).toBe('saved');
   });
 
   it('takes a message down by id, and all of them at once', async () => {
@@ -135,7 +163,7 @@ describe('the notification plugin', () => {
     const grid = await makeGrid();
     const plugin = grid.getPlugin('notification') as unknown as Notification;
     plugin.showMessage({ message: 'x', timeout: 0 });
-    (grid.view?.root.querySelector('.cm-notification-close') as HTMLButtonElement).click();
+    (grid.view?.wrapper.querySelector('.cm-notification-close') as HTMLButtonElement).click();
     expect(plugin.isVisible()).toBe(false);
   });
 });
@@ -180,7 +208,7 @@ describe('the loading plugin', () => {
     const grid = await makeGrid();
     const plugin = grid.getPlugin('loading') as unknown as Loading;
     plugin.show({ message: 'Opening workbook…' });
-    expect(grid.view?.root.querySelector('.cm-loading-message')?.textContent).toBe(
+    expect(grid.view?.wrapper.querySelector('.cm-loading-message')?.textContent).toBe(
       'Opening workbook…',
     );
   });

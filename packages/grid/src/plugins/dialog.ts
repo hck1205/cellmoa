@@ -90,7 +90,9 @@ export class Dialog extends BasePlugin {
         }
       });
     }
-    view.root.appendChild(overlay);
+    // Into the overlay layer, which spans the slots as well as the table: a
+    // modal that leaves the pager clickable is not modal.
+    view.overlay.appendChild(overlay);
     this.#overlay = overlay;
     this.focus();
     this.grid.hooks.run('afterDialogShow', undefined, this.#options);

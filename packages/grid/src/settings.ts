@@ -11,6 +11,8 @@
  * global defaults.
  */
 
+import { CellMap } from './cellMap.js';
+
 import type { HookHandler } from './hooks.js';
 
 /** A cell's coordinates in the visual grid. */
@@ -382,9 +384,9 @@ export class MetaManager {
   #global: GridSettings;
   #table: GridSettings = {};
   #columns = new Map<number, GridSettings>();
-  #cells = new Map<string, GridSettings>();
+  #cells = new CellMap<GridSettings>();
   /** Cleared whenever anything above the cell layer changes. */
-  #cache = new Map<string, GridSettings>();
+  #cache = new CellMap<GridSettings>();
 
   constructor(defaults: GridSettings = DEFAULT_SETTINGS) {
     this.#global = { ...defaults };
@@ -420,23 +422,21 @@ export class MetaManager {
 
   /** Settings for one cell. */
   setCell(row: number, col: number, settings: GridSettings): void {
-    const key = `${row}:${col}`;
-    this.#cells.set(key, { ...(this.#cells.get(key) ?? {}), ...settings });
-    this.#cache.delete(key);
+    this.#cells.set(row, col, { ...(this.#cells.get(row, col) ?? {}), ...settings });
+    this.#cache.delete(row, col);
   }
 
   /** Removes one setting from a cell, so it inherits again. */
   removeCell(row: number, col: number, name?: string): void {
-    const key = `${row}:${col}`;
     if (name === undefined) {
-      this.#cells.delete(key);
+      this.#cells.delete(row, col);
     } else {
-      const existing = this.#cells.get(key);
+      const existing = this.#cells.get(row, col);
       if (existing) {
         delete existing[name];
       }
     }
-    this.#cache.delete(key);
+    this.#cache.delete(row, col);
   }
 
   /**
@@ -447,9 +447,8 @@ export class MetaManager {
    * number, which is worse than losing it.
    */
   shift(axis: 'row' | 'col', at: number, count: number): void {
-    const moved = new Map<string, GridSettings>();
-    for (const [key, settings] of this.#cells) {
-      const [row, col] = key.split(':').map(Number) as [number, number];
+    const moved = new CellMap<GridSettings>();
+    for (const [row, col, settings] of this.#cells) {
       const index = axis === 'row' ? row : col;
       let target = index;
       if (index >= at) {
@@ -459,7 +458,11 @@ export class MetaManager {
         }
         target = index + count;
       }
-      moved.set(axis === 'row' ? `${target}:${col}` : `${row}:${target}`, settings);
+      if (axis === 'row') {
+        moved.set(target, col, settings);
+      } else {
+        moved.set(row, target, settings);
+      }
     }
     this.#cells = moved;
     this.#cache.clear();
@@ -478,8 +481,7 @@ export class MetaManager {
    * set on the column, which beats one set on the grid.
    */
   forCell(row: number, col: number): GridSettings {
-    const key = `${row}:${col}`;
-    const cached = this.#cache.get(key);
+    const cached = this.#cache.get(row, col);
     if (cached) {
       return cached;
     }
@@ -498,12 +500,12 @@ export class MetaManager {
     if (typeof this.#table.cells === 'function') {
       Object.assign(resolved, this.#table.cells(row, col) ?? {});
     }
-    const cell = this.#cells.get(key);
+    const cell = this.#cells.get(row, col);
     if (cell) {
       Object.assign(resolved, cell);
     }
 
-    this.#cache.set(key, resolved);
+    this.#cache.set(row, col, resolved);
     return resolved;
   }
 

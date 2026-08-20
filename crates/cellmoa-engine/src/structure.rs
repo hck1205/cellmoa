@@ -12,7 +12,6 @@
 
 use cellmoa_core::edit::Op;
 use cellmoa_core::model::{CellAddr, CellContent, SheetId, Workbook};
-use cellmoa_core::reference::{MAX_COLS, MAX_ROWS};
 use cellmoa_formula::adjust::{adjust, Axis, Shift};
 use cellmoa_formula::parse;
 use std::collections::{BTreeMap, BTreeSet};
@@ -96,10 +95,7 @@ fn plan(
         return Err(StructureError::EmptyCount);
     }
     let target = workbook.sheet(sheet).ok_or(StructureError::NoSuchSheet(sheet))?;
-    let limit = match axis {
-        Axis::Rows => MAX_ROWS,
-        Axis::Cols => MAX_COLS,
-    };
+    let limit = axis.limit();
     if at >= limit {
         return Err(StructureError::OutOfRange { at, limit });
     }
@@ -116,28 +112,18 @@ fn plan(
     // that also has to be cleared would otherwise be wiped out by the clear,
     // depending on which one the loop reached last.
     for (col, row, _) in target.iter() {
-        let index = match axis {
-            Axis::Rows => row,
-            Axis::Cols => col,
-        };
-        if index >= at {
+        if axis.index_of(col, row) >= at {
             planned.insert(CellAddr { sheet, col, row }, CellContent::Empty);
         }
     }
     for (col, row, cell) in target.iter() {
-        let index = match axis {
-            Axis::Rows => row,
-            Axis::Cols => col,
-        };
+        let index = axis.index_of(col, row);
         if index < at {
             continue;
         }
         if let Some(moved) = shift.moved(index) {
-            let addr = match axis {
-                Axis::Rows => CellAddr { sheet, col, row: moved },
-                Axis::Cols => CellAddr { sheet, col: moved, row },
-            };
-            planned.insert(addr, cell.content.clone());
+            let (col, row) = axis.with_index(col, row, moved);
+            planned.insert(CellAddr { sheet, col, row }, cell.content.clone());
         }
     }
 

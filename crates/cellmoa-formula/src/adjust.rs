@@ -95,7 +95,34 @@ impl Shift {
     }
 
     fn limit(&self) -> u32 {
-        match self.axis {
+        self.axis.limit()
+    }
+}
+
+impl Axis {
+    /// Which of a cell's two coordinates this axis moves.
+    ///
+    /// Every caller that walks cells has to ask this, and asking it here rather
+    /// than at each use is what keeps a row-shaped change from reading a column
+    /// somewhere down the line.
+    pub fn index_of(self, col: u32, row: u32) -> u32 {
+        match self {
+            Axis::Rows => row,
+            Axis::Cols => col,
+        }
+    }
+
+    /// A position with this axis's coordinate replaced.
+    pub fn with_index(self, col: u32, row: u32, index: u32) -> (u32, u32) {
+        match self {
+            Axis::Rows => (col, index),
+            Axis::Cols => (index, row),
+        }
+    }
+
+    /// How far a sheet reaches along this axis.
+    pub fn limit(self) -> u32 {
+        match self {
             Axis::Rows => MAX_ROWS,
             Axis::Cols => MAX_COLS,
         }
@@ -165,12 +192,9 @@ fn adjust_kind(kind: &RefKind, shift: &Shift) -> RefKind {
 }
 
 fn adjust_cell(cell: &CellRef, shift: &Shift) -> Option<CellRef> {
-    let mut moved = *cell;
-    match shift.axis {
-        Axis::Rows => moved.row = shift.moved(cell.row)?,
-        Axis::Cols => moved.col = shift.moved(cell.col)?,
-    }
-    Some(moved)
+    let moved = shift.moved(shift.axis.index_of(cell.col, cell.row))?;
+    let (col, row) = shift.axis.with_index(cell.col, cell.row, moved);
+    Some(CellRef { col, row, ..*cell })
 }
 
 /// Adjusts a range, growing it when the change happens inside it.

@@ -295,7 +295,11 @@ export class View {
     if (this.#frame !== null) {
       cancelAnimationFrame(this.#frame);
     }
-    this.root.remove();
+    // The wrapper, not the grid: the grid is one of its children, and removing
+    // only that would leave the slots and the overlay — with whatever a plugin
+    // put in them — in the page after the grid is gone.
+    this.layout.clear();
+    this.wrapper.remove();
   }
 
   /** The cell an element belongs to, or `null` when it is not in one. */

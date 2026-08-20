@@ -249,6 +249,23 @@ impl Response {
         Response::Error { ok: false, code: code.to_string(), message: message.into(), data }
     }
 
+    /// The refusal the revision guard produces.
+    ///
+    /// One place, because a caller tells a conflict from any other failure by
+    /// the `code` and reads the workbook's real revision out of `data` — and a
+    /// second copy of this that spelled either differently would be a refusal
+    /// the caller could not recover from.
+    pub fn conflict(expected: u64, actual: u64) -> Response {
+        Response::error_with(
+            "revision_conflict",
+            format!(
+                "this edit was made against revision {expected}, \
+                 but the workbook is at {actual}"
+            ),
+            serde_json::json!({ "expected": expected, "revision": actual }),
+        )
+    }
+
     pub fn is_ok(&self) -> bool {
         matches!(self, Response::Ok { .. })
     }

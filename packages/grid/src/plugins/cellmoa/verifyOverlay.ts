@@ -9,6 +9,7 @@
  * Handsontable has no counterpart.
  */
 
+import { CellMap } from '../../cellMap.js';
 import { parseA1 } from '../../dataSource.js';
 import { BasePlugin, registerPlugin } from '../base.js';
 
@@ -46,7 +47,7 @@ export class VerifyOverlay extends BasePlugin {
 
   #results: CheckResult[] = [];
   /** The cells a failed check points at, keyed `row:col`. */
-  #failed = new Map<string, CheckResult>();
+  #failed = new CellMap<CheckResult>();
 
   override isEnabled(): boolean {
     return this.switchedOn();
@@ -56,7 +57,7 @@ export class VerifyOverlay extends BasePlugin {
     this.addHook(
       'afterRenderer',
       (_value: unknown, td: HTMLTableCellElement, row: number, col: number) => {
-        const failure = this.#failed.get(`${row}:${col}`);
+        const failure = this.#failed.get(row, col);
         if (failure) {
           td.classList.add('cm-verify-failed');
           td.title = `expected ${failure.expected}, found ${failure.actual}`;
@@ -89,7 +90,7 @@ export class VerifyOverlay extends BasePlugin {
       // one thing that went wrong.
       const target = parseA1(result.target);
       if (target) {
-        this.#failed.set(`${target.row}:${target.col}`, result);
+        this.#failed.set(target.row, target.col, result);
       }
     }
     this.grid.render();
@@ -115,7 +116,7 @@ export class VerifyOverlay extends BasePlugin {
 
   /** The failure on a cell, or `null`. */
   failureAt(row: number, col: number): CheckResult | null {
-    return this.#failed.get(`${row}:${col}`) ?? null;
+    return this.#failed.get(row, col) ?? null;
   }
 
   /** Takes the marks off. */

@@ -37,6 +37,7 @@ import type { BasePlugin } from './plugins/base.js';
 // Importing the plugins for their side effect: each module registers itself,
 // and a grid built without them would silently have no features.
 import './plugins/index.js';
+import { CellSet } from './cellMap.js';
 import { DEFAULT_LANGUAGE, phrase } from './i18n/index.js';
 import type { LayoutManager, LayoutSettings } from './layout.js';
 import { ShortcutManager } from './shortcuts.js';
@@ -91,7 +92,7 @@ export class Grid {
   #renderQueued = false;
   #editor: EditorInstance | null = null;
   #editing: Coords | null = null;
-  #invalid = new Set<string>();
+  #invalid = new CellSet();
   #listening = true;
   #plugins = new Map<string, BasePlugin>();
   /**
@@ -1231,7 +1232,7 @@ export class Grid {
 
   /** Whether a cell failed validation and has not been corrected. */
   isCellInvalid(row: number, col: number): boolean {
-    return this.#invalid.has(`${row}:${col}`);
+    return this.#invalid.has(row, col);
   }
 
   /** Runs a cell's validator without writing anything. */
@@ -1277,14 +1278,13 @@ export class Grid {
    * — but the cell is marked so the mistake is visible.
    */
   #writeValidated(row: number, col: number, value: string): void {
-    const key = `${row}:${col}`;
     const meta = this.getCellMeta(row, col);
     const validator = this.#validatorFor(meta);
     const finish = (result: ValidationResult): void => {
       if (result.valid) {
-        this.#invalid.delete(key);
+        this.#invalid.delete(row, col);
       } else {
-        this.#invalid.add(key);
+        this.#invalid.add(row, col);
       }
       this.hooks.run('afterValidate', result.valid, value, row, col);
       if (result.valid || meta.allowInvalid !== false) {
@@ -1295,7 +1295,7 @@ export class Grid {
     };
 
     if (!validator) {
-      this.#invalid.delete(key);
+      this.#invalid.delete(row, col);
       this.setDataAtCell(row, col, value);
       return;
     }
@@ -1716,7 +1716,7 @@ export class Grid {
     if (typeof cell?.value === 'number') {
       td.classList.add('cm-numeric');
     }
-    if (this.#invalid.has(`${row}:${col}`)) {
+    if (this.#invalid.has(row, col)) {
       td.classList.add(String(meta.invalidCellClassName ?? 'htInvalid'));
     }
     if (this.#selection.includes({ row, col })) {
