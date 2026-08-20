@@ -5,3 +5,10 @@ version = 4
 [[package]]
 name = "cellmoa-core"
 version = "0.1.0"
+
+[[package]]
+name = "cellmoa-formula"
+version = "0.1.0"
+dependencies = [
+ "cellmoa-core",
+]
