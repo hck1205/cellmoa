@@ -118,13 +118,37 @@ export class DataSource {
   #engine: Engine;
   #sheet: string | null = null;
   #cells = new Map<number, CellData>();
-  /** Windows already read into the cache, so a scroll back does not re-read. */
-  #loaded: Window[] = [];
+  /**
+   * The blocks already read, by their id.
+   *
+   * Not the windows that were asked for. A window is wherever the viewport
+   * happened to stop, so a list of them grows by one for every place the user
+   * scrolls to and has to be searched linearly to answer "do I have this cell?"
+   * — a scan that gets longer the longer the session goes on, run once per cell
+   * per frame. Reads are rounded out to a fixed grid of blocks instead: the
+   * question becomes a set lookup, and scrolling a screen at a time mostly
+   * lands on blocks that are already there.
+   */
+  #loaded = new Set<number>();
   #revision = -1;
   #rows = 0;
   #cols = 0;
   /** Beyond this, a cell key would lose precision as a number. */
   static readonly MAX_COLS = 16_384;
+  /**
+   * How big a block is.
+   *
+   * Bigger blocks mean fewer, larger reads; smaller ones mean less waste at the
+   * edges. A screenful is roughly 40 rows by 20 columns, so a block a little
+   * larger than that makes an ordinary scroll cost one read.
+   */
+  static readonly BLOCK_ROWS = 64;
+  static readonly BLOCK_COLS = 32;
+
+  /** How many blocks the cache is holding. */
+  get loadedBlocks(): number {
+    return this.#loaded.size;
+  }
 
   /**
    * Who this grid's edits are recorded as.
@@ -212,18 +236,26 @@ export class DataSource {
     if (window.endRow < window.startRow || window.endCol < window.startCol) {
       return;
     }
-    if (this.#isLoaded(window)) {
+    for (const block of this.#blocksOf(window)) {
+      this.#read(block);
+    }
+  }
+
+  /** Reads one block, unless it is already in the cache. */
+  #read(block: number): void {
+    if (this.#loaded.has(block)) {
       return;
     }
+    const window = this.#windowOf(block);
     const request: Record<string, unknown> = { op: 'read', range: rangeRef(window) };
     if (this.#sheet) {
       request.sheet = this.#sheet;
     }
     const response = this.#engine.send(request);
     if (!response.ok) {
-      // A window past the end of the sheet is not an error worth throwing over;
-      // it simply holds nothing.
-      this.#loaded.push({ ...window });
+      // A block past the end of the sheet is not an error worth throwing over;
+      // it simply holds nothing, and asking again would not change that.
+      this.#loaded.add(block);
       return;
     }
     this.#revision = response.revision ?? this.#revision;
@@ -236,7 +268,7 @@ export class DataSource {
         ...(cell.style === undefined ? {} : { style: cell.style }),
       });
     }
-    this.#loaded.push({ ...window });
+    this.#loaded.add(block);
   }
 
   /**
@@ -344,6 +376,28 @@ export class DataSource {
     return this.#engine.send(request);
   }
 
+  /**
+   * Who last changed each cell of a rectangle that anyone has changed.
+   *
+   * One call for a window rather than one per cell: the grid marks cells while
+   * drawing them, and a round trip per cell would be a round trip per cell per
+   * frame while scrolling.
+   */
+  actors(window: Window): Array<{ row: number; col: number; actor: { kind: string; id: string } }> {
+    const request: Record<string, unknown> = { op: 'actors', range: rangeRef(window) };
+    if (this.#sheet) {
+      request.sheet = this.#sheet;
+    }
+    const response = this.#engine.send(request);
+    return response.ok
+      ? ((response.actors ?? []) as Array<{
+          row: number;
+          col: number;
+          actor: { kind: string; id: string };
+        }>)
+      : [];
+  }
+
   /** Who changed a cell, and why. */
   history(row: number, col: number): Array<Record<string, unknown>> {
     const request: Record<string, unknown> = { op: 'history', cell: cellRef(row, col) };
@@ -391,18 +445,32 @@ export class DataSource {
 
   #invalidate(): void {
     this.#cells.clear();
-    this.#loaded = [];
+    this.#loaded.clear();
   }
 
-  /** Whether a window is already covered by something read before. */
-  #isLoaded(window: Window): boolean {
-    return this.#loaded.some(
-      (loaded) =>
-        loaded.startRow <= window.startRow &&
-        loaded.endRow >= window.endRow &&
-        loaded.startCol <= window.startCol &&
-        loaded.endCol >= window.endCol,
-    );
+  /** The blocks a window touches. */
+  *#blocksOf(window: Window): Generator<number> {
+    const firstRow = Math.floor(Math.max(window.startRow, 0) / DataSource.BLOCK_ROWS);
+    const lastRow = Math.floor(Math.max(window.endRow, 0) / DataSource.BLOCK_ROWS);
+    const firstCol = Math.floor(Math.max(window.startCol, 0) / DataSource.BLOCK_COLS);
+    const lastCol = Math.floor(Math.max(window.endCol, 0) / DataSource.BLOCK_COLS);
+    for (let row = firstRow; row <= lastRow; row += 1) {
+      for (let col = firstCol; col <= lastCol; col += 1) {
+        yield row * DataSource.MAX_COLS + col;
+      }
+    }
+  }
+
+  /** The rectangle a block covers. */
+  #windowOf(block: number): Window {
+    const row = Math.floor(block / DataSource.MAX_COLS);
+    const col = block % DataSource.MAX_COLS;
+    return {
+      startRow: row * DataSource.BLOCK_ROWS,
+      endRow: (row + 1) * DataSource.BLOCK_ROWS - 1,
+      startCol: col * DataSource.BLOCK_COLS,
+      endCol: (col + 1) * DataSource.BLOCK_COLS - 1,
+    };
   }
 
   /** One number per cell, so the cache is a flat map rather than a map of maps. */

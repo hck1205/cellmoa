@@ -159,6 +159,18 @@ pub enum Request {
         #[serde(default)]
         cols: i64,
     },
+    /// Who last changed each cell of a range.
+    ///
+    /// The grid marks cells an agent touched, and it marks them while drawing —
+    /// so it needs the answer for a whole window at once. Asking cell by cell
+    /// would put one round trip per cell on the render path.
+    Actors {
+        #[serde(default)]
+        sheet: Option<String>,
+        /// An A1 range. Defaults to the sheet's used range.
+        #[serde(default)]
+        range: Option<String>,
+    },
     /// Who changed a cell, and when.
     History {
         cell: String,

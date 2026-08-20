@@ -143,7 +143,7 @@ Handsontable에는 대응물이 없고 VisiGrid 축에서 가져오는 것들. �
 
 | 기능 | 상태 | 비고 |
 |---|:--:|---|
-| 셀 provenance 표시 (누가·언제·왜) | ✅ | `provenance` 플러그인. 컨텍스트 메뉴 "이 값은 어디서 왔나?" |
+| 셀 provenance 표시 (누가·언제·왜) | ✅ | `provenance` 플러그인. 컨텍스트 메뉴 "이 값은 어디서 왔나?". 마커는 창 단위 `actors` 한 번으로 채움 |
 | 에이전트 편집 하이라이트 | ✅ | `.cm-by-agent` — 사람이 고치면 표시가 사라짐 |
 | 에이전트 변경만 undo | ✅ | 컨텍스트 메뉴 "에이전트 변경 되돌리기" + `undoRedo.undoBy()` |
 | revision 충돌 표시 | ✅ | `conflicts` 플러그인 — 거부된 쓰기를 알림으로 |

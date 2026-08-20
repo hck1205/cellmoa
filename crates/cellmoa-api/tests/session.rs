@@ -210,6 +210,57 @@ fn an_unknown_alteration_is_refused_by_name() {
 }
 
 #[test]
+fn one_call_says_who_last_touched_each_cell_of_a_window() {
+    let mut session = Session::new();
+    ok(
+        &mut session,
+        json!({ "op": "write", "cells": [{ "cell": "A1", "input": "1" }],
+                             "who": { "kind": "human", "id": "ada" } }),
+    );
+    ok(
+        &mut session,
+        json!({ "op": "write", "cells": [{ "cell": "B2", "input": "2" }],
+                             "who": { "kind": "agent", "id": "bot" } }),
+    );
+    // Written twice: the later actor is the one reported.
+    ok(
+        &mut session,
+        json!({ "op": "write", "cells": [{ "cell": "A1", "input": "3" }],
+                             "who": { "kind": "agent", "id": "bot" } }),
+    );
+
+    let response = ok(&mut session, json!({ "op": "actors", "range": "A1:B2" }));
+    assert_eq!(
+        response["actors"],
+        json!([
+            { "cell": "A1", "row": 0, "col": 0, "actor": { "kind": "agent", "id": "bot" } },
+            { "cell": "B2", "row": 1, "col": 1, "actor": { "kind": "agent", "id": "bot" } }
+        ])
+    );
+
+    // Cells nobody touched are left out, not reported as unowned.
+    let narrow = ok(&mut session, json!({ "op": "actors", "range": "C1:D9" }));
+    assert_eq!(narrow["actors"], json!([]));
+}
+
+#[test]
+fn undoing_a_change_makes_the_undoer_the_last_to_touch_it() {
+    let mut session = Session::new();
+    ok(
+        &mut session,
+        json!({ "op": "write", "cells": [{ "cell": "A1", "input": "1" }],
+                             "who": { "kind": "agent", "id": "bot" } }),
+    );
+    ok(&mut session, json!({ "op": "undo", "who": { "kind": "human", "id": "ada" } }));
+
+    // An undo is a change like any other, and the person who made it is the one
+    // who last touched the cell — which is what stops a grid from going on
+    // marking a cell as the agent's after someone took the agent's work back.
+    let response = ok(&mut session, json!({ "op": "actors", "range": "A1:A1" }));
+    assert_eq!(response["actors"][0]["actor"], json!({ "kind": "human", "id": "ada" }));
+}
+
+#[test]
 fn a_cells_history_says_who_set_it_to_what() {
     let mut session = Session::new();
     ok(

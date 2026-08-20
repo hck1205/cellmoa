@@ -1682,8 +1682,18 @@ export class Grid {
         (this.getSettings().themeName as string | undefined) ??
         (this.getSettings().theme as string | undefined) ??
         null,
-      prepare: (startRow, endRow, startCol, endCol) =>
-        this.#ensureVisible(startRow, endRow, startCol, endCol),
+      prepare: (startRow, endRow, startCol, endCol) => {
+        this.#ensureVisible(startRow, endRow, startCol, endCol);
+        // The one point where the window about to be drawn is known. A plugin
+        // that decorates cells needs it here: without it, the only place it can
+        // ask about a cell is while drawing that cell, one round trip at a time.
+        this.hooks.run('beforeViewportRender', undefined, {
+          startRow,
+          endRow,
+          startCol,
+          endCol,
+        });
+      },
       renderCell: (context) => this.#renderCell(context),
       overscan: () => 3,
     });

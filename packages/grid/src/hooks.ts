@@ -88,6 +88,8 @@ export const HOOK_NAMES = [
  * would make the figure mean nothing.
  */
 export const EXTRA_HOOK_NAMES = [
+  /** The window of cells about to be drawn, before any of them is. */
+  'beforeViewportRender',
   /** Asks how many rows deep the column header is. */
   'modifyColHeaderLevels',
   /** Replaces the column header's structure, for a nested header. */

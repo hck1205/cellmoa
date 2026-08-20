@@ -138,6 +138,7 @@ impl Session {
             }
             Request::Eval { formula, sheet } => self.eval(&formula, sheet.as_deref()),
             Request::Translate { formula, rows, cols } => self.translate(&formula, rows, cols),
+            Request::Actors { sheet, range } => self.actors(sheet.as_deref(), range.as_deref()),
             Request::History { cell, sheet } => self.history(&cell, sheet.as_deref()),
             Request::Fingerprint => {
                 let digests = fingerprint(self.engine.workbook());
@@ -266,16 +267,10 @@ impl Session {
         let id = sheet!(self, sheet_name.as_deref());
         let sheet = self.engine.workbook().sheet(id).expect("resolved above");
 
-        let area = match range {
-            Some(text) => match RangeRef::parse_a1(&text) {
-                Some(range) => range,
-                None => return Response::error("bad_range", format!("{text:?} is not a range")),
-            },
-            // With no range, the sheet's used area is what a grid wants first.
-            None => match sheet.used_range() {
-                Some(range) => range,
-                None => return self.ok(json!({ "sheet": sheet.name, "range": null, "cells": [] })),
-            },
+        let area = match self.range_of(id, range.as_deref()) {
+            Ok(Some(area)) => area,
+            Ok(None) => return self.ok(json!({ "sheet": sheet.name, "range": null, "cells": [] })),
+            Err(response) => return response,
         };
 
         // Only cells that exist are returned; a client fills the gaps itself.
@@ -489,6 +484,65 @@ impl Session {
             // read.
             Err(_) => self.ok(json!({ "formula": formula })),
         }
+    }
+
+    /// The area a request names, or the sheet's used area when it names none.
+    ///
+    /// `Ok(None)` means the sheet holds nothing, which is a real answer rather
+    /// than a failure — a request about an empty sheet was understood.
+    fn range_of(&self, id: SheetId, range: Option<&str>) -> Result<Option<RangeRef>, Response> {
+        match range {
+            Some(text) => RangeRef::parse_a1(text)
+                .map(Some)
+                .ok_or_else(|| Response::error("bad_range", format!("{text:?} is not a range"))),
+            None => Ok(self.engine.workbook().sheet(id).and_then(|sheet| sheet.used_range())),
+        }
+    }
+
+    /// Who last changed each cell of a range that anyone has changed.
+    ///
+    /// Cells nobody has edited are left out rather than reported as unowned:
+    /// the caller is marking the ones with an owner, and a list of everything
+    /// else would be the whole sheet.
+    fn actors(&self, sheet: Option<&str>, range: Option<&str>) -> Response {
+        let id = sheet!(self, sheet);
+        let window = match self.range_of(id, range) {
+            Ok(Some(window)) => window,
+            Ok(None) => return self.ok(json!({ "actors": [] })),
+            Err(response) => return response,
+        };
+
+        // Walked once over the journal rather than once per cell: the journal is
+        // append-only, so the last commit that touched a cell is the last one
+        // seen while walking it forwards.
+        let mut last: BTreeMap<CellAddr, &cellmoa_core::edit::Actor> = BTreeMap::new();
+        for commit in self.engine.doc.commits() {
+            if commit.undone {
+                continue;
+            }
+            for op in &commit.ops {
+                if let cellmoa_core::edit::Op::SetCell { addr, .. } = op {
+                    if addr.sheet == id && window.contains(addr.col, addr.row) {
+                        last.insert(*addr, &commit.actor);
+                    }
+                }
+            }
+        }
+        let entries: Vec<serde_json::Value> = last
+            .into_iter()
+            .map(|(addr, actor)| {
+                json!({
+                    "cell": format!("{}{}", col_to_letters(addr.col), addr.row + 1),
+                    "row": addr.row,
+                    "col": addr.col,
+                    "actor": {
+                        "kind": format!("{:?}", actor.kind).to_lowercase(),
+                        "id": actor.id,
+                    },
+                })
+            })
+            .collect();
+        self.ok(json!({ "actors": entries }))
     }
 
     fn history(&self, cell: &str, sheet: Option<&str>) -> Response {

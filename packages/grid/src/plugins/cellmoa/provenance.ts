@@ -35,7 +35,14 @@ export const DEFAULT_AGENT_CLASS = 'cm-by-agent';
 export class Provenance extends BasePlugin {
   static override readonly pluginName: string = 'provenance';
 
-  /** Who last touched each cell, keyed `row:col`, rebuilt as cells are drawn. */
+  /**
+   * Who last touched each cell of the window being drawn.
+   *
+   * Filled once per render from one call, not cell by cell while drawing. The
+   * difference is not a micro-optimisation: drawing a screenful is hundreds of
+   * cells, and asking about each of them separately puts hundreds of round
+   * trips into the engine on every frame of a scroll.
+   */
   #lastActor = new CellMap<{ kind: string; id: string }>();
   #panel: HTMLElement | null = null;
 
@@ -45,23 +52,23 @@ export class Provenance extends BasePlugin {
 
   protected override onEnable(): void {
     this.addHook(
+      'beforeViewportRender',
+      (_value: unknown, window: { startRow: number; endRow: number; startCol: number; endCol: number }) => {
+        if (this.marksAgentEdits()) {
+          this.load(window);
+        }
+      },
+    );
+    this.addHook(
       'afterRenderer',
       (_value: unknown, td: HTMLTableCellElement, row: number, col: number) => {
-        if (!this.marksAgentEdits()) {
-          return;
-        }
-        const actor = this.lastActorOf(row, col);
+        const actor = this.#lastActor.get(row, col);
         if (actor?.kind === 'agent') {
           td.classList.add(this.agentClassName());
           td.dataset['actor'] = actor.id;
         }
       },
     );
-    // Any edit can change who last touched a cell, so the cache is dropped
-    // wholesale rather than picked at.
-    this.addHook('afterChange', () => this.#lastActor.clear());
-    this.addHook('afterUndo', () => this.#lastActor.clear());
-    this.addHook('afterRedo', () => this.#lastActor.clear());
     this.grid.render();
   }
 
@@ -86,19 +93,71 @@ export class Provenance extends BasePlugin {
     return this.grid.getCellHistory(row, col) as unknown as HistoryEntry[];
   }
 
+  /**
+   * Reads who last touched each cell of a window, in one call.
+   *
+   * The window is in visual coordinates and the engine answers in physical
+   * ones, so the answer is translated back — a sorted or filtered grid marks
+   * the row the value is on now, not the row it was on in the file.
+   */
+  load(window: { startRow: number; endRow: number; startCol: number; endCol: number }): void {
+    this.#lastActor.clear();
+    const physical = this.#physicalWindow(window);
+    if (!physical) {
+      return;
+    }
+    for (const entry of this.grid.source.actors(physical)) {
+      const row = this.grid.rowIndex.toVisual(entry.row);
+      const col = this.grid.colIndex.toVisual(entry.col);
+      if (row !== null && col !== null) {
+        this.#lastActor.set(row, col, entry.actor);
+      }
+    }
+  }
+
   /** Who last changed a cell, or `null` if nobody has. */
   lastActorOf(row: number, col: number): { kind: string; id: string } | null {
     const cached = this.#lastActor.get(row, col);
     if (cached) {
       return cached;
     }
-    const history = this.getHistory(row, col);
-    const last = history[history.length - 1];
-    if (!last?.actor) {
+    // Outside the window that was loaded, so the journal is asked directly.
+    const last = this.getHistory(row, col).at(-1);
+    return last?.actor ?? null;
+  }
+
+  /** The physical rectangle a visual window covers, or `null` when it covers none. */
+  #physicalWindow(window: {
+    startRow: number;
+    endRow: number;
+    startCol: number;
+    endCol: number;
+  }): { startRow: number; endRow: number; startCol: number; endCol: number } | null {
+    const rows: number[] = [];
+    for (let row = window.startRow; row <= window.endRow; row += 1) {
+      const physical = this.grid.rowIndex.toPhysical(row);
+      if (physical !== null) {
+        rows.push(physical);
+      }
+    }
+    const cols: number[] = [];
+    for (let col = window.startCol; col <= window.endCol; col += 1) {
+      const physical = this.grid.colIndex.toPhysical(col);
+      if (physical !== null) {
+        cols.push(physical);
+      }
+    }
+    if (rows.length === 0 || cols.length === 0) {
       return null;
     }
-    this.#lastActor.set(row, col, last.actor);
-    return last.actor;
+    // The bounding box, not the exact set: a sort scatters the rows and asking
+    // for each run separately would put the round trips back.
+    return {
+      startRow: Math.min(...rows),
+      endRow: Math.max(...rows),
+      startCol: Math.min(...cols),
+      endCol: Math.max(...cols),
+    };
   }
 
   /** Shows a cell's history beside it. */
