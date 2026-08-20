@@ -39,6 +39,7 @@ export class Pagination extends BasePlugin {
   static override readonly pluginName: string = 'pagination';
 
   #page = 1;
+  #pager: HTMLElement | null = null;
   #pageSize: number | 'auto' = DEFAULT_PAGE_SIZE;
   /** Rows this plugin trimmed, so it releases only its own. */
   #trimmed: number[] = [];
@@ -54,23 +55,26 @@ export class Pagination extends BasePlugin {
     this.#pageSize = options.pageSize ?? DEFAULT_PAGE_SIZE;
     this.#page = Math.max(options.initialPage ?? 1, 1);
     this.#apply();
+    this.#drawPager();
   }
 
   protected override onDisable(): void {
     this.#release();
+    this.grid.view?.layout.unregister('pagination', 'bottom');
+    this.#pager = null;
     this.grid.render();
   }
 
   /**
    * How many rows there are to page through.
    *
-   * The *visual* count with this plugin's own trims released, not the physical
-   * one: a filter may already have taken rows out, and paging through rows a
-   * filter excluded would give empty pages.
+   * The *visual* count, not the physical one: a filter may already have taken
+   * rows out, and paging through rows a filter excluded would give empty pages.
+   * This plugin's own trims are added back rather than released, because asking
+   * how many rows there are must not change which ones are showing.
    */
   countAllRows(): number {
-    this.#release();
-    return this.grid.rowIndex.visibleLength;
+    return this.grid.rowIndex.visibleLength + this.#trimmed.length;
   }
 
   /** The page size in force, resolving `auto` against the viewport. */
@@ -166,6 +170,56 @@ export class Pagination extends BasePlugin {
     this.resetPageSize();
   }
 
+  /** The pager element, or `null` when it is not drawn. */
+  get pager(): HTMLElement | null {
+    return this.#pager;
+  }
+
+  /**
+   * Draws the pager into the slot below the grid.
+   *
+   * Rebuilt rather than updated: it has four buttons and a label, and the cost
+   * of getting one of them out of step with the page is higher than the cost of
+   * making five elements.
+   */
+  #drawPager(): void {
+    const view = this.grid.view;
+    if (!view) {
+      return;
+    }
+    const settings = this.settings<PaginationSettings | boolean>();
+    const options = typeof settings === 'object' ? settings : {};
+    const doc = view.root.ownerDocument;
+    const pager = doc.createElement('div');
+    pager.className = 'cm-pagination';
+    pager.setAttribute('role', 'navigation');
+
+    if (options.showCounter !== false) {
+      const counter = doc.createElement('span');
+      counter.className = 'cm-pagination-counter';
+      counter.textContent = `${this.#page} / ${this.countPages()}`;
+      pager.appendChild(counter);
+    }
+    if (options.showNavigation !== false) {
+      for (const [label, target, disabled] of [
+        ['«', 1, this.#page === 1],
+        ['‹', this.#page - 1, this.#page === 1],
+        ['›', this.#page + 1, this.#page === this.countPages()],
+        ['»', this.countPages(), this.#page === this.countPages()],
+      ] as const) {
+        const button = doc.createElement('button');
+        button.type = 'button';
+        button.className = 'cm-pagination-button';
+        button.textContent = label;
+        button.disabled = disabled;
+        button.addEventListener('click', () => this.setPage(target));
+        pager.appendChild(button);
+      }
+    }
+    view.layout.register('pagination', pager, { side: 'bottom', weight: 100 });
+    this.#pager = pager;
+  }
+
   /** Trims everything outside the current page. */
   #apply(): void {
     this.#release();
@@ -184,6 +238,9 @@ export class Pagination extends BasePlugin {
     if (outside.length > 0) {
       this.grid.rowIndex.trim(outside);
       this.#trimmed = outside;
+    }
+    if (this.#pager) {
+      this.#drawPager();
     }
     this.grid.render();
   }

@@ -427,6 +427,95 @@
 }
 
 
+/* The areas around the grid. */
+.cm-wrapper {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  height: 100%;
+}
+
+.cm-wrapper > .cm-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.cm-slot {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: stretch;
+}
+
+.cm-slot[hidden] {
+  display: none;
+}
+
+.cm-slot-element {
+  border: 1px solid var(--cm-border);
+  font: 13px/1.4 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background: var(--cm-header-bg);
+  color: var(--cm-header-fg);
+}
+
+/* Adjacent items share one divider rather than drawing two. */
+.cm-slot-element + .cm-slot-element {
+  border-left: none;
+}
+
+.cm-grid--rtl .cm-slot-element + .cm-slot-element {
+  border-right: none;
+  border-left: 1px solid var(--cm-border);
+}
+
+/* The grid's own edge divides it from the slot, so the facing border goes. */
+.cm-slot--top > .cm-slot-element:last-child {
+  border-bottom: none;
+}
+
+.cm-slot--bottom > .cm-slot-element:first-child {
+  border-top: none;
+}
+
+/* The layer floating UI is drawn in. It does not frame its contents. */
+.cm-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.cm-overlay > * {
+  pointer-events: auto;
+}
+
+/* The pager. */
+.cm-pagination {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+.cm-pagination-button {
+  min-width: 20px;
+  padding: 0 4px;
+  border: 1px solid var(--cm-border);
+  border-radius: 3px;
+  font: inherit;
+  background: var(--cm-cell-bg);
+  color: inherit;
+  cursor: pointer;
+}
+
+.cm-pagination-button:disabled {
+  color: var(--cm-readonly-fg);
+  cursor: default;
+}
+
+.cm-pagination-counter {
+  margin-right: 8px;
+}
+
 /* Right-to-left layout. The panes mirror; the cells themselves inherit. */
 .cm-grid--rtl .cm-menu,
 .cm-grid--rtl .cm-provenance {
@@ -500,11 +589,7 @@
 
 /* The bar along the bottom. */
 .cm-status-bar {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  z-index: 60;
+  flex: 1 1 auto;
   display: flex;
   gap: 16px;
   padding: 2px 8px;

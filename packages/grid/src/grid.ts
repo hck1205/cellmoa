@@ -38,6 +38,7 @@ import type { BasePlugin } from './plugins/base.js';
 // and a grid built without them would silently have no features.
 import './plugins/index.js';
 import { DEFAULT_LANGUAGE, phrase } from './i18n/index.js';
+import type { LayoutManager, LayoutSettings } from './layout.js';
 import { ShortcutManager } from './shortcuts.js';
 import { SizeMap } from './sizes.js';
 import { View } from './view.js';
@@ -145,6 +146,7 @@ export class Grid {
       this.#selection.setMode(settings.selectionMode as SelectionMode);
     }
     this.#selection.setNavigableHeaders(this.getSettings().navigableHeaders === true);
+    this.#view?.layout.setOrder((this.getSettings().layout as LayoutSettings | undefined) ?? {});
     this.#syncDimensions();
     // Every plugin re-reads the settings, so a feature can be switched on
     // after the grid was built.
@@ -435,6 +437,17 @@ export class Grid {
       start: { row: range.topRow, col: range.startCol },
       end: { row: range.bottomRow, col: range.endCol },
     }));
+  }
+
+  /**
+   * The manager for the areas around the grid.
+   *
+   * A caller registers an element and says which side it belongs on; where it
+   * lands is the manager's business, which is what lets the `layout` setting
+   * reorder things the caller never knew about.
+   */
+  getLayoutManager(): LayoutManager | null {
+    return this.#view?.layout ?? null;
   }
 
   /**
@@ -1657,6 +1670,7 @@ export class Grid {
       renderCell: (context) => this.#renderCell(context),
       overscan: () => 3,
     });
+    this.#view.layout.setOrder((this.getSettings().layout as LayoutSettings | undefined) ?? {});
     this.render();
   }
 

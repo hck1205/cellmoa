@@ -337,3 +337,87 @@ describe('input methods', () => {
     expect(editor?.value).toBe('');
   });
 });
+
+describe('the areas around the grid', () => {
+  it('wraps the grid in a top slot, a bottom slot and an overlay', async () => {
+    const grid = await makeGrid();
+    const wrapper = grid.view!.wrapper;
+    expect([...wrapper.children].map((child) => child.className.split(' ')[0])).toEqual([
+      'cm-slot',
+      'cm-grid',
+      'cm-slot',
+      'cm-overlay',
+    ]);
+    // An empty slot must not take up a line of its own.
+    expect((wrapper.querySelector('.cm-slot--top') as HTMLElement).hidden).toBe(true);
+  });
+
+  it('places an element the caller registers', async () => {
+    const grid = await makeGrid();
+    const layout = grid.getLayoutManager()!;
+    const toolbar = document.createElement('div');
+    toolbar.textContent = 'Inventory';
+    layout.register('toolbar', toolbar, { side: 'top' });
+
+    expect(layout.getSlot('top').contains(toolbar)).toBe(true);
+    expect(toolbar.classList.contains('cm-slot-element')).toBe(true);
+    expect(layout.getSlot('top').hidden).toBe(false);
+
+    layout.unregister('toolbar', 'top');
+    expect(toolbar.isConnected).toBe(false);
+    expect(layout.getSlot('top').hidden).toBe(true);
+  });
+
+  it('orders by weight, keeping registration order for ties', async () => {
+    const grid = await makeGrid();
+    const layout = grid.getLayoutManager()!;
+    layout.register('c', document.createElement('div'), { side: 'top', weight: 200 });
+    layout.register('a', document.createElement('div'), { side: 'top', weight: 100 });
+    layout.register('b', document.createElement('div'), { side: 'top', weight: 100 });
+    expect(layout.getKeys('top')).toEqual(['a', 'b', 'c']);
+  });
+
+  it('lets the `layout` setting pin an order the caller never knew about', async () => {
+    const grid = await makeGrid({ layout: { bottom: ['mine', 'statusBar'] }, statusBar: true });
+    const layout = grid.getLayoutManager()!;
+    layout.register('mine', document.createElement('div'), { side: 'bottom', weight: 999 });
+    expect(layout.getKeys('bottom')).toEqual(['mine', 'statusBar']);
+
+    grid.updateSettings({ layout: { bottom: ['statusBar', 'mine'] } });
+    expect(layout.getKeys('bottom')).toEqual(['statusBar', 'mine']);
+  });
+
+  it('replaces an element registered again under the same key', async () => {
+    const grid = await makeGrid();
+    const layout = grid.getLayoutManager()!;
+    const first = document.createElement('div');
+    const second = document.createElement('div');
+    layout.register('x', first, { side: 'bottom' });
+    layout.register('x', second, { side: 'bottom' });
+    expect(layout.getKeys('bottom')).toEqual(['x']);
+    expect(first.isConnected).toBe(false);
+    expect(second.isConnected).toBe(true);
+  });
+
+  it('puts the status bar below the grid rather than over it', async () => {
+    const grid = await makeGrid({ statusBar: true });
+    const layout = grid.getLayoutManager()!;
+    expect(layout.has('statusBar', 'bottom')).toBe(true);
+    expect(layout.getSlot('bottom').querySelector('.cm-status-bar')).not.toBeNull();
+  });
+
+  it('draws a pager for a paginated grid, and keeps it in step', async () => {
+    const grid = await makeGrid({ pagination: { pageSize: 2 }, startRows: 6 });
+    const layout = grid.getLayoutManager()!;
+    const pager = () => layout.getSlot('bottom').querySelector('.cm-pagination');
+    expect(pager()?.querySelector('.cm-pagination-counter')?.textContent).toBe('1 / 3');
+
+    // The buttons that would go nowhere are disabled, and the others work.
+    const buttons = () =>
+      [...(pager()?.querySelectorAll('button') ?? [])] as HTMLButtonElement[];
+    expect(buttons()[0]?.disabled).toBe(true);
+    buttons()[2]?.click();
+    expect(pager()?.querySelector('.cm-pagination-counter')?.textContent).toBe('2 / 3');
+    expect(buttons()[0]?.disabled).toBe(false);
+  });
+});

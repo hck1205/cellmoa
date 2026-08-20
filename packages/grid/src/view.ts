@@ -16,6 +16,7 @@
  */
 
 import { columnLetters } from './dataSource.js';
+import { LayoutManager } from './layout.js';
 import type { SizeMap } from './sizes.js';
 
 /** What the view needs to know to draw a cell. */
@@ -106,6 +107,9 @@ export interface Viewport {
 
 const CLASS = {
   root: 'cm-grid',
+  wrapper: 'cm-wrapper',
+  slot: 'cm-slot',
+  overlay: 'cm-overlay',
   scroller: 'cm-scroller',
   spacer: 'cm-spacer',
   pane: 'cm-pane',
@@ -166,9 +170,30 @@ export class View {
     // must not swallow clicks meant for the cells beneath it.
     this.scroller.style.pointerEvents = 'auto';
 
-    container.appendChild(this.root);
+    // The grid sits inside a wrapper with a slot above and below it and a
+    // layer over it. A toolbar or a pager that positioned itself would have to
+    // know where the grid is; a slot means it does not.
+    this.wrapper = this.#element('div', CLASS.wrapper);
+    const slots = {
+      top: this.#element('div', `${CLASS.slot} ${CLASS.slot}--top`),
+      bottom: this.#element('div', `${CLASS.slot} ${CLASS.slot}--bottom`),
+    };
+    this.overlay = this.#element('div', CLASS.overlay);
+    slots.top.hidden = true;
+    slots.bottom.hidden = true;
+    this.wrapper.append(slots.top, this.root, slots.bottom, this.overlay);
+    this.layout = new LayoutManager(slots, this.overlay);
+
+    container.appendChild(this.wrapper);
     this.scroller.addEventListener('scroll', this.#onScroll);
   }
+
+  /** The element holding the grid and everything around it. */
+  readonly wrapper!: HTMLElement;
+  /** The layer floating UI is drawn in, over the grid. */
+  readonly overlay!: HTMLElement;
+  /** The slots around the grid. */
+  readonly layout!: LayoutManager;
 
   /** The window currently drawn. */
   get viewport(): Viewport {

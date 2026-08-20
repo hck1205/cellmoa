@@ -229,6 +229,8 @@ export interface GridSettings {
   touchScroll?: unknown;
   selectionHandles?: unknown;
   multipleSelectionHandles?: unknown;
+  /** The order of the elements in the slots around the grid. */
+  layout?: { top?: string[]; bottom?: string[] };
   dataProvider?: unknown;
 
   // Settings with no Handsontable counterpart.

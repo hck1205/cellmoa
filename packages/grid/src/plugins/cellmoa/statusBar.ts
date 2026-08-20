@@ -46,7 +46,7 @@ export class StatusBar extends BasePlugin {
   }
 
   protected override onDisable(): void {
-    this.#element?.remove();
+    this.grid.view?.layout.unregister('statusBar', 'bottom');
     this.#element = null;
   }
 
@@ -84,7 +84,9 @@ export class StatusBar extends BasePlugin {
       this.#element = doc.createElement('div');
       this.#element.className = 'cm-status-bar';
       this.#element.setAttribute('role', 'status');
-      view.root.appendChild(this.#element);
+      // Into the slot below the grid rather than on top of it: a status bar
+      // that covered the last row would hide the thing it describes.
+      view.layout.register('statusBar', this.#element, { side: 'bottom', weight: 200 });
     }
     this.#element.replaceChildren();
 

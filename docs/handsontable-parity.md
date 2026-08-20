@@ -133,6 +133,8 @@ autocomplete/select/multiSelect 8종.
 | 내비게이션 — 헤더 이동 (`navigableHeaders`) | ✅ | 헤더는 인덱스 -1 |
 | 내비게이션 — 포커스 범위 (`tabNavigation`) | ✅ | 끄면 Tab이 브라우저로 넘어감 (폼 안의 그리드) |
 | 국제화 — IME (`imeFastEdit`) | ✅ | 조합 중 키는 에디터에 심지 않고 빈 에디터를 엶 |
+| 액세서리 — 레이아웃 슬롯 (`layout`, `getLayoutManager`) | ✅ | top / grid / bottom / overlay. 상태 표시줄과 페이저가 슬롯에 들어감 |
+| 액세서리 — 아이콘 팩 | — | Handsontable에서도 라이브러리 기능이 아니라 별도 SVG 배포물 |
 
 ## cellmoa 고유 기능 ➕
 
