@@ -43,6 +43,21 @@ impl Default for Session {
     }
 }
 
+/// Resolves a sheet name, answering with the error response if it names none.
+///
+/// Every handler that takes a sheet did this by hand, four lines at a time.
+/// `?` cannot serve them: a handler answers with a `Response`, not a `Result`,
+/// because a request that names a missing sheet is a request that was answered
+/// — not one that failed.
+macro_rules! sheet {
+    ($self:ident, $name:expr) => {
+        match $self.sheet_id($name) {
+            Ok(id) => id,
+            Err(response) => return response,
+        }
+    };
+}
+
 impl Session {
     /// A session holding an empty workbook with one sheet.
     pub fn new() -> Session {
@@ -248,10 +263,7 @@ impl Session {
             }
             None => (sheet.map(String::from), None),
         };
-        let id = match self.sheet_id(sheet_name.as_deref()) {
-            Ok(id) => id,
-            Err(response) => return response,
-        };
+        let id = sheet!(self, sheet_name.as_deref());
         let sheet = self.engine.workbook().sheet(id).expect("resolved above");
 
         let area = match range {
@@ -293,10 +305,7 @@ impl Session {
         revision: Option<u64>,
         label: Option<String>,
     ) -> Response {
-        let default_sheet = match self.sheet_id(sheet) {
-            Ok(id) => id,
-            Err(response) => return response,
-        };
+        let default_sheet = sheet!(self, sheet);
 
         let mut edits = Vec::with_capacity(cells.len());
         for write in cells {
@@ -372,10 +381,7 @@ impl Session {
         revision: Option<u64>,
         label: Option<String>,
     ) -> Response {
-        let id = match self.sheet_id(sheet) {
-            Ok(id) => id,
-            Err(response) => return response,
-        };
+        let id = sheet!(self, sheet);
         let change = match action {
             "insert_row" => Alter::InsertRows { sheet: id, at: index, count: amount },
             "remove_row" => Alter::RemoveRows { sheet: id, at: index, count: amount },
@@ -407,10 +413,7 @@ impl Session {
     }
 
     fn eval(&mut self, formula: &str, sheet: Option<&str>) -> Response {
-        let id = match self.sheet_id(sheet) {
-            Ok(id) => id,
-            Err(response) => return response,
-        };
+        let id = sheet!(self, sheet);
         match self.engine.evaluate(id, formula) {
             Ok(value) => self.ok(json!({
                 "text": value.to_string(),
@@ -501,10 +504,7 @@ impl Session {
 
     fn history(&self, cell: &str, sheet: Option<&str>) -> Response {
         let (qualified, rest) = parse_sheet_qualified(cell);
-        let id = match self.sheet_id(qualified.as_deref().or(sheet)) {
-            Ok(id) => id,
-            Err(response) => return response,
-        };
+        let id = sheet!(self, qualified.as_deref().or(sheet));
         let Some(reference) = CellRef::parse_a1(rest) else {
             return Response::error("bad_cell", format!("{cell:?} is not a cell"));
         };

@@ -89,8 +89,7 @@ export class MoveCells extends BasePlugin {
         // A move keeps the formula exactly as it was; a copy shifts it, which
         // is what the clipboard already does, so a copy-drag goes through the
         // same translation.
-        const text =
-          isCopy && value.startsWith('=') ? this.#shift(value, dRow, dCol) : value;
+        const text = isCopy ? this.grid.translateFormula(value, dRow, dCol) : value;
         changes.push([row + r, col + c, text]);
       });
     });
@@ -99,11 +98,6 @@ export class MoveCells extends BasePlugin {
     this.grid.selectCell(row, col, row + height - 1, col + width - 1);
     this.grid.hooks.run('afterMoveCells', undefined, source, { row, col }, isCopy);
     return true;
-  }
-
-  #shift(value: string, rows: number, cols: number): string {
-    const response = this.grid.engine.call({ op: 'translate', formula: value, rows, cols });
-    return typeof response['formula'] === 'string' ? response['formula'] : value;
   }
 }
 

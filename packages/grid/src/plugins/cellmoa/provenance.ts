@@ -39,8 +39,7 @@ export class Provenance extends BasePlugin {
   #panel: HTMLElement | null = null;
 
   override isEnabled(): boolean {
-    const settings = this.grid.getSettings().provenance;
-    return settings === true || (typeof settings === 'object' && settings !== null);
+    return this.switchedOn();
   }
 
   protected override onEnable(): void {
@@ -73,15 +72,12 @@ export class Provenance extends BasePlugin {
 
   /** Whether cells an agent touched are marked. */
   marksAgentEdits(): boolean {
-    const settings = this.settings<ProvenanceSettings | boolean>();
-    return typeof settings === 'object' ? settings.markAgentEdits !== false : true;
+    return this.options<ProvenanceSettings>().markAgentEdits !== false;
   }
 
   /** The class such a cell carries. */
   agentClassName(): string {
-    const settings = this.settings<ProvenanceSettings | boolean>();
-    return (typeof settings === 'object' ? settings.agentClassName : undefined) ??
-      DEFAULT_AGENT_CLASS;
+    return this.options<ProvenanceSettings>().agentClassName ?? DEFAULT_AGENT_CLASS;
   }
 
   /** Every change that touched a cell, oldest first. */

@@ -8,6 +8,7 @@ pub mod adjust;
 pub mod ast;
 pub mod lexer;
 pub mod parser;
+pub mod rewrite;
 pub mod translate;
 
 pub use ast::{BinaryOp, ColRef, Expr, Ref, RefKind, RowRef, SheetSpec, UnaryOp};

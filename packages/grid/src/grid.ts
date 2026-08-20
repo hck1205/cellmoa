@@ -440,6 +440,23 @@ export class Grid {
   }
 
   /**
+   * Moves a formula's relative references by a distance.
+   *
+   * Copying a formula and moving it are different operations and only one of
+   * them shifts references, so the callers decide *whether* to shift; what a
+   * shift means is one question with one answer, and it is answered here.
+   * Anything that is not a formula, and any formula that did not move, comes
+   * back untouched.
+   */
+  translateFormula(formula: string, rows: number, cols: number): string {
+    if (!formula.startsWith('=') || (rows === 0 && cols === 0)) {
+      return formula;
+    }
+    const response = this.#engine.call({ op: 'translate', formula, rows, cols });
+    return typeof response['formula'] === 'string' ? response['formula'] : formula;
+  }
+
+  /**
    * The manager for the areas around the grid.
    *
    * A caller registers an element and says which side it belongs on; where it

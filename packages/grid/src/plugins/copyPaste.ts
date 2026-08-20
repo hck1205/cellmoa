@@ -272,13 +272,7 @@ export class CopyPaste extends BasePlugin {
       return clipping.source;
     }
     return clipping.source.map((line) =>
-      line.map((value) => {
-        if (!value.startsWith('=')) {
-          return value;
-        }
-        const response = this.grid.engine.call({ op: 'translate', formula: value, rows, cols });
-        return typeof response['formula'] === 'string' ? response['formula'] : value;
-      }),
+      line.map((value) => this.grid.translateFormula(value, rows, cols)),
     );
   }
 }

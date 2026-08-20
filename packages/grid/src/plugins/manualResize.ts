@@ -120,8 +120,7 @@ export class AutoRowSize extends BasePlugin {
 
   /** Resizes every row that has not been resized by hand. */
   recalculate(): void {
-    const settings = this.grid.getSettings().autoRowSize;
-    const options = typeof settings === 'object' ? (settings as Record<string, number>) : {};
+    const options = this.options<{ minimumHeight: number; maximumHeight: number }>();
     const min = options.minimumHeight ?? DEFAULT_ROW_HEIGHT;
     const max = options.maximumHeight ?? 400;
     for (let row = 0; row < this.grid.countRows(); row += 1) {
@@ -281,8 +280,7 @@ export class AutoColumnSize extends BasePlugin {
 
   /** Resizes every column that has not been resized by hand. */
   recalculate(): void {
-    const settings = this.grid.getSettings().autoColumnSize;
-    const options = typeof settings === 'object' ? (settings as Record<string, number>) : {};
+    const options = this.options<{ minimumWidth: number; maximumWidth: number }>();
     const min = options.minimumWidth ?? 30;
     const max = options.maximumWidth ?? 400;
     for (let column = 0; column < this.grid.countCols(); column += 1) {

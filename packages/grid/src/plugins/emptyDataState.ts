@@ -28,8 +28,7 @@ export class EmptyDataState extends BasePlugin {
   #element: HTMLElement | null = null;
 
   override isEnabled(): boolean {
-    const settings = this.grid.getSettings().emptyDataState;
-    return settings === true || (typeof settings === 'object' && settings !== null);
+    return this.switchedOn();
   }
 
   protected override onEnable(): void {
@@ -57,8 +56,7 @@ export class EmptyDataState extends BasePlugin {
 
   /** The message that would be shown. */
   getMessage(reason: EmptyReason): string {
-    const settings = this.settings<EmptyDataStateSettings | boolean>();
-    const options = typeof settings === 'object' ? settings : {};
+    const options = this.options<EmptyDataStateSettings>();
     return reason === 'filtered'
       ? (options.filteredMessage ?? DEFAULT_FILTERED_MESSAGE)
       : (options.emptyMessage ?? DEFAULT_EMPTY_MESSAGE);
@@ -82,8 +80,7 @@ export class EmptyDataState extends BasePlugin {
       view.root.appendChild(this.#element);
     }
     this.#element.dataset['reason'] = reason;
-    const settings = this.settings<EmptyDataStateSettings | boolean>();
-    const renderer = typeof settings === 'object' ? settings.contentRenderer : undefined;
+    const renderer = this.options<EmptyDataStateSettings>().contentRenderer;
     if (renderer) {
       this.#element.replaceChildren();
       renderer(this.#element, reason);

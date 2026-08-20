@@ -8,6 +8,7 @@
  */
 
 import { BasePlugin, registerPlugin } from './base.js';
+import { OwnedIndexes } from './ownedIndexes.js';
 
 /** One row's place in the tree. */
 export interface NestedRow {
@@ -22,8 +23,8 @@ export class NestedRows extends BasePlugin {
 
   #tree: NestedRow[] = [];
   #collapsed = new Set<number>();
-  /** Rows this plugin trimmed, so it releases only its own. */
-  #trimmed: number[] = [];
+  /** The rows this plugin is folding away. */
+  readonly #folded = new OwnedIndexes(() => this.grid.rowIndex, 'trim');
 
   override isEnabled(): boolean {
     const settings = this.grid.getSettings().nestedRows;
@@ -41,7 +42,7 @@ export class NestedRows extends BasePlugin {
   }
 
   protected override onDisable(): void {
-    this.#release();
+    this.#folded.clear();
     this.#collapsed.clear();
     this.grid.render();
   }
@@ -161,26 +162,14 @@ export class NestedRows extends BasePlugin {
    * one must not reveal what the inner one is folding away.
    */
   #apply(): void {
-    this.#release();
     const hidden = new Set<number>();
     for (const parent of this.#collapsed) {
       for (const child of this.getDescendants(parent)) {
         hidden.add(child);
       }
     }
-    if (hidden.size > 0) {
-      const rows = [...hidden];
-      this.grid.rowIndex.trim(rows);
-      this.#trimmed = rows;
-    }
+    this.#folded.set(hidden);
     this.grid.render();
-  }
-
-  #release(): void {
-    if (this.#trimmed.length > 0) {
-      this.grid.rowIndex.untrim(this.#trimmed);
-      this.#trimmed = [];
-    }
   }
 
   #decorate(row: number, th: HTMLTableCellElement): void {

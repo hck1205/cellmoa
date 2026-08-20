@@ -2,18 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { Engine } from '../src/engine.js';
 import { Grid } from '../src/grid.js';
 import { cellTypeNames, getEditor, getRenderer, getValidator } from '../src/cellTypes/index.js';
-import { readWasm } from './wasm.js';
-
-const wasm = readWasm();
-
-async function makeGrid(settings: Record<string, unknown> = {}) {
-  const engine = await Engine.load(wasm);
-  const container = document.createElement('div');
-  Object.defineProperty(container, 'clientHeight', { value: 400, configurable: true });
-  Object.defineProperty(container, 'clientWidth', { value: 600, configurable: true });
-  document.body.appendChild(container);
-  return new Grid(container, { engine, colHeaders: true, rowHeaders: true, ...settings });
-}
+import { makeGrid } from './helpers.js';
 
 function key(grid: Grid, k: string, modifiers: Partial<KeyboardEventInit> = {}): KeyboardEvent {
   const event = new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true, ...modifiers });

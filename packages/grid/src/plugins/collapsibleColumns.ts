@@ -7,6 +7,7 @@
  */
 
 import { BasePlugin, registerPlugin } from './base.js';
+import { OwnedIndexes } from './ownedIndexes.js';
 import type { NestedHeaders } from './nestedHeaders.js';
 
 /** Which header cells may be collapsed, when the setting is a list. */
@@ -29,8 +30,8 @@ export class CollapsibleColumns extends BasePlugin {
 
   /** The header cells currently folded, keyed `level:col`. */
   #collapsed = new Set<string>();
-  /** The physical columns this plugin is hiding, so it can release its own. */
-  #hiding = new Set<number>();
+  /** The columns this plugin is folding away. */
+  readonly #folded = new OwnedIndexes(() => this.grid.colIndex, 'hide');
 
   override isEnabled(): boolean {
     const settings = this.grid.getSettings().collapsibleColumns;
@@ -63,11 +64,9 @@ export class CollapsibleColumns extends BasePlugin {
   }
 
   protected override onDisable(): void {
-    const hidden = [...this.#collapsed];
     this.#collapsed.clear();
-    if (hidden.length > 0) {
-      this.#apply();
-    }
+    this.#folded.clear();
+    this.grid.render();
   }
 
   /** The nested-header plugin this one reads its groups from. */
@@ -161,14 +160,12 @@ export class CollapsibleColumns extends BasePlugin {
   }
 
   /**
-   * Recomputes which columns are hidden.
+   * Recomputes which columns are folded away.
    *
-   * Everything is worked out from scratch each time rather than hidden and
-   * unhidden incrementally: a column can sit inside two folded groups at once,
-   * and unfolding the outer one must not reveal what the inner one is hiding.
-   *
-   * Only the columns *this* plugin hid are released. Someone may also have
-   * hidden a column through `hiddenColumns`, and unfolding a group is no
+   * The whole set each time, because a column can sit inside two folded groups
+   * at once and unfolding the outer one must not reveal what the inner one is
+   * hiding. Only the columns this plugin hid are released — someone may also
+   * have hidden a column through `hiddenColumns`, and unfolding a group is no
    * reason to bring that one back.
    */
   #apply(): void {
@@ -191,14 +188,7 @@ export class CollapsibleColumns extends BasePlugin {
         }
       }
     }
-    const released = [...this.#hiding].filter((column) => !wanted.has(column));
-    if (released.length > 0) {
-      this.grid.colIndex.unhide(released);
-    }
-    if (wanted.size > 0) {
-      this.grid.colIndex.hide([...wanted]);
-    }
-    this.#hiding = wanted;
+    this.#folded.set(wanted);
     this.grid.render();
   }
 }

@@ -10,6 +10,7 @@
  */
 
 import { BasePlugin, registerPlugin } from './base.js';
+import { OwnedIndexes } from './ownedIndexes.js';
 
 export interface PaginationSettings {
   pageSize?: number | 'auto';
@@ -41,17 +42,15 @@ export class Pagination extends BasePlugin {
   #page = 1;
   #pager: HTMLElement | null = null;
   #pageSize: number | 'auto' = DEFAULT_PAGE_SIZE;
-  /** Rows this plugin trimmed, so it releases only its own. */
-  #trimmed: number[] = [];
+  /** The rows this plugin is holding out of view. */
+  readonly #outside = new OwnedIndexes(() => this.grid.rowIndex, 'trim');
 
   override isEnabled(): boolean {
-    const settings = this.grid.getSettings().pagination;
-    return settings === true || (typeof settings === 'object' && settings !== null);
+    return this.switchedOn();
   }
 
   protected override onEnable(): void {
-    const settings = this.settings<PaginationSettings | boolean>();
-    const options = typeof settings === 'object' ? settings : {};
+    const options = this.options<PaginationSettings>();
     this.#pageSize = options.pageSize ?? DEFAULT_PAGE_SIZE;
     this.#page = Math.max(options.initialPage ?? 1, 1);
     this.#apply();
@@ -59,7 +58,7 @@ export class Pagination extends BasePlugin {
   }
 
   protected override onDisable(): void {
-    this.#release();
+    this.#outside.clear();
     this.grid.view?.layout.unregister('pagination', 'bottom');
     this.#pager = null;
     this.grid.render();
@@ -74,7 +73,7 @@ export class Pagination extends BasePlugin {
    * how many rows there are must not change which ones are showing.
    */
   countAllRows(): number {
-    return this.grid.rowIndex.visibleLength + this.#trimmed.length;
+    return this.grid.rowIndex.visibleLength + this.#outside.size;
   }
 
   /** The page size in force, resolving `auto` against the viewport. */
@@ -98,8 +97,7 @@ export class Pagination extends BasePlugin {
 
   /** Everything a pager needs to draw itself. */
   getPaginationData(): PaginationData {
-    const settings = this.settings<PaginationSettings | boolean>();
-    const options = typeof settings === 'object' ? settings : {};
+    const options = this.options<PaginationSettings>();
     const pageSize = this.getCurrentPageSize();
     const start = (this.#page - 1) * pageSize;
     const rendered = this.grid.countRows();
@@ -159,9 +157,7 @@ export class Pagination extends BasePlugin {
   }
 
   resetPageSize(): void {
-    const settings = this.settings<PaginationSettings | boolean>();
-    const options = typeof settings === 'object' ? settings : {};
-    this.setPageSize(options.pageSize ?? DEFAULT_PAGE_SIZE);
+    this.setPageSize(this.options<PaginationSettings>().pageSize ?? DEFAULT_PAGE_SIZE);
   }
 
   /** Back to page one at the original size. */
@@ -187,8 +183,7 @@ export class Pagination extends BasePlugin {
     if (!view) {
       return;
     }
-    const settings = this.settings<PaginationSettings | boolean>();
-    const options = typeof settings === 'object' ? settings : {};
+    const options = this.options<PaginationSettings>();
     const doc = view.root.ownerDocument;
     const pager = doc.createElement('div');
     pager.className = 'cm-pagination';
@@ -220,14 +215,17 @@ export class Pagination extends BasePlugin {
     this.#pager = pager;
   }
 
-  /** Trims everything outside the current page. */
+  /** Holds everything outside the current page out of view. */
   #apply(): void {
-    this.#release();
     const pageSize = this.getCurrentPageSize();
     const start = (this.#page - 1) * pageSize;
     const end = start + pageSize;
     const outside: number[] = [];
-    for (let visual = 0; visual < this.grid.rowIndex.visibleLength; visual += 1) {
+    const total = this.countAllRows();
+    // Counted over the whole visual space with this plugin's rows added back,
+    // so paging does not walk off the end of what a filter left behind.
+    this.#outside.clear();
+    for (let visual = 0; visual < total; visual += 1) {
       if (visual < start || visual >= end) {
         const physical = this.grid.rowIndex.toPhysical(visual);
         if (physical !== null) {
@@ -235,21 +233,11 @@ export class Pagination extends BasePlugin {
         }
       }
     }
-    if (outside.length > 0) {
-      this.grid.rowIndex.trim(outside);
-      this.#trimmed = outside;
-    }
+    this.#outside.set(outside);
     if (this.#pager) {
       this.#drawPager();
     }
     this.grid.render();
-  }
-
-  #release(): void {
-    if (this.#trimmed.length > 0) {
-      this.grid.rowIndex.untrim(this.#trimmed);
-      this.#trimmed = [];
-    }
   }
 }
 

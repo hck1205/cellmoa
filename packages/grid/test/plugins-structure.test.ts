@@ -14,26 +14,12 @@ import {
   escapeCsvValue,
   normalizeHeaders,
 } from '../src/plugins/index.js';
-import { readWasm } from './wasm.js';
+import { mountGrid } from './helpers.js';
+import type { MountOptions } from './helpers.js';
 
-const wasm = readWasm();
-
-async function makeGrid(settings: Record<string, unknown> = {}) {
-  document.body.replaceChildren();
-  const engine = await Engine.load(wasm);
-  const container = document.createElement('div');
-  Object.defineProperty(container, 'clientHeight', { value: 400, configurable: true });
-  Object.defineProperty(container, 'clientWidth', { value: 600, configurable: true });
-  document.body.appendChild(container);
-  return new Grid(container, {
-    engine,
-    colHeaders: true,
-    rowHeaders: true,
-    startRows: 5,
-    startCols: 4,
-    ...settings,
-  });
-}
+/** This suite's table, whose size several of its assertions count on. */
+const makeGrid = (settings: MountOptions = {}) =>
+  mountGrid({ startRows: 5, startCols: 4, ...settings }).then((m) => m.grid);
 
 describe('the undoRedo plugin', () => {
   it('reports what undo would do next, and for whom', async () => {

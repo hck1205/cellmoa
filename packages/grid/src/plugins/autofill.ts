@@ -107,7 +107,7 @@ export class Autofill extends BasePlugin {
             changes.push([
               source.bottomRow + index + 1,
               col,
-              this.#shift(filled.value, filled.distance, 0),
+              this.grid.translateFormula(filled.value, filled.distance, 0),
             ]);
           });
         }
@@ -119,7 +119,7 @@ export class Autofill extends BasePlugin {
               changes.push([
                 source.topRow - index - 1,
                 col,
-                this.#shift(filled.value, -filled.distance, 0),
+                this.grid.translateFormula(filled.value, -filled.distance, 0),
               ]);
             },
           );
@@ -137,7 +137,7 @@ export class Autofill extends BasePlugin {
             changes.push([
               row,
               source.endCol + index + 1,
-              this.#shift(filled.value, 0, filled.distance),
+              this.grid.translateFormula(filled.value, 0, filled.distance),
             ]);
           });
         }
@@ -147,7 +147,7 @@ export class Autofill extends BasePlugin {
               changes.push([
                 row,
                 source.startCol - index - 1,
-                this.#shift(filled.value, 0, -filled.distance),
+                this.grid.translateFormula(filled.value, 0, -filled.distance),
               ]);
             },
           );
@@ -159,21 +159,6 @@ export class Autofill extends BasePlugin {
       this.grid.setDataAtCells(changes, 'autofill');
     }
     this.grid.hooks.run('afterAutofill', undefined, source.toArray(), target);
-  }
-
-  /**
-   * Moves a formula by the distance it travelled.
-   *
-   * Anything that is not a formula comes back untouched, and so does a formula
-   * that did not move — a computed step in a number series has no source cell
-   * whose references could be shifted.
-   */
-  #shift(value: string, rows: number, cols: number): string {
-    if (!value.startsWith('=') || (rows === 0 && cols === 0)) {
-      return value;
-    }
-    const response = this.grid.engine.call({ op: 'translate', formula: value, rows, cols });
-    return typeof response['formula'] === 'string' ? response['formula'] : value;
   }
 }
 

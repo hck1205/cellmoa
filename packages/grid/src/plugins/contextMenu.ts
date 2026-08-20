@@ -104,8 +104,7 @@ export class ContextMenu extends BasePlugin {
     if (this.grid.hooks.allows('beforeContextMenuShow', shown) === false) {
       return;
     }
-    const settings = this.settings<ContextMenuSettings>();
-    this.#menu?.open(shown, x, y, typeof settings === 'object' ? settings?.uiContainer : undefined);
+    this.#menu?.open(shown, x, y, this.options<ContextMenuSettings>().uiContainer);
     this.grid.hooks.run('afterContextMenuShow', undefined, shown);
   }
 
@@ -122,10 +121,7 @@ export class ContextMenu extends BasePlugin {
     const item = this.getItems().find((entry) => entry.key === key);
     if (item) {
       this.#menu?.execute(item, event);
-      const settings = this.settings<ContextMenuSettings>();
-      if (typeof settings === 'object' && settings?.callback) {
-        settings.callback(key, this.grid.getMenuSelection(), event);
-      }
+      this.options<ContextMenuSettings>().callback?.(key, this.grid.getMenuSelection(), event);
     }
   }
 

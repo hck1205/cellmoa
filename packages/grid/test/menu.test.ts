@@ -5,26 +5,12 @@ import { Menu, SEPARATOR, resolve } from '../src/menu.js';
 import type { MenuItem } from '../src/menu.js';
 import type { ContextMenu, DropdownMenu } from '../src/plugins/index.js';
 import { DEFAULT_CONTEXT_MENU, ITEM, buildMenu } from '../src/plugins/index.js';
-import { readWasm } from './wasm.js';
+import { mountGrid } from './helpers.js';
+import type { MountOptions } from './helpers.js';
 
-const wasm = readWasm();
-
-async function makeGrid(settings: Record<string, unknown> = {}) {
-  document.body.replaceChildren();
-  const engine = await Engine.load(wasm);
-  const container = document.createElement('div');
-  Object.defineProperty(container, 'clientHeight', { value: 400, configurable: true });
-  Object.defineProperty(container, 'clientWidth', { value: 600, configurable: true });
-  document.body.appendChild(container);
-  return new Grid(container, {
-    engine,
-    colHeaders: true,
-    rowHeaders: true,
-    startRows: 4,
-    startCols: 3,
-    ...settings,
-  });
-}
+/** This suite's table, whose size several of its assertions count on. */
+const makeGrid = (settings: MountOptions = {}) =>
+  mountGrid({ startRows: 4, startCols: 3, ...settings }).then((m) => m.grid);
 
 /** The labels the menu is showing, separators included as a dash. */
 function labels(root: HTMLElement | null): string[] {

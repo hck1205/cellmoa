@@ -31,12 +31,10 @@ abstract class HidingPlugin extends BasePlugin {
   }
 
   protected override onEnable(): void {
-    const settings = this.settings<HidingSettings | boolean>();
-    if (typeof settings === 'object') {
-      const initial = this.axis === 'rows' ? settings.rows : settings.columns;
-      if (Array.isArray(initial) && initial.length > 0) {
-        this.hide(initial);
-      }
+    const options = this.options<HidingSettings>();
+    const initial = this.axis === 'rows' ? options.rows : options.columns;
+    if (Array.isArray(initial) && initial.length > 0) {
+      this.hide(initial);
     }
   }
 

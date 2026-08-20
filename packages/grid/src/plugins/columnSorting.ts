@@ -83,9 +83,9 @@ export class ColumnSorting extends BasePlugin {
   }
 
   protected override onEnable(): void {
-    const settings = this.settings<SortSettings | boolean>();
-    if (typeof settings === 'object' && settings?.initialConfig) {
-      this.sort(settings.initialConfig);
+    const initial = this.options<SortSettings>().initialConfig;
+    if (initial) {
+      this.sort(initial);
     }
     // Clicking a header cycles ascending, descending, off — the order every
     // spreadsheet uses.
@@ -94,8 +94,7 @@ export class ColumnSorting extends BasePlugin {
       if (!target || !target.classList.contains('cm-col-header')) {
         return;
       }
-      const options = this.settings<SortSettings>();
-      if (typeof options === 'object' && options?.headerAction === false) {
+      if (this.options<SortSettings>().headerAction === false) {
         return;
       }
       const col = Number(target.dataset.col);
@@ -180,8 +179,8 @@ export class ColumnSorting extends BasePlugin {
       return;
     }
     const rows = this.grid.rowIndex.visibleLength;
-    const settings = this.settings<SortSettings>();
-    const sortEmptyCells = typeof settings === 'object' && settings?.sortEmptyCells === true;
+    const options = this.options<SortSettings>();
+    const sortEmptyCells = options.sortEmptyCells === true;
 
     // The visual order is what gets sorted, then translated back to physical
     // indexes — sorting the physical order would ignore any filtering.
@@ -200,7 +199,7 @@ export class ColumnSorting extends BasePlugin {
       for (const [index, entry] of this.sortState.entries()) {
         const columnMeta = this.grid.getCellMeta(0, entry.column);
         const factory =
-          typeof settings === 'object' ? settings?.compareFunctionFactory : undefined;
+          options.compareFunctionFactory;
         const compare = factory
           ? factory(entry.sortOrder, columnMeta as Record<string, unknown>)
           : compareValues;

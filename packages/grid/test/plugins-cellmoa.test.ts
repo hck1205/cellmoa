@@ -12,26 +12,14 @@ import type {
   VerifyOverlay,
 } from '../src/plugins/index.js';
 import { readWasm } from './wasm.js';
+import { mountGrid } from './helpers.js';
+import type { MountOptions } from './helpers.js';
+
+/** This suite's table, whose size several of its assertions count on. */
+const makeGrid = (settings: MountOptions = {}) =>
+  mountGrid({ startRows: 4, startCols: 3, ...settings }).then((m) => m.grid);
 
 const wasm = readWasm();
-
-/** A grid, and optionally a second one on the same workbook. */
-async function makeGrid(settings: Record<string, unknown> = {}) {
-  document.body.replaceChildren();
-  const engine = (settings['engine'] as Engine | undefined) ?? (await Engine.load(wasm));
-  const container = document.createElement('div');
-  Object.defineProperty(container, 'clientHeight', { value: 400, configurable: true });
-  Object.defineProperty(container, 'clientWidth', { value: 600, configurable: true });
-  document.body.appendChild(container);
-  return new Grid(container, {
-    colHeaders: true,
-    rowHeaders: true,
-    startRows: 4,
-    startCols: 3,
-    ...settings,
-    engine,
-  });
-}
 
 describe('provenance', () => {
   it('says who set a cell to what, newest first on screen', async () => {

@@ -9,6 +9,7 @@
  * Handsontable has no counterpart.
  */
 
+import { parseA1 } from '../../dataSource.js';
 import { BasePlugin, registerPlugin } from '../base.js';
 
 /** One thing the specification says should be true. */
@@ -48,8 +49,7 @@ export class VerifyOverlay extends BasePlugin {
   #failed = new Map<string, CheckResult>();
 
   override isEnabled(): boolean {
-    const settings = this.grid.getSettings().verifyOverlay;
-    return settings === true || (typeof settings === 'object' && settings !== null);
+    return this.switchedOn();
   }
 
   protected override onEnable(): void {
@@ -63,9 +63,9 @@ export class VerifyOverlay extends BasePlugin {
         }
       },
     );
-    const spec = this.settings<{ spec?: Spec } | boolean>();
-    if (typeof spec === 'object' && spec.spec) {
-      this.run(spec.spec);
+    const configured = this.options<{ spec: Spec }>().spec;
+    if (configured) {
+      this.run(configured);
     }
   }
 
@@ -87,7 +87,7 @@ export class VerifyOverlay extends BasePlugin {
       // A check on a range marks its top-left cell: that is where a reader
       // looks first, and marking every cell of a large range would bury the
       // one thing that went wrong.
-      const target = this.#locate(result.target);
+      const target = parseA1(result.target);
       if (target) {
         this.#failed.set(`${target.row}:${target.col}`, result);
       }
@@ -123,27 +123,6 @@ export class VerifyOverlay extends BasePlugin {
     this.#results = [];
     this.#failed.clear();
     this.grid.render();
-  }
-
-  /**
-   * Turns a target such as `Sheet1!B2` or `B2:C4` into a cell position.
-   *
-   * Returns `null` for anything that is not a reference — a check can be about
-   * the workbook as a whole, and that has nowhere on the grid to point at.
-   */
-  #locate(target: string): { row: number; col: number } | null {
-    const bare = target.includes('!') ? target.slice(target.indexOf('!') + 1) : target;
-    const first = bare.split(':')[0] ?? '';
-    const match = /^\$?([A-Za-z]+)\$?(\d+)$/.exec(first);
-    if (!match) {
-      return null;
-    }
-    const letters = match[1]!.toUpperCase();
-    let col = 0;
-    for (const character of letters) {
-      col = col * 26 + (character.charCodeAt(0) - 64);
-    }
-    return { row: Number(match[2]) - 1, col: col - 1 };
   }
 }
 

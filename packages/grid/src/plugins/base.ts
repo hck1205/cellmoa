@@ -125,6 +125,31 @@ export abstract class BasePlugin {
   protected settings<T = unknown>(): T | undefined {
     return this.grid.getSettings()[this.pluginName] as T | undefined;
   }
+
+  /**
+   * Whether the plugin's setting switches it on.
+   *
+   * Handsontable's settings take three shapes for one feature: `true` to switch
+   * it on with its defaults, an object to switch it on and configure it, and
+   * anything else (`false`, absent) to leave it off. Most plugins want exactly
+   * that test, and writing it out is how one of them ends up treating `null`
+   * as configuration.
+   */
+  protected switchedOn(): boolean {
+    const settings = this.settings();
+    return settings === true || (typeof settings === 'object' && settings !== null);
+  }
+
+  /**
+   * The plugin's settings as an object, empty when they were not given as one.
+   *
+   * `true` carries no configuration, so it reads as "no options" — which lets a
+   * caller ask for a field without first asking what shape the setting took.
+   */
+  protected options<T extends object>(): Partial<T> {
+    const settings = this.settings();
+    return typeof settings === 'object' && settings !== null ? (settings as Partial<T>) : {};
+  }
 }
 
 /** How a plugin is constructed. */

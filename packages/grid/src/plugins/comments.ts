@@ -26,8 +26,7 @@ export class Comments extends BasePlugin {
   #editor: HTMLElement | null = null;
 
   override isEnabled(): boolean {
-    const settings = this.grid.getSettings().comments;
-    return settings === true || (typeof settings === 'object' && settings !== null);
+    return this.switchedOn();
   }
 
   protected override onEnable(): void {

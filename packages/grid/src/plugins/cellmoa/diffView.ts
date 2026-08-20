@@ -9,6 +9,7 @@
  * Handsontable has no counterpart.
  */
 
+import { parseA1 } from '../../dataSource.js';
 import { BasePlugin, registerPlugin } from '../base.js';
 
 /** What a cell held on one side of the comparison. */
@@ -112,7 +113,7 @@ export class DiffView extends BasePlugin {
         }
         continue;
       }
-      const position = change.cell ? this.#locate(change.cell) : null;
+      const position = change.cell ? parseA1(change.cell) : null;
       if (position) {
         this.#byCell.set(`${position.row}:${position.col}`, change);
       }
@@ -152,18 +153,6 @@ export class DiffView extends BasePlugin {
     this.#byCell.clear();
     this.#against = null;
     this.grid.render();
-  }
-
-  #locate(cell: string): { row: number; col: number } | null {
-    const match = /^\$?([A-Za-z]+)\$?(\d+)$/.exec(cell);
-    if (!match) {
-      return null;
-    }
-    let col = 0;
-    for (const character of match[1]!.toUpperCase()) {
-      col = col * 26 + (character.charCodeAt(0) - 64);
-    }
-    return { row: Number(match[2]) - 1, col: col - 1 };
   }
 }
 

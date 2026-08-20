@@ -9,6 +9,17 @@
 
 import type { Grid } from '../grid.js';
 import { PHRASE } from '../i18n/keys.js';
+// Type-only imports, so naming the plugins here costs nothing at run time and
+// makes no import cycle. Structural stand-ins would compile just as well and
+// would go quietly out of date the first time one of these methods is renamed.
+import type { Comments } from './comments.js';
+import type { ColumnSorting } from './columnSorting.js';
+import type { CopyPaste } from './copyPaste.js';
+import type { ExportFile } from './exportFile.js';
+import type { HiddenColumns, HiddenRows } from './hiding.js';
+import type { ManualColumnFreeze } from './manualMove.js';
+import type { MergeCells } from './mergeCells.js';
+import type { Provenance } from './cellmoa/provenance.js';
 import type { MenuItem, MenuSelection } from '../menu.js';
 import { SEPARATOR } from '../menu.js';
 
@@ -287,7 +298,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
   };
 
   if (enabled(grid, 'copyPaste')) {
-    const clipboard = grid.getPlugin('copyPaste') as unknown as { getCopyableText(): string };
+    const clipboard = grid.getPlugin<CopyPaste>('copyPaste')!;
     items[ITEM.copy] = {
       key: ITEM.copy,
       name: () => grid.getTranslatedPhrase(PHRASE.copy),
@@ -309,10 +320,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
   }
 
   if (enabled(grid, 'mergeCells')) {
-    const merge = grid.getPlugin('mergeCells') as unknown as {
-      toggleMerge(): void;
-      getCoveringArea(row: number, col: number): unknown;
-    };
+    const merge = grid.getPlugin<MergeCells>('mergeCells')!;
     items[ITEM.mergeCells] = {
       key: ITEM.mergeCells,
       name: () => {
@@ -329,10 +337,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
   }
 
   if (enabled(grid, 'manualColumnFreeze')) {
-    const freeze = grid.getPlugin('manualColumnFreeze') as unknown as {
-      freezeColumn(col: number): void;
-      unfreezeColumn(col: number): void;
-    };
+    const freeze = grid.getPlugin<ManualColumnFreeze>('manualColumnFreeze')!;
     items[ITEM.freezeColumn] = {
       key: ITEM.freezeColumn,
       name: () => grid.getTranslatedPhrase(PHRASE.freezeColumn),
@@ -358,10 +363,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
   }
 
   if (enabled(grid, 'hiddenRows')) {
-    const hidden = grid.getPlugin('hiddenRows') as unknown as {
-      hide(indexes: number[]): void;
-      show(indexes?: number[]): void;
-    };
+    const hidden = grid.getPlugin<HiddenRows>('hiddenRows')!;
     items[ITEM.hiddenRowsHide] = {
       key: ITEM.hiddenRowsHide,
       name: () => grid.getTranslatedPhrase(PHRASE.hideRow),
@@ -382,10 +384,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
   }
 
   if (enabled(grid, 'hiddenColumns')) {
-    const hidden = grid.getPlugin('hiddenColumns') as unknown as {
-      hide(indexes: number[]): void;
-      show(indexes?: number[]): void;
-    };
+    const hidden = grid.getPlugin<HiddenColumns>('hiddenColumns')!;
     items[ITEM.hiddenColumnsHide] = {
       key: ITEM.hiddenColumnsHide,
       name: () => grid.getTranslatedPhrase(PHRASE.hideColumn),
@@ -406,11 +405,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
   }
 
   if (enabled(grid, 'comments')) {
-    const comments = grid.getPlugin('comments') as unknown as {
-      show(row: number, col: number): void;
-      removeComment(row: number, col: number): void;
-      getComment(row: number, col: number): unknown;
-    };
+    const comments = grid.getPlugin<Comments>('comments')!;
     items[ITEM.addComment] = {
       key: ITEM.addComment,
       name: () => {
@@ -446,11 +441,12 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
   }
 
   if (enabled(grid, 'columnSorting') || enabled(grid, 'multiColumnSorting')) {
-    const sorting = (grid.getPlugin('multiColumnSorting')?.isPluginEnabled() === true
-      ? grid.getPlugin('multiColumnSorting')
-      : grid.getPlugin('columnSorting')) as unknown as {
-      sort(config: { column: number; sortOrder: 'asc' | 'desc' }): void;
-    };
+    // `multiColumnSorting` is a subclass of `columnSorting`, so either answers
+    // the same call; which one is running decides whether a second sort adds to
+    // the first or replaces it.
+    const sorting = (enabled(grid, 'multiColumnSorting')
+      ? grid.getPlugin<ColumnSorting>('multiColumnSorting')
+      : grid.getPlugin<ColumnSorting>('columnSorting'))!;
     for (const [key, name, order] of [
       [ITEM.sortAscending, 'Sort ascending', 'asc'],
       [ITEM.sortDescending, 'Sort descending', 'desc'],
@@ -470,9 +466,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
   }
 
   if (enabled(grid, 'exportFile')) {
-    const exporter = grid.getPlugin('exportFile') as unknown as {
-      downloadFile(format: 'csv' | 'xlsx', options?: Record<string, unknown>): void;
-    };
+    const exporter = grid.getPlugin<ExportFile>('exportFile')!;
     items[ITEM.exportFile] = {
       key: ITEM.exportFile,
       name: () => grid.getTranslatedPhrase(PHRASE.exportFile),
@@ -494,9 +488,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
   }
 
   if (enabled(grid, 'provenance')) {
-    const provenance = grid.getPlugin('provenance') as unknown as {
-      show(row: number, col: number): void;
-    };
+    const provenance = grid.getPlugin<Provenance>('provenance')!;
     items[ITEM.provenance] = {
       key: ITEM.provenance,
       name: 'Where did this come from?',

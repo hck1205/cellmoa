@@ -9,26 +9,12 @@ import {
   toClipboardHtml,
   toClipboardText,
 } from '../src/plugins/index.js';
-import { readWasm } from './wasm.js';
+import { mountGrid } from './helpers.js';
+import type { MountOptions } from './helpers.js';
 
-const wasm = readWasm();
-
-async function makeGrid(settings: Record<string, unknown> = {}) {
-  document.body.replaceChildren();
-  const engine = await Engine.load(wasm);
-  const container = document.createElement('div');
-  Object.defineProperty(container, 'clientHeight', { value: 400, configurable: true });
-  Object.defineProperty(container, 'clientWidth', { value: 600, configurable: true });
-  document.body.appendChild(container);
-  return new Grid(container, {
-    engine,
-    colHeaders: true,
-    rowHeaders: true,
-    startRows: 6,
-    startCols: 4,
-    ...settings,
-  });
-}
+/** This suite's table, whose size several of its assertions count on. */
+const makeGrid = (settings: MountOptions = {}) =>
+  mountGrid({ startRows: 6, startCols: 4, ...settings }).then((m) => m.grid);
 
 /** A `ClipboardEvent` jsdom will accept, with a data transfer we can inspect. */
 function clipboardEvent(type: string, text = ''): ClipboardEvent {

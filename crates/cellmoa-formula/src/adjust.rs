@@ -12,6 +12,7 @@
 //! follow `Data!A5` when a row is inserted on `Data`.
 
 use crate::ast::{ColRef, Expr, Ref, RefKind, RowRef, SheetSpec};
+use crate::rewrite::map_refs;
 use cellmoa_core::reference::{CellRef, RangeRef, MAX_COLS, MAX_ROWS};
 
 /// Which way a sheet's cells are being moved.
@@ -106,36 +107,12 @@ impl Shift {
 /// `on_sheet` is the sheet the formula itself lives on, which is what an
 /// unqualified reference means.
 pub fn adjust(expr: &Expr, shift: &Shift, on_sheet: &str) -> Expr {
-    match expr {
-        Expr::Ref(reference) => {
-            if !applies_to(reference.sheet.as_ref(), shift, on_sheet) {
-                return expr.clone();
-            }
-            Expr::Ref(Ref {
-                sheet: reference.sheet.clone(),
-                kind: adjust_kind(&reference.kind, shift),
-            })
+    map_refs(expr, &mut |reference| {
+        if !applies_to(reference.sheet.as_ref(), shift, on_sheet) {
+            return reference.clone();
         }
-        Expr::Unary { op, expr } => {
-            Expr::Unary { op: *op, expr: Box::new(adjust(expr, shift, on_sheet)) }
-        }
-        Expr::Binary { op, lhs, rhs } => Expr::Binary {
-            op: *op,
-            lhs: Box::new(adjust(lhs, shift, on_sheet)),
-            rhs: Box::new(adjust(rhs, shift, on_sheet)),
-        },
-        Expr::Func { name, args } => Expr::Func {
-            name: name.clone(),
-            args: args.iter().map(|a| adjust(a, shift, on_sheet)).collect(),
-        },
-        Expr::Paren(inner) => Expr::Paren(Box::new(adjust(inner, shift, on_sheet))),
-        Expr::Array(rows) => Expr::Array(
-            rows.iter()
-                .map(|row| row.iter().map(|c| adjust(c, shift, on_sheet)).collect())
-                .collect(),
-        ),
-        other => other.clone(),
-    }
+        Ref { sheet: reference.sheet.clone(), kind: adjust_kind(&reference.kind, shift) }
+    })
 }
 
 /// Whether a reference points at the sheet whose shape is changing.

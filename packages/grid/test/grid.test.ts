@@ -1,20 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { Engine } from '../src/engine.js';
 import { Grid } from '../src/grid.js';
-import { readWasm } from './wasm.js';
-
-const wasm = readWasm();
-
-async function makeGrid(settings: Record<string, unknown> = {}) {
-  const engine = await Engine.load(wasm);
-  const container = document.createElement('div');
-  // jsdom reports zero for every measurement, so the viewport is given a size.
-  Object.defineProperty(container, 'clientHeight', { value: 400, configurable: true });
-  Object.defineProperty(container, 'clientWidth', { value: 600, configurable: true });
-  document.body.appendChild(container);
-  const grid = new Grid(container, { engine, colHeaders: true, rowHeaders: true, ...settings });
-  return { grid, engine, container };
-}
+import { mountGrid } from './helpers.js';
 
 describe('the grid', () => {
   let grid: Grid;
@@ -22,7 +9,7 @@ describe('the grid', () => {
 
   beforeEach(async () => {
     document.body.replaceChildren();
-    ({ grid, container } = await makeGrid());
+    ({ grid, container } = await mountGrid());
   });
 
   it('mounts into its container', () => {
@@ -250,7 +237,7 @@ describe('the grid', () => {
 
 describe('inserting and deleting rows and columns', () => {
   it('moves the cells below an inserted row down', async () => {
-    const { grid } = await makeGrid({ startRows: 4, startCols: 2 });
+    const { grid } = await mountGrid({ startRows: 4, startCols: 2 });
     grid.setDataAtCells([
       [0, 0, 'top'],
       [1, 0, 'middle'],
@@ -263,7 +250,7 @@ describe('inserting and deleting rows and columns', () => {
   });
 
   it('keeps a formula pointing at what it pointed at', async () => {
-    const { grid } = await makeGrid({ startRows: 4, startCols: 3 });
+    const { grid } = await mountGrid({ startRows: 4, startCols: 3 });
     grid.setDataAtCells([
       [0, 0, '1'],
       [1, 0, '2'],
@@ -277,7 +264,7 @@ describe('inserting and deleting rows and columns', () => {
   });
 
   it('removes a row and pulls the rest up', async () => {
-    const { grid } = await makeGrid({ startRows: 4, startCols: 2 });
+    const { grid } = await mountGrid({ startRows: 4, startCols: 2 });
     grid.setDataAtCells([
       [0, 0, 'one'],
       [1, 0, 'two'],
@@ -290,7 +277,7 @@ describe('inserting and deleting rows and columns', () => {
   });
 
   it('leaves a #REF! rather than a wrong number', async () => {
-    const { grid } = await makeGrid({ startRows: 4, startCols: 3 });
+    const { grid } = await mountGrid({ startRows: 4, startCols: 3 });
     grid.setDataAtCells([
       [1, 0, '5'],
       [0, 2, '=A2'],
@@ -300,7 +287,7 @@ describe('inserting and deleting rows and columns', () => {
   });
 
   it('inserts and removes columns too', async () => {
-    const { grid } = await makeGrid({ startRows: 2, startCols: 3 });
+    const { grid } = await mountGrid({ startRows: 2, startCols: 3 });
     grid.setDataAtCells([
       [0, 0, 'a'],
       [0, 1, 'b'],
@@ -313,7 +300,7 @@ describe('inserting and deleting rows and columns', () => {
   });
 
   it('moves a cell comment along with the cell it describes', async () => {
-    const { grid } = await makeGrid({ startRows: 4, startCols: 2 });
+    const { grid } = await mountGrid({ startRows: 4, startCols: 2 });
     grid.setCellMeta(1, 0, 'comment', { value: 'about the second row' });
     grid.alter('insert_row', 0);
     expect(grid.getCellMeta(1, 0)['comment']).toBeUndefined();
@@ -321,14 +308,14 @@ describe('inserting and deleting rows and columns', () => {
   });
 
   it('drops what was said about a row that was deleted', async () => {
-    const { grid } = await makeGrid({ startRows: 4, startCols: 2 });
+    const { grid } = await mountGrid({ startRows: 4, startCols: 2 });
     grid.setCellMeta(1, 0, 'readOnly', true);
     grid.alter('remove_row', 1);
     expect(grid.getCellMeta(1, 0)['readOnly']).toBeFalsy();
   });
 
   it('lets a hook veto the change', async () => {
-    const { grid } = await makeGrid({ startRows: 3, startCols: 2 });
+    const { grid } = await mountGrid({ startRows: 3, startCols: 2 });
     grid.setDataAtCell(1, 0, 'stays');
     grid.addHook('beforeRemoveRow', () => false);
     grid.alter('remove_row', 1);
@@ -336,7 +323,7 @@ describe('inserting and deleting rows and columns', () => {
   });
 
   it('undoes in one step', async () => {
-    const { grid } = await makeGrid({ startRows: 4, startCols: 2 });
+    const { grid } = await mountGrid({ startRows: 4, startCols: 2 });
     grid.setDataAtCells([
       [0, 0, 'one'],
       [1, 0, 'two'],

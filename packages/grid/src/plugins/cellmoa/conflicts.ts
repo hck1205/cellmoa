@@ -50,9 +50,9 @@ export class Conflicts extends BasePlugin {
 
   /** The message a refusal produces. */
   messageFor(revision: number): string {
-    const settings = this.settings<ConflictsSettings | boolean>();
-    if (typeof settings === 'object' && settings.message) {
-      return settings.message(revision);
+    const message = this.options<ConflictsSettings>().message;
+    if (message) {
+      return message(revision);
     }
     return `Someone else changed this workbook (now at revision ${revision}). Your change was not applied.`;
   }
@@ -62,8 +62,7 @@ export class Conflicts extends BasePlugin {
     // an edit, and nothing about it has to replay.
     this.#refusals.push({ revision, at: Date.now() });
 
-    const settings = this.settings<ConflictsSettings | boolean>();
-    if (typeof settings === 'object' && settings.notify === false) {
+    if (this.options<ConflictsSettings>().notify === false) {
       return;
     }
     const notifications = this.grid.getPlugin('notification') as unknown as {

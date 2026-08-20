@@ -81,6 +81,26 @@ export function lettersToColumn(letters: string): number {
   return n - 1;
 }
 
+/**
+ * Reads an A1 reference back into a position.
+ *
+ * Returns `null` for anything that is not one — a sheet-qualified reference has
+ * its qualifier stripped first, and a range gives its top-left corner, but a
+ * defined name or a whole-column reference has no single cell to point at and
+ * says so rather than guessing.
+ */
+export function parseA1(reference: string): Coords | null {
+  const bare = reference.includes('!')
+    ? reference.slice(reference.lastIndexOf('!') + 1)
+    : reference;
+  const first = bare.split(':')[0] ?? '';
+  const match = /^\$?([A-Za-z]+)\$?(\d+)$/.exec(first);
+  if (!match) {
+    return null;
+  }
+  return { row: Number(match[2]) - 1, col: lettersToColumn(match[1]!) };
+}
+
 /** An A1 reference for a cell. */
 export function cellRef(row: number, col: number): string {
   return `${columnLetters(col)}${row + 1}`;

@@ -33,8 +33,7 @@ export class StatusBar extends BasePlugin {
   #element: HTMLElement | null = null;
 
   override isEnabled(): boolean {
-    const settings = this.grid.getSettings().statusBar;
-    return settings === true || (typeof settings === 'object' && settings !== null);
+    return this.switchedOn();
   }
 
   protected override onEnable(): void {
@@ -77,8 +76,7 @@ export class StatusBar extends BasePlugin {
     if (!view) {
       return;
     }
-    const settings = this.settings<StatusBarSettings | boolean>();
-    const options = typeof settings === 'object' ? settings : {};
+    const options = this.options<StatusBarSettings>();
     const doc = view.root.ownerDocument;
     if (!this.#element) {
       this.#element = doc.createElement('div');

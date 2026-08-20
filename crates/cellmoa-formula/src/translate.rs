@@ -6,34 +6,16 @@
 //! one implementation is the only way they can.
 
 use crate::ast::{ColRef, Expr, Ref, RefKind, RowRef};
+use crate::rewrite::map_refs;
 use cellmoa_core::reference::{MAX_COLS, MAX_ROWS};
 
 /// Shifts every relative reference in an expression, for expanding a shared
 /// formula into the cells that use it.
 pub fn translate(expr: &Expr, dcol: i64, drow: i64) -> Expr {
-    match expr {
-        Expr::Ref(reference) => Expr::Ref(Ref {
-            sheet: reference.sheet.clone(),
-            kind: translate_kind(&reference.kind, dcol, drow),
-        }),
-        Expr::Unary { op, expr } => {
-            Expr::Unary { op: *op, expr: Box::new(translate(expr, dcol, drow)) }
-        }
-        Expr::Binary { op, lhs, rhs } => Expr::Binary {
-            op: *op,
-            lhs: Box::new(translate(lhs, dcol, drow)),
-            rhs: Box::new(translate(rhs, dcol, drow)),
-        },
-        Expr::Func { name, args } => Expr::Func {
-            name: name.clone(),
-            args: args.iter().map(|a| translate(a, dcol, drow)).collect(),
-        },
-        Expr::Paren(inner) => Expr::Paren(Box::new(translate(inner, dcol, drow))),
-        Expr::Array(rows) => Expr::Array(
-            rows.iter().map(|row| row.iter().map(|c| translate(c, dcol, drow)).collect()).collect(),
-        ),
-        other => other.clone(),
-    }
+    map_refs(expr, &mut |reference| Ref {
+        sheet: reference.sheet.clone(),
+        kind: translate_kind(&reference.kind, dcol, drow),
+    })
 }
 
 fn translate_kind(kind: &RefKind, dcol: i64, drow: i64) -> RefKind {

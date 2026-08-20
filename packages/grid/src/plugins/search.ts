@@ -48,8 +48,7 @@ export class Search extends BasePlugin {
   #cursor = -1;
 
   override isEnabled(): boolean {
-    const settings = this.grid.getSettings().search;
-    return settings === true || (typeof settings === 'object' && settings !== null);
+    return this.switchedOn();
   }
 
   protected override onEnable(): void {
@@ -71,18 +70,18 @@ export class Search extends BasePlugin {
 
   /** The class put on a matching cell. */
   resultClass(): string {
-    return this.settings<SearchSettings>()?.searchResultClass ?? DEFAULT_SEARCH_RESULT_CLASS;
+    return this.options<SearchSettings>().searchResultClass ?? DEFAULT_SEARCH_RESULT_CLASS;
   }
 
   /** The matcher in use. */
   queryMethod(): SearchQueryMethod {
-    return this.settings<SearchSettings>()?.queryMethod ?? DEFAULT_QUERY_METHOD;
+    return this.options<SearchSettings>().queryMethod ?? DEFAULT_QUERY_METHOD;
   }
 
   /** Runs a query over every cell and returns what matched. */
   query(text: string, callback?: SearchSettings['callback'], method?: SearchQueryMethod): SearchResult[] {
     const matches = method ?? this.queryMethod();
-    const report = callback ?? this.settings<SearchSettings>()?.callback;
+    const report = callback ?? this.options<SearchSettings>().callback;
     this.#query = text;
     this.#results = [];
     this.#cursor = -1;

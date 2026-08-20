@@ -90,8 +90,7 @@ export class DropdownMenu extends BasePlugin {
     if (this.grid.hooks.allows('beforeDropdownMenuShow', shown) === false) {
       return;
     }
-    const settings = this.settings<DropdownMenuSettings>();
-    this.#menu?.open(shown, x, y, typeof settings === 'object' ? settings?.uiContainer : undefined);
+    this.#menu?.open(shown, x, y, this.options<DropdownMenuSettings>().uiContainer);
     this.grid.hooks.run('afterDropdownMenuShow', undefined, shown);
   }
 
