@@ -38,13 +38,13 @@ Handsontable 저장소(`handsontable/handsontable`)의 소스와 문서에서 �
 | `columnSorting` | ✅ | |
 | `columnSummary` | ✅ | 고정된 숫자가 아니라 수식을 씀 — 위 값이 바뀌면 따라감 ➕ |
 | `comments` | ✅ | 주석은 셀 메타에만 저장 — 워크북/수식에 영향 없음 |
-| `contextMenu` | ⬜ | |
+| `contextMenu` | ✅ | 항목 키는 Handsontable과 동일. 켜져 있는 플러그인의 명령만 나타남. "에이전트 변경 되돌리기" 추가 ➕ |
 | `copyPaste` | ✅ | `text/plain` + `text/html` 양쪽 기록. 자기 복사본 붙여넣기는 수식 참조 이동 ➕ |
 | `customBorders` | ⬜ | |
 | `dataProvider` | ⬜ | |
 | `dialog` | ⬜ | |
 | `dragToScroll` | ⬜ | |
-| `dropdownMenu` | ⬜ | |
+| `dropdownMenu` | ✅ | 열 헤더 버튼. contextMenu와 메뉴 위젯 공유 |
 | `emptyDataState` | ⬜ | |
 | `exportFile` | ✅ | CSV는 화면 값으로, `.xlsx`는 엔진이 직접 (수식·스타일 보존) ➕ |
 | `filters` | ✅ | |

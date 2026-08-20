@@ -105,7 +105,7 @@ export class Grid {
   constructor(container: HTMLElement, options: GridOptions) {
     this.#container = container;
     this.#engine = options.engine;
-    this.#data = new DataSource(options.engine, options.sheet);
+    this.#data = new DataSource(options.engine, options.sheet, options.actor);
 
     const { engine: _engine, sheet: _sheet, ...settings } = options;
     this.#meta.update(settings);
@@ -424,6 +424,80 @@ export class Grid {
       source,
     );
     this.render();
+  }
+
+  /** The selection as a menu command wants it: plain corners. */
+  getMenuSelection(): Array<{ start: { row: number; col: number }; end: { row: number; col: number } }> {
+    return this.selection.ranges.map((range) => ({
+      start: { row: range.topRow, col: range.startCol },
+      end: { row: range.bottomRow, col: range.endCol },
+    }));
+  }
+
+  /** Whether there is anything to undo. */
+  canUndo(): boolean {
+    return this.#undoState().canUndo === true;
+  }
+
+  /** Whether there is anything to redo. */
+  canRedo(): boolean {
+    return this.#undoState().canRedo === true;
+  }
+
+  /**
+   * Whether one kind of actor has anything left to take back.
+   *
+   * `kind` is matched against the actor's kind — `agent`, `human`, `script`,
+   * `system` — rather than an identifier, because a menu offering "undo the
+   * agent's changes" does not know which agent it was.
+   */
+  canUndoBy(kind: string): boolean {
+    return this.#lastChangeBy(kind) !== null;
+  }
+
+  /** Takes back the most recent change made by an agent, leaving yours alone. */
+  undoLastAgentChange(): void {
+    const actor = this.#lastChangeBy('agent');
+    if (actor !== null) {
+      this.undoBy(actor);
+    }
+  }
+
+  /** Sets the alignment class on a rectangle of cells. */
+  setAlignment(
+    range: { start: { row: number; col: number }; end: { row: number; col: number } },
+    className: string,
+  ): void {
+    // Horizontal and vertical are separate axes, so setting one must not clear
+    // the other: `htLeft htMiddle` is a perfectly ordinary pair.
+    const axis = className.startsWith('htTop') ||
+      className.startsWith('htMiddle') ||
+      className.startsWith('htBottom')
+      ? ['htTop', 'htMiddle', 'htBottom']
+      : ['htLeft', 'htCenter', 'htRight', 'htJustify'];
+
+    for (let row = Math.min(range.start.row, range.end.row); row <= Math.max(range.start.row, range.end.row); row += 1) {
+      for (let col = Math.min(range.start.col, range.end.col); col <= Math.max(range.start.col, range.end.col); col += 1) {
+        const existing = String(this.getCellMeta(row, col)['className'] ?? '')
+          .split(/\s+/)
+          .filter((name) => name !== '' && !axis.includes(name));
+        this.setCellMeta(row, col, 'className', [...existing, className].join(' '));
+      }
+    }
+    this.render();
+  }
+
+  #undoState(): Record<string, unknown> {
+    return this.#engine.call({ op: 'undo_state' });
+  }
+
+  /** The id of the actor whose last undoable change was of the given kind. */
+  #lastChangeBy(kind: string): string | null {
+    const next = this.#undoState()['nextUndo'] as
+      | { actor?: { kind?: string; id?: string } }
+      | null
+      | undefined;
+    return next?.actor?.kind === kind ? (next.actor.id ?? null) : null;
   }
 
   /** Undoes the last change. */

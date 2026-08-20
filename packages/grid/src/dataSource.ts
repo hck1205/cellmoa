@@ -19,6 +19,12 @@ export interface Window {
   endCol: number;
 }
 
+/** Who is making a change. */
+export interface Actor {
+  kind: 'human' | 'agent' | 'script' | 'system';
+  id: string;
+}
+
 /** A structural change to the sheet. */
 export type AlterAction = 'insert_row' | 'remove_row' | 'insert_col' | 'remove_col';
 
@@ -100,10 +106,29 @@ export class DataSource {
   /** Beyond this, a cell key would lose precision as a number. */
   static readonly MAX_COLS = 16_384;
 
-  constructor(engine: Engine, sheet?: string) {
+  /**
+   * Who this grid's edits are recorded as.
+   *
+   * Every write carries it. Provenance, actor-scoped undo and the marker on a
+   * cell an agent touched all read the journal, and a journal that recorded
+   * everything as "anonymous" would support none of them.
+   */
+  #actor: Actor;
+
+  constructor(engine: Engine, sheet?: string, actor?: Actor) {
     this.#engine = engine;
     this.#sheet = sheet ?? null;
+    this.#actor = actor ?? { kind: 'human', id: 'anonymous' };
     this.refresh();
+  }
+
+  /** Who edits are attributed to. */
+  get actor(): Actor {
+    return this.#actor;
+  }
+
+  set actor(actor: Actor) {
+    this.#actor = actor;
   }
 
   /** The sheet being shown. */
@@ -233,6 +258,7 @@ export class DataSource {
     const request: Record<string, unknown> = {
       op: 'write',
       cells: edits.map((edit) => ({ cell: cellRef(edit.row, edit.col), input: edit.input })),
+      who: this.#actor,
     };
     if (this.#sheet) {
       request.sheet = this.#sheet;
@@ -249,7 +275,7 @@ export class DataSource {
 
   /** Undoes the most recent change, optionally only one actor's. */
   undo(onlyBy?: string): number {
-    const request: Record<string, unknown> = { op: 'undo' };
+    const request: Record<string, unknown> = { op: 'undo', who: this.#actor };
     if (onlyBy !== undefined) {
       request.only_by = onlyBy;
     }
@@ -258,7 +284,7 @@ export class DataSource {
 
   /** Re-applies the most recently undone change. */
   redo(onlyBy?: string): number {
-    const request: Record<string, unknown> = { op: 'redo' };
+    const request: Record<string, unknown> = { op: 'redo', who: this.#actor };
     if (onlyBy !== undefined) {
       request.only_by = onlyBy;
     }
@@ -273,7 +299,13 @@ export class DataSource {
    * the wrong cell.
    */
   alter(action: AlterAction, index: number, amount = 1, label?: string): number {
-    const request: Record<string, unknown> = { op: 'alter', action, index, amount };
+    const request: Record<string, unknown> = {
+      op: 'alter',
+      action,
+      index,
+      amount,
+      who: this.#actor,
+    };
     if (this.#sheet) {
       request.sheet = this.#sheet;
     }
