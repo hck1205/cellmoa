@@ -112,7 +112,8 @@ impl Complex {
     }
 
     fn text(&self) -> String {
-        let format = |n: f64| cellmoa_core::value::format_number(n);
+        // A complex number's text form is data, so it keeps full precision.
+        let format = |n: f64| cellmoa_core::value::format_number_exact(n);
         if self.im == 0.0 {
             return format(self.re);
         }

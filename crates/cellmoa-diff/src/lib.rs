@@ -272,7 +272,7 @@ fn fingerprint_sheet_content(sheet: &Sheet) -> String {
 fn row_digests(sheet: &Sheet) -> (Vec<u32>, Vec<String>) {
     let mut rows: BTreeMap<u32, Sha256> = BTreeMap::new();
     for (col, row, cell) in sheet.iter() {
-        let hasher = rows.entry(row).or_insert_with(Sha256::new);
+        let hasher = rows.entry(row).or_default();
         hasher.update(&(col as u64).to_be_bytes());
         match &cell.content {
             CellContent::Empty => hasher.update(&[0]),
@@ -416,7 +416,11 @@ mod tests {
     use super::*;
     use cellmoa_core::model::{Cell, DefinedName};
 
-    fn workbook(rows: &[(&str, &[(u32, u32, &str)])]) -> Workbook {
+    /// A cell as written in the test tables below: column, row, and the text
+    /// that would be typed into it.
+    type CellSpec = (u32, u32, &'static str);
+
+    fn workbook(rows: &[(&str, &[CellSpec])]) -> Workbook {
         let mut workbook = Workbook::new();
         for (name, cells) in rows {
             let id = workbook.add_sheet(*name);
@@ -480,7 +484,7 @@ mod tests {
         }
         let before = workbook(&[("Sheet1", &before_cells)]);
 
-        let mut after_cells: Vec<(u32, u32, &str)> = Vec::new();
+        let mut after_cells: Vec<CellSpec> = Vec::new();
         after_cells.push((0, 0, "new"));
         for row in 0..500u32 {
             after_cells.push((0, row + 1, "x"));

@@ -10,7 +10,7 @@ use crate::xml::Writer;
 use crate::zip::Archive;
 use cellmoa_core::model::{CellContent, Sheet, Workbook};
 use cellmoa_core::reference::col_to_letters;
-use cellmoa_core::value::{format_number, Value};
+use cellmoa_core::value::{format_number_exact, Value};
 use std::collections::BTreeMap;
 
 const NS_SPREADSHEET: &str = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
@@ -348,7 +348,8 @@ fn write_cell(
     let formula = cell.content.as_formula();
     let body = match &cell.value {
         Value::Blank => None,
-        Value::Number(n) => Some(format_number(*n)),
+        // Written at full precision: the display rounding is for screens.
+        Value::Number(n) => Some(format_number_exact(*n)),
         Value::Bool(b) => Some(if *b { "1".into() } else { "0".into() }),
         Value::Error(e) => Some(e.as_str().to_string()),
         Value::Text(text) => Some(match formula {

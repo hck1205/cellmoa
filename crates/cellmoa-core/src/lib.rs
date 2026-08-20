@@ -16,4 +16,4 @@ pub mod value;
 pub use edit::{Actor, ActorKind, Commit, CommitKind, Document, EditError, Op};
 pub use model::{Cell, CellAddr, CellContent, DefinedName, Sheet, SheetId, Workbook};
 pub use reference::{CellRef, RangeRef, MAX_COLS, MAX_ROWS};
-pub use value::{CellError, Value};
+pub use value::{format_number, format_number_exact, CellError, Value};

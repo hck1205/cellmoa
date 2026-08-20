@@ -14,7 +14,9 @@ use std::collections::BTreeMap;
 pub type SheetId = u32;
 
 /// A fully qualified cell address.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub struct CellAddr {
     pub sheet: SheetId,
     /// Row first, so the derived ordering is row-major within a sheet.
@@ -33,7 +35,7 @@ impl CellAddr {
 }
 
 /// What the user typed into a cell, as opposed to what it currently shows.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum CellContent {
     /// The cell is empty. Distinct from a cell holding an empty string.
     Empty,
@@ -66,7 +68,7 @@ impl CellContent {
 
 /// A cell: its input, the value that input last evaluated to, and how it is
 /// formatted.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Cell {
     pub content: CellContent,
     /// The last computed value. For a literal this mirrors the content; for a
@@ -195,7 +197,7 @@ impl Sheet {
 }
 
 /// A named range or named constant, as defined in the Name Manager.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct DefinedName {
     pub name: String,
     /// The formula the name expands to, without a leading `=`.

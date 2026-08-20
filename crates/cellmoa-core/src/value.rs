@@ -4,7 +4,9 @@ use std::fmt;
 
 /// The error values a cell can hold. Errors are first-class values in a
 /// spreadsheet: they propagate through formulas rather than aborting evaluation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum CellError {
     /// `#DIV/0!` — division by zero.
     Div0,
@@ -76,7 +78,7 @@ impl fmt::Display for CellError {
 /// every arithmetic path that could produce one yields [`CellError::Num`]
 /// instead. That keeps [`Value`] totally ordered and hashable, which the
 /// fingerprint (D2) and replay (D4) features depend on.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Value {
     /// An empty cell. Coerces to `0` in arithmetic and `""` in text context.
     Blank,
@@ -206,15 +208,37 @@ impl fmt::Display for Value {
     }
 }
 
-/// Renders a number the way a spreadsheet does with the General format:
-/// integers without a decimal point, and no exponent for everyday magnitudes.
+/// Renders a number the way a spreadsheet displays it.
+///
+/// A spreadsheet shows at most 15 significant decimal digits, and that is not
+/// cosmetic: `3 * 2.68` is `8.040000000000001` in binary floating point, and
+/// showing all seventeen digits of it would be an answer no user recognises.
+/// Rounding to fifteen restores the number they typed.
 pub fn format_number(n: f64) -> String {
+    format_at_precision(n, true)
+}
+
+/// Renders a number without losing any of it.
+///
+/// Used where the value is being stored rather than shown — a file, a formula
+/// literal — because the fifteen-digit rounding above is a display convention,
+/// and applying it on the way to disk would quietly change the number.
+pub fn format_number_exact(n: f64) -> String {
+    format_at_precision(n, false)
+}
+
+fn format_at_precision(n: f64, display: bool) -> String {
     if n == 0.0 {
         // Normalises -0.0, which would otherwise print as "-0".
         return "0".to_string();
     }
     if !n.is_finite() {
         return CellError::Num.as_str().to_string();
+    }
+    // Fifteen significant digits, via a round trip through decimal.
+    let n = if display { format!("{n:.14e}").parse().unwrap_or(n) } else { n };
+    if n == 0.0 {
+        return "0".to_string();
     }
     let abs = n.abs();
     if (1e-10..1e21).contains(&abs) {
@@ -286,6 +310,23 @@ mod tests {
         assert_eq!(format_number(-0.0), "0");
         assert_eq!(format_number(0.5), "0.5");
         assert_eq!(format_number(1234567.0), "1234567");
+    }
+
+    #[test]
+    fn display_rounds_to_fifteen_significant_digits() {
+        // 3 * 2.68 is 8.040000000000001 in binary floating point.
+        assert_eq!(format_number(3.0 * 2.68), "8.04");
+        assert_eq!(format_number(0.1 + 0.2), "0.3");
+        // Storing the same number keeps every digit of it.
+        assert_eq!(format_number_exact(3.0 * 2.68), "8.040000000000001");
+        assert_eq!(format_number_exact(0.1 + 0.2), "0.30000000000000004");
+    }
+
+    #[test]
+    fn rounding_for_display_does_not_disturb_ordinary_numbers() {
+        for n in [1.0, 0.5, -2.25, 1234567.0, 1e20, 1e-9] {
+            assert_eq!(format_number(n), format_number_exact(n), "{n}");
+        }
     }
 
     #[test]

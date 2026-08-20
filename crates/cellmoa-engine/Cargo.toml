@@ -9,3 +9,7 @@ repository.workspace = true
 [dependencies]
 cellmoa-core.workspace = true
 cellmoa-formula.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

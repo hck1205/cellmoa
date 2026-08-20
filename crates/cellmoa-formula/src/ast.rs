@@ -265,7 +265,8 @@ impl fmt::Display for Expr {
     /// Writes the formula back out without a leading `=`.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Expr::Number(n) => f.write_str(&cellmoa_core::value::format_number(*n)),
+            // A literal in a formula is stored, not shown, so it keeps every digit.
+            Expr::Number(n) => f.write_str(&cellmoa_core::value::format_number_exact(*n)),
             Expr::Text(s) => write!(f, "\"{}\"", s.replace('"', "\"\"")),
             Expr::Bool(b) => f.write_str(if *b { "TRUE" } else { "FALSE" }),
             Expr::Error(e) => f.write_str(e.as_str()),

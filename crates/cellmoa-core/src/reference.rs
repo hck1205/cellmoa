@@ -13,7 +13,9 @@ pub const MAX_COLS: u32 = 16_384;
 pub const MAX_ROWS: u32 = 1_048_576;
 
 /// A single cell reference. `col` and `row` are zero-based; `A1` is `(0, 0)`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub struct CellRef {
     pub col: u32,
     pub row: u32,
@@ -113,7 +115,9 @@ impl fmt::Display for CellRef {
 }
 
 /// A rectangular range. `start` is the top-left corner after normalisation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub struct RangeRef {
     pub start: CellRef,
     pub end: CellRef,

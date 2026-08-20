@@ -17,7 +17,7 @@ use std::fmt;
 
 /// Who made an edit. Recorded on every commit so that an agent's changes can be
 /// told apart from a person's — which is what makes agent-scoped undo possible.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ActorKind {
     Human,
     Agent,
@@ -26,7 +26,7 @@ pub enum ActorKind {
     System,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Actor {
     pub kind: ActorKind,
     /// A stable identifier: a user id, an agent session id, a script name.
@@ -52,7 +52,7 @@ impl Actor {
 }
 
 /// A single reversible mutation.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Op {
     SetCell { addr: CellAddr, content: CellContent },
     AddSheet { name: String },
@@ -65,7 +65,7 @@ pub enum Op {
 
 /// Why a commit exists. Undo and redo are recorded as commits of their own so
 /// the journal stays append-only and the audit trail shows the reversal.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum CommitKind {
     Edit,
     /// Reverses the commit at this index.
@@ -75,7 +75,7 @@ pub enum CommitKind {
 }
 
 /// One atomic, reversible group of ops.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Commit {
     /// The revision the document reached when this commit was applied.
     pub revision: u64,
@@ -137,6 +137,12 @@ impl std::error::Error for EditError {}
 #[derive(Debug, Clone)]
 pub struct Document {
     pub workbook: Workbook,
+    /// Fingerprint of the workbook this document started from.
+    ///
+    /// A journal is a list of changes, not a document. Replaying it onto the
+    /// wrong starting point would produce a plausible but wrong result, so the
+    /// starting point is recorded and checked.
+    base: String,
     commits: Vec<Commit>,
     undo_stack: Vec<usize>,
     /// Pairs of `(original commit, the undo commit that reversed it)`. Redo
@@ -155,7 +161,18 @@ impl Default for Document {
 
 impl Document {
     pub fn new(workbook: Workbook) -> Document {
-        Document { workbook, commits: Vec::new(), undo_stack: Vec::new(), redo_stack: Vec::new() }
+        Document {
+            base: crate::fingerprint::fingerprint(&workbook).workbook,
+            workbook,
+            commits: Vec::new(),
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
+        }
+    }
+
+    /// The fingerprint of the workbook this document started from.
+    pub fn base_fingerprint(&self) -> &str {
+        &self.base
     }
 
     pub fn revision(&self) -> u64 {
@@ -271,22 +288,6 @@ impl Document {
         self.commits[orig].undone = false;
         self.undo_stack.push(orig);
         self.apply_full(actor, ops, None, CommitKind::Redo(orig), None, None)
-    }
-
-    /// Rebuilds a workbook by replaying a journal from empty.
-    ///
-    /// Because ops carry no timestamps or environment, the result depends only
-    /// on the journal — this is the guarantee replay (D4) and fingerprint
-    /// comparison (D2) are built on.
-    pub fn replay(commits: &[Commit]) -> Workbook {
-        let mut doc = Document::new(Workbook::new());
-        for commit in commits {
-            for op in &commit.ops {
-                doc.perform(op);
-            }
-            doc.workbook.bump_revision();
-        }
-        doc.workbook
     }
 
     /// Computes the op that reverses `op` against the current state.
@@ -481,6 +482,34 @@ mod tests {
     }
 
     #[test]
+    fn a_journal_survives_a_trip_through_json() {
+        let mut d = doc();
+        d.apply_labeled(Actor::agent("a1"), vec![set(0, 0, 7)], None, "forecast", Some(99))
+            .unwrap();
+        d.apply(Actor::human("u1"), vec![Op::AddSheet { name: "Data".into() }], None).unwrap();
+        d.undo(Actor::human("u1"), None).unwrap();
+
+        let journal = Journal::of(&d);
+        let text = serde_json::to_string(&journal).expect("journal should serialise");
+        let restored: Journal = serde_json::from_str(&text).expect("journal should parse");
+
+        assert_eq!(restored.version, JOURNAL_VERSION);
+        // Replayed onto the same starting point the document had.
+        let mut base = Workbook::new();
+        base.add_sheet("Sheet1");
+        let replayed = restored.replay_onto(base).expect("the base should match");
+        assert_eq!(
+            replayed.value(CellAddr::new(0, 0, 0)),
+            d.workbook.value(CellAddr::new(0, 0, 0))
+        );
+        assert_eq!(replayed.sheets().count(), d.workbook.sheets().count());
+        // The audit trail comes back too, not just the final state.
+        assert_eq!(restored.commits[0].actor.id, "a1");
+        assert_eq!(restored.commits[0].label.as_deref(), Some("forecast"));
+        assert_eq!(restored.commits[0].at, Some(99));
+    }
+
+    #[test]
     fn replaying_the_journal_reproduces_the_document() {
         let mut d = doc();
         d.apply(Actor::system(), vec![Op::AddSheet { name: "Sheet1".into() }], None).unwrap();
@@ -488,7 +517,10 @@ mod tests {
         d.apply(Actor::agent("a1"), vec![set(0, 0, 7)], None).unwrap();
         d.undo(Actor::human("u1"), Some("a1")).unwrap();
 
-        let replayed = Document::replay(d.commits());
+        // Replayed onto the same starting point: a workbook with Sheet1 in it.
+        let mut base = Workbook::new();
+        base.add_sheet("Sheet1");
+        let replayed = Journal::of(&d).replay_onto(base).expect("the base should match");
         for (col, row) in [(0u32, 0u32), (1, 0)] {
             let addr = CellAddr::new(0, col, row);
             assert_eq!(replayed.value(addr), d.workbook.value(addr));
@@ -508,6 +540,25 @@ mod tests {
         assert_eq!(d.workbook.sheets().count(), 3);
         d.undo(Actor::human("u1"), None).unwrap();
         assert_eq!(d.workbook.sheets().count(), 1);
+    }
+
+    #[test]
+    fn replaying_onto_the_wrong_document_is_refused() {
+        let mut d = doc();
+        d.apply(Actor::human("u1"), vec![set(0, 0, 1)], None).unwrap();
+        let journal = Journal::of(&d);
+
+        // A workbook that is not what the journal was recorded against.
+        let mut different = Workbook::new();
+        different.add_sheet("Something Else");
+        assert!(matches!(journal.replay_onto(different), Err(ReplayError::BaseMismatch { .. })));
+    }
+
+    #[test]
+    fn a_journal_from_an_incompatible_version_is_refused() {
+        let mut journal = Journal::of(&doc());
+        journal.version = 999;
+        assert_eq!(journal.replay().unwrap_err(), ReplayError::UnsupportedVersion(999));
     }
 
     #[test]
@@ -544,5 +595,86 @@ mod tests {
         assert_eq!(d.workbook.name("Tax").unwrap().refers_to, "Sheet1!$A$1");
         d.undo(Actor::human("u1"), None).unwrap();
         assert!(d.workbook.name("Tax").is_none());
+    }
+}
+
+/// A journal that can be written to a file and replayed.
+///
+/// Replay is only meaningful if the log is complete and self-contained: no
+/// timestamps are consulted and no environment is read, so applying the commits
+/// in order to the recorded starting point reproduces the document exactly.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Journal {
+    /// The format version, so an older log can be recognised rather than
+    /// misread.
+    pub version: u32,
+    /// Fingerprint of the workbook the first commit was applied to.
+    pub base: String,
+    pub commits: Vec<Commit>,
+}
+
+/// Why a replay could not be trusted.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ReplayError {
+    /// The journal was recorded against a different starting point.
+    BaseMismatch { expected: String, actual: String },
+    /// The journal was written by an incompatible version.
+    UnsupportedVersion(u32),
+}
+
+impl fmt::Display for ReplayError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ReplayError::BaseMismatch { expected, actual } => write!(
+                f,
+                "this journal was recorded against a workbook fingerprinted {expected}, \
+                 but the one given fingerprints {actual}"
+            ),
+            ReplayError::UnsupportedVersion(v) => write!(f, "unsupported journal version {v}"),
+        }
+    }
+}
+
+impl std::error::Error for ReplayError {}
+
+/// The journal format this build writes.
+pub const JOURNAL_VERSION: u32 = 1;
+
+impl Journal {
+    pub fn of(document: &Document) -> Journal {
+        Journal {
+            version: JOURNAL_VERSION,
+            base: document.base_fingerprint().to_string(),
+            commits: document.commits().to_vec(),
+        }
+    }
+
+    /// Replays the journal onto the workbook it was recorded against.
+    ///
+    /// The starting point is checked first: a journal applied to the wrong
+    /// document would produce something plausible and wrong, which is the one
+    /// outcome an audit trail must never have.
+    pub fn replay_onto(&self, base: Workbook) -> Result<Workbook, ReplayError> {
+        if self.version != JOURNAL_VERSION {
+            return Err(ReplayError::UnsupportedVersion(self.version));
+        }
+        let actual = crate::fingerprint::fingerprint(&base).workbook;
+        if actual != self.base {
+            return Err(ReplayError::BaseMismatch { expected: self.base.clone(), actual });
+        }
+        let mut document = Document::new(base);
+        for commit in &self.commits {
+            for op in &commit.ops {
+                document.perform(op);
+            }
+            document.workbook.bump_revision();
+        }
+        Ok(document.workbook)
+    }
+
+    /// Replays onto an empty workbook, for a journal that records a document
+    /// built from nothing.
+    pub fn replay(&self) -> Result<Workbook, ReplayError> {
+        self.replay_onto(Workbook::new())
     }
 }
