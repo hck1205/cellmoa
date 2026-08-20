@@ -210,6 +210,58 @@ fn an_unknown_alteration_is_refused_by_name() {
 }
 
 #[test]
+fn a_cells_history_says_who_set_it_to_what() {
+    let mut session = Session::new();
+    ok(&mut session, json!({ "op": "write", "cells": [{ "cell": "A1", "input": "1" }],
+                             "who": { "kind": "human", "id": "ada" } }));
+    ok(&mut session, json!({ "op": "write", "cells": [{ "cell": "A1", "input": "=2*2" }],
+                             "who": { "kind": "agent", "id": "bot" }, "label": "recalculated" }));
+
+    let history = ok(&mut session, json!({ "op": "history", "cell": "A1" }));
+    let entries = history["history"].as_array().unwrap();
+    assert_eq!(entries.len(), 2);
+    assert_eq!(entries[0]["actor"]["id"], json!("ada"));
+    assert_eq!(entries[0]["input"], json!("1"));
+    assert_eq!(entries[1]["actor"]["kind"], json!("agent"));
+    assert_eq!(entries[1]["input"], json!("=2*2"));
+    assert_eq!(entries[1]["label"], json!("recalculated"));
+}
+
+#[test]
+fn a_snapshot_says_what_changed_since_it_was_taken() {
+    let mut session = Session::new();
+    ok(&mut session, json!({ "op": "write", "cells": [{ "cell": "A1", "input": "1" }] }));
+    ok(&mut session, json!({ "op": "snapshot", "name": "before the agent" }));
+
+    ok(
+        &mut session,
+        json!({ "op": "write", "cells": [
+            { "cell": "A1", "input": "2" },
+            { "cell": "B1", "input": "new" }
+        ], "who": { "kind": "agent", "id": "bot" } }),
+    );
+
+    let diff = ok(&mut session, json!({ "op": "diff", "against": "before the agent" }));
+    assert_eq!(diff["summary"]["cells"], json!(2));
+    let changes = diff["changes"].as_array().unwrap();
+    let changed = changes.iter().find(|c| c["cell"] == "A1").unwrap();
+    assert_eq!(changed["before"]["value"], json!("1"));
+    assert_eq!(changed["after"]["value"], json!("2"));
+
+    assert_eq!(
+        ok(&mut session, json!({ "op": "snapshots" }))["snapshots"],
+        json!(["before the agent"])
+    );
+}
+
+#[test]
+fn diffing_against_a_snapshot_that_was_never_taken_says_so() {
+    let mut session = Session::new();
+    let response = session.dispatch_json(&json!({ "op": "diff", "against": "nope" }).to_string());
+    assert!(response.contains("no_such_snapshot"), "{response}");
+}
+
+#[test]
 fn undo_state_counts_what_each_actor_can_take_back() {
     let mut session = Session::new();
     ok(

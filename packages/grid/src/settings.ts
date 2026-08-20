@@ -230,6 +230,18 @@ export interface GridSettings {
   selectionHandles?: unknown;
   multipleSelectionHandles?: unknown;
   dataProvider?: unknown;
+
+  // Settings with no Handsontable counterpart.
+  /** Show who changed each cell, and mark the ones an agent touched. */
+  provenance?: unknown;
+  /** Report writes the revision guard refused. */
+  conflicts?: unknown;
+  /** A bar showing the revision and the workbook fingerprint. */
+  statusBar?: unknown;
+  /** Mark the cells a failed verification points at. */
+  verifyOverlay?: unknown;
+  /** Mark the cells that differ from a recorded snapshot. */
+  diffView?: unknown;
   notification?: unknown;
   loading?: unknown;
   emptyDataState?: unknown;

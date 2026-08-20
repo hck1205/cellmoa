@@ -22,6 +22,9 @@
   --cm-search-bg: rgba(255, 210, 0, 0.35);
   --cm-notification-accent: #3478f6;
   --cm-loading-bg: rgba(255, 255, 255, 0.72);
+  --cm-diff-changed-bg: rgba(255, 196, 0, 0.18);
+  --cm-diff-added-bg: rgba(46, 158, 79, 0.18);
+  --cm-diff-removed-bg: rgba(192, 57, 43, 0.15);
 
   position: relative;
   overflow: hidden;
@@ -423,6 +426,101 @@
   cursor: pointer;
 }
 
+
+/* --- Features with no Handsontable counterpart ------------------------- */
+
+/* A cell an agent last touched. */
+.cm-grid .cm-by-agent {
+  position: relative;
+}
+
+/* The cell's history, shown beside it. */
+.cm-provenance {
+  z-index: 90;
+  max-width: 320px;
+  max-height: 240px;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid var(--cm-border);
+  border-radius: 4px;
+  font-size: 12px;
+  background: var(--cm-cell-bg);
+  color: var(--cm-cell-fg);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+}
+
+.cm-provenance-title {
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.cm-provenance-empty {
+  color: var(--cm-readonly-fg);
+}
+
+.cm-provenance-entry {
+  display: grid;
+  gap: 2px 8px;
+  grid-template-columns: auto 1fr;
+  padding: 4px 0;
+  border-top: 1px solid var(--cm-border);
+}
+
+.cm-provenance-entry--agent .cm-provenance-who {
+  color: var(--cm-agent-marker);
+}
+
+.cm-provenance-who {
+  font-weight: 600;
+}
+
+.cm-provenance-why,
+.cm-provenance-when {
+  grid-column: 1 / -1;
+  color: var(--cm-readonly-fg);
+}
+
+/* The bar along the bottom. */
+.cm-status-bar {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 60;
+  display: flex;
+  gap: 16px;
+  padding: 2px 8px;
+  border-top: 1px solid var(--cm-border);
+  font-size: 11px;
+  background: var(--cm-header-bg);
+  color: var(--cm-header-fg);
+}
+
+.cm-status-field--fingerprint {
+  margin-left: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  cursor: help;
+}
+
+/* A cell a failed verification points at. */
+.cm-grid .cm-verify-failed {
+  box-shadow: inset 0 0 0 2px var(--cm-error-fg);
+}
+
+/* A cell that differs from the snapshot being compared against. */
+.cm-grid .cm-diff-changed {
+  background: var(--cm-diff-changed-bg);
+}
+
+.cm-grid .cm-diff-added {
+  background: var(--cm-diff-added-bg);
+}
+
+.cm-grid .cm-diff-removed {
+  background: var(--cm-diff-removed-bg);
+  text-decoration: line-through;
+}
+
 @media (prefers-color-scheme: dark) {
   .cm-grid {
     --cm-border: #3a3a3a;
@@ -437,5 +535,8 @@
     --cm-search-bg: rgba(255, 210, 0, 0.22);
     --cm-notification-accent: #5a96ff;
     --cm-loading-bg: rgba(26, 26, 26, 0.72);
+    --cm-diff-changed-bg: rgba(255, 196, 0, 0.14);
+    --cm-diff-added-bg: rgba(46, 158, 79, 0.2);
+    --cm-diff-removed-bg: rgba(192, 57, 43, 0.2);
   }
 }

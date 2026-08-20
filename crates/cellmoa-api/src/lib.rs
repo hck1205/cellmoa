@@ -10,7 +10,7 @@ pub mod protocol;
 
 use cellmoa_core::edit::{EditError, Journal};
 use cellmoa_core::fingerprint::fingerprint;
-use cellmoa_core::model::{CellAddr, SheetId};
+use cellmoa_core::model::{CellAddr, CellContent, SheetId, Workbook};
 use cellmoa_core::reference::{col_to_letters, parse_sheet_qualified, CellRef, RangeRef};
 use cellmoa_core::value::Value;
 use cellmoa_engine::structure::{Alter, AlterError};
@@ -28,6 +28,13 @@ pub struct Session {
     /// not model.
     source: Option<Package>,
     path: Option<String>,
+    /// Named copies of the workbook, to compare the current one against.
+    ///
+    /// A person who steps away and comes back to a workbook an agent has been
+    /// editing needs to see what changed while they were gone. That is a diff
+    /// against a moment they choose, not against the file on disk, so the
+    /// moment has to be recordable.
+    snapshots: BTreeMap<String, Workbook>,
 }
 
 impl Default for Session {
@@ -39,7 +46,7 @@ impl Default for Session {
 impl Session {
     /// A session holding an empty workbook with one sheet.
     pub fn new() -> Session {
-        Session { engine: blank("Sheet1"), source: None, path: None }
+        Session { engine: blank("Sheet1"), source: None, path: None, snapshots: BTreeMap::new() }
     }
 
     pub fn engine(&self) -> &Engine {
@@ -135,6 +142,14 @@ impl Session {
                 let passed = report.passed();
                 self.ok(json!({ "passed": passed, "report": report }))
             }
+            Request::Snapshot { name } => {
+                self.snapshots.insert(name.clone(), self.engine.doc.workbook.clone());
+                self.ok(json!({ "snapshot": name, "revision": self.engine.doc.revision() }))
+            }
+            Request::Snapshots => self.ok(json!({
+                "snapshots": self.snapshots.keys().collect::<Vec<_>>(),
+            })),
+            Request::Diff { against } => self.diff(&against),
             Request::UndoState => self.undo_state(),
             Request::Journal => {
                 let journal = Journal::of(&self.engine.doc);
@@ -406,6 +421,27 @@ impl Session {
         }
     }
 
+    /// The changes between a snapshot and the workbook as it stands.
+    fn diff(&self, against: &str) -> Response {
+        let Some(before) = self.snapshots.get(against) else {
+            return Response::error(
+                "no_such_snapshot",
+                format!("there is no snapshot called {against:?}"),
+            );
+        };
+        let diff = cellmoa_diff::diff(before, &self.engine.doc.workbook);
+        let summary = diff.summary();
+        self.ok(json!({
+            "changes": diff.changes,
+            "summary": {
+                "sheets": summary.sheets,
+                "rows": summary.rows,
+                "cells": summary.cells,
+                "names": summary.names,
+            },
+        }))
+    }
+
     fn undo_state(&self) -> Response {
         // Per actor as well as in total: the whole point of an actor-scoped
         // undo is that a person can take back what an agent did without
@@ -479,6 +515,18 @@ impl Session {
             .doc
             .history_of(addr)
             .map(|commit| {
+                // What this commit set the cell to, so a reader can see the
+                // change rather than only that there was one.
+                let input = commit.ops.iter().find_map(|op| match op {
+                    cellmoa_core::edit::Op::SetCell { addr: a, content } if *a == addr => {
+                        Some(match content {
+                            CellContent::Empty => String::new(),
+                            CellContent::Literal(v) => v.to_string(),
+                            CellContent::Formula(src) => format!("={src}"),
+                        })
+                    }
+                    _ => None,
+                });
                 json!({
                     "revision": commit.revision,
                     "actor": { "kind": format!("{:?}", commit.actor.kind).to_lowercase(),
@@ -486,6 +534,7 @@ impl Session {
                     "label": commit.label,
                     "at": commit.at,
                     "undone": commit.undone,
+                    "input": input,
                 })
             })
             .collect();

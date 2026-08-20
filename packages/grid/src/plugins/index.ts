@@ -56,3 +56,6 @@ export * from './selectionHandles.js';
 export * from './bindRowsWithHeaders.js';
 export * from './nestedRows.js';
 export * from './dataProvider.js';
+
+// The features with no Handsontable counterpart, listed apart.
+export * from './cellmoa/index.js';

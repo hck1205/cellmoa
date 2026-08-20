@@ -169,6 +169,12 @@ pub enum Request {
     Fingerprint,
     /// Check the workbook against a specification.
     Verify { spec: Spec },
+    /// Record the workbook as it stands, under a name, to compare against later.
+    Snapshot { name: String },
+    /// The snapshots that have been recorded.
+    Snapshots,
+    /// The changes between a snapshot and the workbook as it stands.
+    Diff { against: String },
     /// What undo and redo would do next.
     ///
     /// A toolbar needs this to grey out its buttons, and the per-actor counts

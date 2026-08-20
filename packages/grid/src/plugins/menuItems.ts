@@ -44,6 +44,8 @@ export const ITEM = {
   noItems: 'no_items',
   /** Not in Handsontable: takes back only what one actor did. */
   undoAgent: 'undo_agent',
+  /** Not in Handsontable: who changed this cell, when, and why. */
+  provenance: 'provenance',
 } as const;
 
 /** The default context-menu layout, in order. */
@@ -476,6 +478,23 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
             callback: () => exporter.downloadFile('xlsx'),
           },
         ],
+      },
+    };
+  }
+
+  if (enabled(grid, 'provenance')) {
+    const provenance = grid.getPlugin('provenance') as unknown as {
+      show(row: number, col: number): void;
+    };
+    items[ITEM.provenance] = {
+      key: ITEM.provenance,
+      name: 'Where did this come from?',
+      disabled: nothingSelected,
+      callback: (_key, ranges) => {
+        const range = first(ranges);
+        if (range) {
+          provenance.show(topRow(range), startCol(range));
+        }
       },
     };
   }

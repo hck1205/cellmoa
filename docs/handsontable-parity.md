@@ -121,13 +121,13 @@ Handsontable에는 대응물이 없고 VisiGrid 축에서 가져오는 것들. �
 
 | 기능 | 상태 | 비고 |
 |---|:--:|---|
-| 셀 provenance 표시 (누가·언제·왜) | ⬜ | 셀 우클릭 → 변경 이력 |
-| 에이전트 편집 하이라이트 | ⬜ | 사람 편집과 시각적으로 구분 |
-| 에이전트 변경만 undo | ⬜ | `undo(only_by)` |
-| revision 충돌 표시 | ⬜ | 낙관적 동시성 거부를 UI로 |
-| 워크북 fingerprint 표시 | ⬜ | 상태 표시줄 |
-| verify 결과 오버레이 | ⬜ | 실패한 셀 표시 |
-| diff 뷰 (두 버전 비교) | ⬜ | 변경 셀 강조 |
+| 셀 provenance 표시 (누가·언제·왜) | ✅ | `provenance` 플러그인. 컨텍스트 메뉴 "이 값은 어디서 왔나?" |
+| 에이전트 편집 하이라이트 | ✅ | `.cm-by-agent` — 사람이 고치면 표시가 사라짐 |
+| 에이전트 변경만 undo | ✅ | 컨텍스트 메뉴 "에이전트 변경 되돌리기" + `undoRedo.undoBy()` |
+| revision 충돌 표시 | ✅ | `conflicts` 플러그인 — 거부된 쓰기를 알림으로 |
+| 워크북 fingerprint 표시 | ✅ | `statusBar` 플러그인 — revision · 선택 · 세 가지 digest |
+| verify 결과 오버레이 | ✅ | `verifyOverlay` 플러그인 |
+| diff 뷰 (두 버전 비교) | ✅ | `diffView` 플러그인 + `snapshot`/`diff` 명령 |
 
 ---
 
