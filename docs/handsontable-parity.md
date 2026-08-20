@@ -128,6 +128,11 @@ autocomplete/select/multiSelect 8종.
 | 최적화 — batch / suspendRender | ✅ | |
 | 내비게이션 — 단축키 · 검색 | ✅ | `ShortcutManager`, `search` 플러그인 |
 | 데이터 관리 — 서버 데이터 | ✅ | `dataProvider` 플러그인 |
+| 셀 기능 — 조건부 서식 | ✅ | `cells` 함수 (Handsontable과 동일한 방식) |
+| 셀 기능 — 숫자 서식 (`numericFormat`) | ✅ | `Intl.NumberFormat`. 숫자가 아닌 값은 건드리지 않음 |
+| 내비게이션 — 헤더 이동 (`navigableHeaders`) | ✅ | 헤더는 인덱스 -1 |
+| 내비게이션 — 포커스 범위 (`tabNavigation`) | ✅ | 끄면 Tab이 브라우저로 넘어감 (폼 안의 그리드) |
+| 국제화 — IME (`imeFastEdit`) | ✅ | 조합 중 키는 에디터에 심지 않고 빈 에디터를 엶 |
 
 ## cellmoa 고유 기능 ➕
 

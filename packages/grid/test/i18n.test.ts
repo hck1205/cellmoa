@@ -228,3 +228,112 @@ describe('cell content and markup', () => {
     expect(cell?.textContent).toBe('safe');
   });
 });
+
+describe('number formatting', () => {
+  it('shows the workbook value untouched without `numericFormat`', async () => {
+    const grid = await makeGrid();
+    grid.setDataAtCell(0, 0, '1234.5');
+    expect(grid.view?.elementAt(0, 0)?.textContent).toBe('1234.5');
+  });
+
+  it('formats through Intl when asked, in the grid’s locale', async () => {
+    const grid = await makeGrid({
+      columns: [{ type: 'numeric', numericFormat: { minimumFractionDigits: 2, useGrouping: true } }],
+    });
+    grid.setDataAtCell(0, 0, '1234.5');
+    expect(grid.view?.elementAt(0, 0)?.textContent).toBe('1,234.50');
+
+    const german = await makeGrid({
+      locale: 'de-DE',
+      columns: [{ type: 'numeric', numericFormat: { minimumFractionDigits: 2, useGrouping: true } }],
+    });
+    german.setDataAtCell(0, 0, '1234.5');
+    expect(german.view?.elementAt(0, 0)?.textContent).toBe('1.234,50');
+  });
+
+  it('formats a currency', async () => {
+    const grid = await makeGrid({
+      columns: [{ type: 'numeric', numericFormat: { style: 'currency', currency: 'USD' } }],
+    });
+    grid.setDataAtCell(0, 0, '9.5');
+    expect(grid.view?.elementAt(0, 0)?.textContent).toBe('$9.50');
+  });
+
+  it('leaves text that merely looks numeric alone', async () => {
+    const grid = await makeGrid({
+      columns: [{ type: 'numeric', numericFormat: { minimumFractionDigits: 2 } }],
+    });
+    // A leading apostrophe stores it as text; formatting it would claim a type
+    // the cell does not have.
+    grid.setDataAtCell(0, 0, "'1234.5");
+    expect(grid.view?.elementAt(0, 0)?.textContent).toBe('1234.5');
+  });
+
+  it('keeps the value rather than losing it to an unusable option', async () => {
+    const grid = await makeGrid({
+      columns: [{ type: 'numeric', numericFormat: { style: 'currency' } }],
+    });
+    grid.setDataAtCell(0, 0, '5');
+    expect(grid.view?.elementAt(0, 0)?.textContent).toBe('5');
+  });
+});
+
+describe('keyboard reach', () => {
+  it('lets the selection sit on a header when `navigableHeaders` is on', async () => {
+    const grid = await makeGrid({ navigableHeaders: true });
+    grid.selectCell(0, 0);
+    grid.view?.root.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+    // -1 is the column header row.
+    expect(grid.selection.highlight?.row).toBe(-1);
+  });
+
+  it('stops at the first cell without it', async () => {
+    const grid = await makeGrid();
+    grid.selectCell(0, 0);
+    grid.view?.root.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+    expect(grid.selection.highlight?.row).toBe(0);
+  });
+
+  it('hands Tab back to the page when `tabNavigation` is off', async () => {
+    const grid = await makeGrid({ tabNavigation: false });
+    grid.selectCell(0, 0);
+    const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    grid.view?.root.dispatchEvent(event);
+    // Not consumed, so the browser moves focus out of the grid.
+    expect(event.defaultPrevented).toBe(false);
+    expect(grid.selection.highlight?.col).toBe(0);
+  });
+
+  it('moves across the row with Tab by default', async () => {
+    const grid = await makeGrid();
+    grid.selectCell(0, 0);
+    grid.view?.root.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }),
+    );
+    expect(grid.selection.highlight?.col).toBe(1);
+  });
+});
+
+describe('input methods', () => {
+  it('does not seed the editor with a composition keystroke', async () => {
+    const grid = await makeGrid();
+    grid.selectCell(0, 0);
+    grid.view?.root.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Process', bubbles: true, cancelable: true }),
+    );
+    // Without imeFastEdit the grid waits; `Process` means nothing on its own.
+    expect(document.querySelector('.cm-editor')).toBeNull();
+  });
+
+  it('opens an empty editor for the composition when `imeFastEdit` is on', async () => {
+    const grid = await makeGrid({ imeFastEdit: true });
+    grid.selectCell(0, 0);
+    grid.view?.root.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Process', bubbles: true, cancelable: true }),
+    );
+    const editor = document.querySelector('.cm-editor') as HTMLInputElement | null;
+    expect(editor).not.toBeNull();
+    // Empty, so the composition lands in it rather than after a stray key.
+    expect(editor?.value).toBe('');
+  });
+});

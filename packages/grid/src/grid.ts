@@ -118,6 +118,7 @@ export class Grid {
     );
 
     this.#registerSettingHooks(settings);
+    this.#selection.setNavigableHeaders(this.getSettings().navigableHeaders === true);
     this.#syncDimensions(true);
     this.#mount();
     this.#bindKeyboard();
@@ -143,6 +144,7 @@ export class Grid {
     if (settings.selectionMode) {
       this.#selection.setMode(settings.selectionMode as SelectionMode);
     }
+    this.#selection.setNavigableHeaders(this.getSettings().navigableHeaders === true);
     this.#syncDimensions();
     // Every plugin re-reads the settings, so a feature can be switched on
     // after the grid was built.
@@ -1456,6 +1458,23 @@ export class Grid {
     }
     // A printable character with no modifier starts an edit and becomes its
     // first keystroke, as it does in every spreadsheet.
+    //
+    // `Process` and `Unidentified` are what a browser reports while an input
+    // method is composing — typing Japanese or Korean sends those long before
+    // any character exists. Treating them as printable would open the editor
+    // with a keystroke that means nothing; ignoring them entirely would mean
+    // the composition never reaches a cell. `imeFastEdit` opens the editor
+    // without seeding it, so the composition lands in a real input.
+    const composing = event.isComposing || event.key === 'Process';
+    if (composing) {
+      if (!this.#editor && this.getSettings().imeFastEdit === true) {
+        const highlight = this.#selection.highlight;
+        if (highlight) {
+          this.beginEditing(highlight.row, highlight.col, '');
+        }
+      }
+      return;
+    }
     if (
       !this.#editor &&
       event.key.length === 1 &&
@@ -1497,7 +1516,19 @@ export class Grid {
     this.beginEditing(highlight.row, highlight.col);
   }
 
-  #onTab(shift: boolean): void {
+  /**
+   * Whether Tab moves the selection or leaves the grid.
+   *
+   * `tabNavigation: false` hands Tab back to the page, which is what a keyboard
+   * user needs to get past a grid embedded in a form. It is a real trade — with
+   * it on, Tab is the fastest way across a row and there is no way out but
+   * Escape — so it is a setting, and the default is Handsontable's.
+   */
+  #onTab(shift: boolean): boolean {
+    if (this.getSettings().tabNavigation === false) {
+      // Not handled, so the browser moves focus as it would on any element.
+      return false;
+    }
     const moves = this.getSettings().tabMoves;
     const step = typeof moves === 'function' ? { row: 0, col: 1 } : (moves as Coords) ?? { row: 0, col: 1 };
     const direction = shift ? -1 : 1;
@@ -1507,6 +1538,7 @@ export class Grid {
       this.getSettings().autoWrapRow === true,
     );
     this.#afterSelection();
+    return true;
   }
 
   /**

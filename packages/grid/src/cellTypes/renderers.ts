@@ -61,8 +61,53 @@ export const textRenderer: CellRenderer = (context) => {
 
 /** Right-aligned, with tabular figures so columns of numbers line up. */
 export const numericRenderer: CellRenderer = (context) => {
-  textRenderer(context);
-  context.td.classList.add('cm-numeric');
+  const { td, cell, meta } = context;
+  applyCommon(context);
+  const text = formatNumeric(cell?.text ?? '', cell?.value, meta);
+  write(td, text === '' && meta.placeholder ? String(meta.placeholder) : text, meta);
+  td.classList.add('cm-numeric');
+};
+
+/**
+ * The cache behind `numericFormat`.
+ *
+ * Building an `Intl.NumberFormat` is expensive enough that doing it per cell
+ * would show while scrolling, and the options a grid uses are few — so they are
+ * kept, keyed by locale and options together.
+ */
+const formatters = new Map<string, Intl.NumberFormat>();
+
+/**
+ * Formats a number for display, when `numericFormat` asks for it.
+ *
+ * The value has to be a number, not merely look like one: a cell holding text
+ * that happens to read as a number keeps its text, because formatting it would
+ * silently claim a type it does not have. Without `numericFormat` the engine's
+ * own rendering is used, which is what makes an unformatted grid show exactly
+ * what the workbook holds.
+ */
+export function formatNumeric(
+  text: string,
+  value: unknown,
+  meta: RenderContext['meta'],
+): string {
+  const format = meta.numericFormat as Intl.NumberFormatOptions | undefined;
+  if (!format || typeof value !== 'number' || !Number.isFinite(value)) {
+    return text;
+  }
+  const locale = typeof meta.locale === 'string' ? meta.locale : undefined;
+  const key = `${locale ?? ''}:${JSON.stringify(format)}`;
+  let formatter = formatters.get(key);
+  if (!formatter) {
+    try {
+      formatter = new Intl.NumberFormat(locale, format);
+    } catch {
+      // An unusable option is not worth losing the value over.
+      return text;
+    }
+    formatters.set(key, formatter);
+  }
+  return formatter.format(value);
 };
 
 /**

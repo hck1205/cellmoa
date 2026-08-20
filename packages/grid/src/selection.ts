@@ -132,10 +132,23 @@ export class Selection {
   #rowCount: () => number;
   #colCount: () => number;
 
+  /** Whether the selection may sit on a header, which is index -1. */
+  #navigableHeaders = false;
+
   constructor(rowCount: () => number, colCount: () => number, mode: SelectionMode = 'multiple') {
     this.#rowCount = rowCount;
     this.#colCount = colCount;
     this.#mode = mode;
+  }
+
+  /** Lets the selection reach the row and column headers. */
+  setNavigableHeaders(navigable: boolean): void {
+    this.#navigableHeaders = navigable;
+  }
+
+  /** Whether headers can be selected. */
+  get navigableHeaders(): boolean {
+    return this.#navigableHeaders;
   }
 
   setMode(mode: SelectionMode): void {
@@ -252,7 +265,10 @@ export class Selection {
         row = rows - 1;
       }
     }
-    if (row < 0 || col < 0 || row >= rows || col >= cols) {
+    // The headers are index -1, so how far the move may go depends on whether
+    // they can be reached at all.
+    const floor = this.#navigableHeaders ? -1 : 0;
+    if (row < floor || col < floor || row >= rows || col >= cols) {
       return false;
     }
     this.setCell({ row, col });
@@ -331,9 +347,13 @@ export class Selection {
   #clamp(coords: Coords): Coords {
     const rows = Math.max(this.#rowCount(), 1);
     const cols = Math.max(this.#colCount(), 1);
+    // Headers are index -1, so reaching them is a matter of how far down the
+    // floor goes. A grid that cannot select its headers is one a keyboard user
+    // cannot sort or resize a column in.
+    const floor = this.#navigableHeaders ? -1 : 0;
     return {
-      row: Math.min(Math.max(coords.row, 0), rows - 1),
-      col: Math.min(Math.max(coords.col, 0), cols - 1),
+      row: Math.min(Math.max(coords.row, floor), rows - 1),
+      col: Math.min(Math.max(coords.col, floor), cols - 1),
     };
   }
 }
