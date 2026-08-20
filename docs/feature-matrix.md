@@ -99,12 +99,28 @@
 - 🟢 **12개** 항목을 VisiGrid에서 가져온다 (D1~D5, E1·E3, F1~F5, G1~G2).
 - 🟢 **4개** 항목은 양쪽 모두 이미 🟢이라 기준선이 높다 (B1~B3, C1).
 
-## 미결 사항 (착수 전 결정 필요)
+## 확정 사항
 
-| 항목 | 선택지 | 영향 |
+| 항목 | 결정 | 근거 |
 |---|---|---|
-| 코어 언어 | TypeScript 단일 / Rust 코어 + WASM·N-API 바인딩 | 웹·CLI·데스크톱 3면을 한 코어로 덮을지, 성능 상한 |
-| 스크립팅 언어 | Lua (VisiGrid 호환) / JS 샌드박스 | E3 API 설계, 샌드박스 구현 난이도 |
-| 데스크톱 셸 | Tauri / Electron | 번들 크기, 코어가 Rust면 Tauri가 자연스러움 |
-| 라이선스 | MIT·Apache / 듀얼 라이선스 | Handsontable 대체재로서의 포지션 |
-| 함수 커버리지 목표 | 400+ 전량 / 사용 빈도 상위 우선 | B1 일정 |
+| 코어 언어 | **Rust 코어 + WASM / N-API 바인딩** | 웹·CLI·데스크톱 3면이 같은 코어를 공유해야 fingerprint(D2)·replay(D4)의 결정성이 보장된다. 대용량 재계산 성능 상한도 유리. |
+| 스크립팅 | **JS 샌드박스** | 스프레드시트 사용자층의 학습 곡선 최소화. 샌드박스는 코어가 호스트로서 제어(무한루프 차단·파일접근 차단). |
+| 데스크톱 셸 | **Tauri** | Rust 코어와 동일 프로세스에서 붙는다. |
+| 착수 순서 | **B(계산 엔진) → C(XLSX I/O) → E1(CLI) → D → A(UI) → F → G** | 결정적 코어가 서면 D·E가 자연히 따라온다. UI 없이도 검증 가능한 산출물이 먼저 나온다. |
+
+## 크레이트 구성
+
+```
+crates/
+  cellmoa-core      문서 모델 · Value · 참조 · revision · provenance   [A·D5·F5의 토대]
+  cellmoa-formula   수식 렉서 · 파서 · AST                              [B1]
+  cellmoa-engine    의존성 그래프 · 증분 재계산 · 함수 라이브러리        [B1·B2·B3]
+  cellmoa-xlsx      XLSX import/export (엔진 내장)                      [C1]
+  cellmoa-cli       CLI 프론트엔드                                      [E1·E2]
+  cellmoa-wasm      WASM 바인딩 (웹 UI용)                               [A1]
+  cellmoa-napi      Node 바인딩 (MCP·스크립팅용)                        [E3·F1]
+packages/
+  grid              TypeScript 웹 그리드 UI                             [A1]
+```
+
+문서 모델에 revision과 provenance를 **1일차부터** 넣는 이유는 F4·F5·D5가 나중에 붙일 수 없는 항목이기 때문이다.
