@@ -1,0 +1,15 @@
+[package]
+name = "cellmoa-xlsx"
+description = "XLSX import and export built into the cellmoa engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+cellmoa-core.workspace = true
+cellmoa-formula.workspace = true
+# DEFLATE only. The ZIP container and every OOXML part are this crate's own
+# work; flate2's default backend is pure Rust (miniz_oxide), so this adds a
+# compression codec and nothing else.
+flate2 = "1"

@@ -337,10 +337,15 @@ impl Document {
         match op {
             Op::SetCell { addr, content } => {
                 let Some(sheet) = self.workbook.sheet_mut(addr.sheet) else { return };
+                // An edit replaces the input but leaves the cell's format in
+                // place, exactly as typing into a formatted cell does.
+                let style = sheet.get(addr.col, addr.row).and_then(|c| c.style);
                 let cell = match content {
-                    CellContent::Empty => Cell { content: CellContent::Empty, value: Value::Blank },
-                    CellContent::Literal(v) => Cell::literal(v.clone()),
-                    CellContent::Formula(src) => Cell::formula(src.clone()),
+                    CellContent::Empty => {
+                        Cell { content: CellContent::Empty, value: Value::Blank, style }
+                    }
+                    CellContent::Literal(v) => Cell::literal(v.clone()).with_style(style),
+                    CellContent::Formula(src) => Cell::formula(src.clone()).with_style(style),
                 };
                 sheet.set(addr.col, addr.row, cell);
             }

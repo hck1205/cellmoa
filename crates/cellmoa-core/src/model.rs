@@ -64,23 +64,36 @@ impl CellContent {
     }
 }
 
-/// A cell: its input, and the value that input last evaluated to.
+/// A cell: its input, the value that input last evaluated to, and how it is
+/// formatted.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Cell {
     pub content: CellContent,
     /// The last computed value. For a literal this mirrors the content; for a
     /// formula it is the engine's output, cached so that reads do not evaluate.
     pub value: Value,
+    /// Index into the workbook's format table.
+    ///
+    /// The formats themselves are not modelled yet. Keeping the index means a
+    /// file can be read, edited and written back with its formatting intact,
+    /// rather than every cell coming back as General.
+    pub style: Option<u32>,
 }
 
 impl Cell {
     pub fn literal(value: Value) -> Cell {
-        Cell { content: CellContent::Literal(value.clone()), value }
+        Cell { content: CellContent::Literal(value.clone()), value, style: None }
     }
 
     pub fn formula(src: impl Into<String>) -> Cell {
         // Until the engine evaluates it, an unevaluated formula reads as blank.
-        Cell { content: CellContent::formula(src), value: Value::Blank }
+        Cell { content: CellContent::formula(src), value: Value::Blank, style: None }
+    }
+
+    /// The same cell with a format index attached.
+    pub fn with_style(mut self, style: Option<u32>) -> Cell {
+        self.style = style;
+        self
     }
 }
 
@@ -118,7 +131,9 @@ impl Sheet {
     /// trace in the map and two documents that differ only by such a write
     /// still fingerprint the same.
     pub fn set(&mut self, col: u32, row: u32, cell: Cell) {
-        if cell.content.is_empty() && cell.value.is_blank() {
+        // A cell that carries formatting is kept even when it holds nothing:
+        // the format is the content.
+        if cell.content.is_empty() && cell.value.is_blank() && cell.style.is_none() {
             self.cells.remove(&(row, col));
         } else {
             self.cells.insert((row, col), cell);
@@ -135,7 +150,7 @@ impl Sheet {
         if let Some(cell) = self.cells.get_mut(&(row, col)) {
             cell.value = value;
         } else if !value.is_blank() {
-            self.cells.insert((row, col), Cell { content: CellContent::Empty, value });
+            self.cells.insert((row, col), Cell { content: CellContent::Empty, value, style: None });
         }
     }
 
@@ -363,7 +378,7 @@ mod tests {
     fn writing_an_empty_cell_removes_it() {
         let mut sheet = Sheet::new(0, "s");
         sheet.set(0, 0, Cell::literal(Value::number(1)));
-        sheet.set(0, 0, Cell { content: CellContent::Empty, value: Value::Blank });
+        sheet.set(0, 0, Cell { content: CellContent::Empty, value: Value::Blank, style: None });
         assert_eq!(sheet.cell_count(), 0);
     }
 
@@ -378,6 +393,14 @@ mod tests {
         assert_eq!(second, 1);
         assert!(wb.restore_sheet(0));
         assert_eq!(wb.sheet(0).unwrap().cell_count(), 3);
+    }
+
+    #[test]
+    fn a_cell_holding_only_formatting_is_kept() {
+        let mut sheet = Sheet::new(0, "s");
+        sheet.set(0, 0, Cell::literal(Value::Blank).with_style(Some(3)));
+        assert_eq!(sheet.cell_count(), 1);
+        assert_eq!(sheet.get(0, 0).unwrap().style, Some(3));
     }
 
     #[test]
