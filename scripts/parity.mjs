@@ -108,19 +108,73 @@ for (const name of declared) {
   (where ? read : unread).push(name);
 }
 
+/**
+ * The core methods the reference exposes, and whether this grid has them.
+ *
+ * The list is kept here rather than derived from the reference's source,
+ * because the source is not on hand at run time — but it is derived *from* it,
+ * and a name in it that the grid does not answer to is a name the parity table
+ * may not claim.
+ */
+const CORE_METHODS = readFileSync(
+  new URL('./core-methods.txt', import.meta.url).pathname,
+  'utf8',
+)
+  .split('\n')
+  .map((line) => line.trim())
+  .filter(Boolean);
+
+function hasMethod(name) {
+  const pattern = new RegExp(`^\\s*(?:static |readonly |get |set |override |async )*${name}\\s*[(<:]`, 'm');
+  for (const text of sources.values()) {
+    if (pattern.test(text)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Names this grid answers to with a different meaning.
+ *
+ * A name being present is not the same as it behaving as the reference does.
+ * Counting one of these as parity would be the exact dishonesty this script
+ * exists to prevent, so they are listed, printed, and explained.
+ */
+const DIVERGENT = {
+  getCell:
+    "returns the cell's value, not its `<td>` — the element is `getCellElement`",
+};
+
+const methodsPresent = CORE_METHODS.filter(hasMethod);
+const methodsMissing = CORE_METHODS.filter((name) => !hasMethod(name));
+
 const report = {
   settings: { declared: declared.length, read: read.length, unread: unread.length, missing: unread },
+  methods: {
+    declared: CORE_METHODS.length,
+    present: methodsPresent.length,
+    missing: methodsMissing,
+    divergent: DIVERGENT,
+  },
 };
 
 if (process.argv.includes('--json')) {
   console.log(JSON.stringify(report, null, 2));
 } else if (process.argv.includes('--missing')) {
-  for (const name of unread) {
+  const what = process.argv.includes('--methods') ? methodsMissing : unread;
+  for (const name of what) {
     console.log(name);
   }
 } else {
   const { declared: d, read: r } = report.settings;
+  const { declared: md, present: mp } = report.methods;
   console.log(`settings  ${r}/${d} read  (${d - r} declared but never consulted)`);
+  console.log(`methods   ${mp}/${md} present  (${md - mp} named by the reference and missing)`);
+  for (const [name, why] of Object.entries(DIVERGENT)) {
+    console.log(`          ${name}: ${why}`);
+  }
 }
 
-process.exitCode = unread.length > 0 && process.argv.includes('--strict') ? 1 : 0;
+const failing = unread.length + methodsMissing.length;
+process.exitCode = failing > 0 && process.argv.includes('--strict') ? 1 : 0;

@@ -87,7 +87,7 @@ export class NestedHeaders extends BasePlugin {
    * ordinary header, so the depth is one more than the settings list.
    */
   countLevels(): number {
-    return this.#levels.length + 1;
+    return Math.max(this.#levels.length, 1);
   }
 
   /** Every level, spans and all. */
@@ -124,16 +124,22 @@ export class NestedHeaders extends BasePlugin {
       rows.push(cells);
     });
 
-    const bottom: ColHeaderCell[] = [];
-    for (let col = firstCol; col <= lastCol; col += 1) {
-      bottom.push({
-        col,
-        colspan: 1,
-        level: this.#levels.length,
-        label: this.grid.hasColHeaders() ? this.grid.getColHeader(col) : columnLetters(col),
-      });
+    // The last configured row *is* the row of columns — the settings describe
+    // the whole header, not the groups above one. Appending a row of labels
+    // here would draw a band nobody asked for, and push every level's index
+    // one out of step with the settings that named it.
+    if (rows.length === 0) {
+      const bottom: ColHeaderCell[] = [];
+      for (let col = firstCol; col <= lastCol; col += 1) {
+        bottom.push({
+          col,
+          colspan: 1,
+          level: 0,
+          label: this.grid.hasColHeaders() ? this.grid.getColHeader(col) : columnLetters(col),
+        });
+      }
+      rows.push(bottom);
     }
-    rows.push(bottom);
     return rows;
   }
 }

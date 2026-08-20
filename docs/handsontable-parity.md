@@ -7,7 +7,7 @@ Handsontable 저장소(`handsontable/handsontable`)의 소스와 문서에서 �
 |---|--:|---|
 | 설정 옵션 | 162 | `src/dataMap/metaManager/metaSchema.ts` |
 | 훅 | 253 | `src/core/hooks/constants.ts` |
-| 코어 메서드 | 134 | `src/core.ts` |
+| 코어 메서드 | 146 | `src/core.ts` |
 | 플러그인 | 42 | `src/plugins/` |
 | 셀 타입 | 13 | `src/cellTypes/` |
 
@@ -97,7 +97,22 @@ Handsontable 저장소(`handsontable/handsontable`)의 소스와 문서에서 �
 토글이라 에디터가 없는 것이 정상). 검증기는 text/numeric/date/time/dropdown/
 autocomplete/select/multiSelect 8종.
 
-## 코어 (Handsontable 코어 메서드 134개 중)
+## 코어 (Handsontable 코어 메서드 146개)
+
+`node scripts/parity.mjs`가 이름 하나하나를 소스에서 찾아 센다. 아래 표는
+영역별 요약이고, 숫자를 주장하는 것은 스크립트다.
+
+```
+methods   146/146 present  (0 named by the reference and missing)
+```
+
+### 이름은 같고 뜻이 다른 것
+
+| 메서드 | 차이 |
+|---|---|
+| `getCell` | 여기서는 셀의 **값**을 돌려준다. `<td>` 엘리먼트는 `getCellElement`다. |
+
+개수만 세면 이 차이가 묻힌다. 그래서 스크립트가 이 목록을 따로 출력한다.
 
 | 영역 | 상태 | 비고 |
 |---|:--:|---|
@@ -252,7 +267,7 @@ Handsontable에는 대응물이 없고 VisiGrid 축에서 가져오는 것들. �
 `modifyRowHeight` `modifyRowHeightByOverlayName` `modifySinglePassLayout` `modifySourceData` `modifyTransformEnd` `modifyTransformFocus`
 `modifyTransformStart`
 
-## 부록: 코어 메서드 전체 (134개)
+## 부록: 코어 메서드 전체 (146개)
 
 `addHook` `addHookOnce` `alter` `batch` `batchExecution` `batchRender`
 `clear` `colToProp` `countColHeaders` `countCols` `countEmptyCols` `countEmptyRows`
@@ -260,20 +275,22 @@ Handsontable에는 대응물이 없고 VisiGrid 축에서 가져오는 것들. �
 `countVisibleCols` `countVisibleRows` `deselectCell` `destroy` `destroyEditor` `emptySelectedCells`
 `getActiveEditor` `getActiveSelectionLayerIndex` `getCell` `getCellEditor` `getCellMeta` `getCellMetaAtRow`
 `getCellMetaTransient` `getCellRenderer` `getCellValidator` `getCellsMeta` `getColHeader` `getColWidth`
-`getColumnMeta` `getCoords` `getCopyableData` `getCopyableSourceData` `getCopyableText` `getData`
-`getDataAtCell` `getDataAtCol` `getDataAtProp` `getDataAtRow` `getDataAtRowProp` `getDataType`
-`getDirectionFactor` `getFirstFullyVisibleColumn` `getFirstFullyVisibleRow` `getFirstPartiallyVisibleColumn` `getFirstPartiallyVisibleRow` `getFirstRenderedVisibleColumn`
-`getFirstRenderedVisibleRow` `getFocusManager` `getFocusScopeManager` `getInitialColumnCount` `getInstance` `getLastFullyVisibleColumn`
-`getLastFullyVisibleRow` `getLastPartiallyVisibleColumn` `getLastPartiallyVisibleRow` `getLastRenderedVisibleColumn` `getLastRenderedVisibleRow` `getLayoutManager`
-`getPlugin` `getPluginName` `getRowHeader` `getRowHeight` `getSchema` `getSelected`
-`getSelectedActive` `getSelectedLast` `getSelectedRange` `getSelectedRangeActive` `getSelectedRangeLast` `getSettings`
-`getShortcutManager` `getSourceData` `getSourceDataArray` `getSourceDataAtCell` `getSourceDataAtCol` `getSourceDataAtRow`
-`getTranslatedPhrase` `getValue` `hasColHeaders` `hasHook` `hasRowHeaders` `init`
-`initIndexMappers` `isColumnModificationAllowed` `isEmptyCol` `isEmptyRow` `isExecutionSuspended` `isListening`
-`isLtr` `isRenderSuspended` `isRtl` `listen` `loadData` `populateFromArray`
-`propToCol` `refreshDimensions` `removeCellMeta` `removeHook` `render` `resumeExecution`
-`resumeRender` `runHooks` `scrollToFocusedCell` `scrollViewportTo` `selectAll` `selectCell`
-`selectCells` `selectColumns` `selectRows` `setCellMeta` `setCellMetaObject` `setDataAtCell`
-`setDataAtRowProp` `setSourceDataAtCell` `spliceCellsMeta` `spliceCol` `spliceRow` `suspendExecution`
-`suspendRender` `unlisten` `updateData` `updateSettings` `validateCell` `validateCells`
+`getColumnMeta` `getCoords` `getCopyableData` `getCopyableSourceData` `getCopyableText` `getCurrentThemeName`
+`getData` `getDataAtCell` `getDataAtCol` `getDataAtProp` `getDataAtRow` `getDataAtRowProp`
+`getDataType` `getDirectionFactor` `getFirstFullyVisibleColumn` `getFirstFullyVisibleRow` `getFirstPartiallyVisibleColumn` `getFirstPartiallyVisibleRow`
+`getFirstRenderedVisibleColumn` `getFirstRenderedVisibleRow` `getFocusManager` `getFocusScopeManager` `getInitialColumnCount` `getInstance`
+`getLastFullyVisibleColumn` `getLastFullyVisibleRow` `getLastPartiallyVisibleColumn` `getLastPartiallyVisibleRow` `getLastRenderedVisibleColumn` `getLastRenderedVisibleRow`
+`getLayoutManager` `getPlugin` `getPluginName` `getPluginsNames` `getRowHeader` `getRowHeight`
+`getSchema` `getSelected` `getSelectedActive` `getSelectedLast` `getSelectedRange` `getSelectedRangeActive`
+`getSelectedRangeLast` `getSettings` `getShortcutManager` `getSourceData` `getSourceDataArray` `getSourceDataAtCell`
+`getSourceDataAtCol` `getSourceDataAtRow` `getTableHeight` `getTableWidth` `getTranslatedPhrase` `getValue`
+`hasColHeaders` `hasHook` `hasRowHeaders` `init` `initIndexMappers` `isColumnModificationAllowed`
+`isEmptyCol` `isEmptyRow` `isExecutionSuspended` `isListening` `isLtr` `isRenderSuspended`
+`isRtl` `listen` `loadData` `populateFromArray` `propToCol` `refreshDimensions`
+`registerAllShortcutContexts` `removeCellMeta` `removeHook` `render` `resumeExecution` `resumeRender`
+`runHooks` `scrollToFocusedCell` `scrollViewportTo` `selectAll` `selectCell` `selectCells`
+`selectColumns` `selectRows` `setCellMeta` `setCellMetaObject` `setDataAtCell` `setDataAtRowProp`
+`setSourceDataAtCell` `spliceCellsMeta` `spliceCol` `spliceRow` `suspendExecution` `suspendRender`
+`toHTML` `toPhysicalColumn` `toPhysicalRow` `toTableElement` `toVisualColumn` `toVisualRow`
+`unlisten` `updateData` `updateSettings` `useTheme` `validateCell` `validateCells`
 `validateColumns` `validateRows`

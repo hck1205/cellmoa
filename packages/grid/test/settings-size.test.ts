@@ -51,7 +51,7 @@ describe('header size', () => {
     const { grid } = await mountGrid({
       startRows: 2,
       startCols: 2,
-      nestedHeaders: [[{ label: 'group', colspan: 2 }]],
+      nestedHeaders: [[{ label: 'group', colspan: 2 }], ['a', 'b']],
       columnHeaderHeight: [50, 25],
     });
     expect(grid.getColHeaderHeight(0)).toBe(50);

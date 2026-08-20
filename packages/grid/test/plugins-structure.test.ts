@@ -288,19 +288,33 @@ describe('nested headers', () => {
     ]);
   });
 
-  it('draws a group row above the ordinary header', async () => {
+  it('draws exactly the rows the settings describe', async () => {
+    // The settings are the whole header, not the groups above one. A single
+    // configured row means a single row of header — the reference appends no
+    // row of column letters underneath, and neither does this.
     const grid = await makeGrid({
       nestedHeaders: [['A group', { label: 'B group', colspan: 3 }]],
+    });
+    expect(grid.countColHeaderLevels()).toBe(1);
+
+    const plugin = grid.getPlugin('nestedHeaders') as unknown as NestedHeaders;
+    const rows = plugin.rowsFor(0, 3);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toEqual([
+      { col: 0, colspan: 1, level: 0, label: 'A group' },
+      { col: 1, colspan: 3, level: 0, label: 'B group' },
+    ]);
+  });
+
+  it('draws a group above the columns when both rows are given', async () => {
+    const grid = await makeGrid({
+      nestedHeaders: [['A group', { label: 'B group', colspan: 3 }], ['A', 'B', 'C', 'D']],
     });
     expect(grid.countColHeaderLevels()).toBe(2);
 
     const plugin = grid.getPlugin('nestedHeaders') as unknown as NestedHeaders;
     const rows = plugin.rowsFor(0, 3);
     expect(rows).toHaveLength(2);
-    expect(rows[0]).toEqual([
-      { col: 0, colspan: 1, level: 0, label: 'A group' },
-      { col: 1, colspan: 3, level: 0, label: 'B group' },
-    ]);
     expect(rows[1]?.map((cell) => cell.label)).toEqual(['A', 'B', 'C', 'D']);
   });
 

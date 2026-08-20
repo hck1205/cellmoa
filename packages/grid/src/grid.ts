@@ -56,6 +56,21 @@ import type { CellRenderContext, ColHeaderCell } from './view.js';
 const DEFAULT_OVERSCAN = 3;
 
 /** Identifies the injected stylesheet, so several grids share one. */
+/**
+ * Brings a spliced line back to the length it had.
+ *
+ * A splice that removes more than it inserts leaves the tail of the row still
+ * holding its old values — the shortened array simply never reaches them. The
+ * cells that fell off the end have to be written as empty, or the splice
+ * silently duplicates whatever used to be there.
+ */
+function pad(line: string[], length: number): string[] {
+  while (line.length < length) {
+    line.push('');
+  }
+  return line.slice(0, length);
+}
+
 const CORE_CSS_ID = 'cm-core-css';
 
 /**
@@ -864,6 +879,31 @@ export class Grid {
   }
 
   /**
+   * How much room the headers actually take.
+   *
+   * `getRowHeaderWidth` and `getColHeaderHeight` answer "how big is one",
+   * which is the wrong question for anything measuring the table: a grid with
+   * `colHeaders: false` draws no band at all, and a nested header draws
+   * several. Everything that positions against the headers — the renderer, the
+   * visible-row arithmetic, `getTableHeight` — asks these instead, so they
+   * cannot drift apart from what was drawn.
+   */
+  #drawnHeaderWidth(): number {
+    return this.hasRowHeaders() ? this.getRowHeaderWidth() : 0;
+  }
+
+  #drawnHeaderHeight(): number {
+    if (!this.hasColHeaders()) {
+      return 0;
+    }
+    let total = 0;
+    for (let level = 0; level < this.countColHeaderLevels(); level += 1) {
+      total += this.getColHeaderHeight(level);
+    }
+    return total;
+  }
+
+  /**
    * Whether a row is hidden — present in the data but not drawn.
    *
    * Hidden is not the same as trimmed: a hidden row still counts, still holds
@@ -1137,7 +1177,18 @@ export class Grid {
     return this.#renderSuspended > 0;
   }
 
-  /** Runs a function with drawing held off. */
+  /**
+   * Runs a function with drawing held off.
+   *
+   * `batchRender` is the reference's name for exactly this; `batch` is what the
+   * rest of this codebase calls it. Both are kept because a Handsontable
+   * configuration reaches for the first and everything here reaches for the
+   * second, and having one call the other means there is still only one of it.
+   */
+  batchRender<T>(action: () => T): T {
+    return this.batch(action);
+  }
+
   batch<T>(action: () => T): T {
     this.suspendRender();
     try {
@@ -1168,6 +1219,745 @@ export class Grid {
   }
 
   /** Releases the grid. */
+
+  // --- the rest of the reference's core surface ---------------------------
+  //
+  // Mostly one question each. They are grouped here rather than spread through
+  // the file above because they are answers, not machinery.
+
+  /** How many row-header columns there are. One, or none. */
+  countRowHeaders(): number {
+    return this.hasRowHeaders() ? 1 : 0;
+  }
+
+  /** How many column-header rows there are, nesting included. */
+  countColHeaders(): number {
+    return this.hasColHeaders() ? this.countColHeaderLevels() : 0;
+  }
+
+  /** How many rows are in the DOM, which is not how many the sheet has. */
+  countRenderedRows(): number {
+    const viewport = this.view?.viewport;
+    return viewport ? Math.max(viewport.lastRow - viewport.firstRow + 1, 0) : 0;
+  }
+
+  countRenderedCols(): number {
+    const viewport = this.view?.viewport;
+    return viewport ? Math.max(viewport.lastCol - viewport.firstCol + 1, 0) : 0;
+  }
+
+  /** How many rows the user can actually see, whole or in part. */
+  countVisibleRows(): number {
+    const first = this.getFirstPartiallyVisibleRow();
+    const last = this.getLastPartiallyVisibleRow();
+    return first < 0 || last < 0 ? 0 : last - first + 1;
+  }
+
+  countVisibleCols(): number {
+    const first = this.getFirstPartiallyVisibleColumn();
+    const last = this.getLastPartiallyVisibleColumn();
+    return first < 0 || last < 0 ? 0 : last - first + 1;
+  }
+
+  /**
+   * Whether a row holds nothing.
+   *
+   * A cell holding an empty string is empty; a cell holding a formula that
+   * evaluates to an empty string is not, because something is there.
+   */
+  isEmptyRow(row: number): boolean {
+    for (let col = 0; col < this.countCols(); col += 1) {
+      if (this.getSourceDataAtCell(row, col) !== '') {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  isEmptyCol(col: number): boolean {
+    for (let row = 0; row < this.countRows(); row += 1) {
+      if (this.getSourceDataAtCell(row, col) !== '') {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * How many rows are empty.
+   *
+   * `ending` counts only the run at the bottom, which is the question someone
+   * trimming a sheet is actually asking.
+   */
+  countEmptyRows(ending = false): number {
+    let count = 0;
+    for (let row = this.countRows() - 1; row >= 0; row -= 1) {
+      if (this.isEmptyRow(row)) {
+        count += 1;
+      } else if (ending) {
+        break;
+      }
+    }
+    return count;
+  }
+
+  countEmptyCols(ending = false): number {
+    let count = 0;
+    for (let col = this.countCols() - 1; col >= 0; col -= 1) {
+      if (this.isEmptyCol(col)) {
+        count += 1;
+      } else if (ending) {
+        break;
+      }
+    }
+    return count;
+  }
+
+  // --- the viewport -------------------------------------------------------
+
+  getFirstRenderedVisibleRow(): number {
+    return this.view?.viewport.firstRow ?? -1;
+  }
+
+  getLastRenderedVisibleRow(): number {
+    return this.view?.viewport.lastRow ?? -1;
+  }
+
+  getFirstRenderedVisibleColumn(): number {
+    return this.view?.viewport.firstCol ?? -1;
+  }
+
+  getLastRenderedVisibleColumn(): number {
+    return this.view?.viewport.lastCol ?? -1;
+  }
+
+  /**
+   * The first row entirely on screen.
+   *
+   * *Fully* and *partially* differ by one row at each edge, and the difference
+   * matters: scrolling to the first fully visible row is a no-op, while
+   * scrolling to the first partially visible one moves.
+   */
+  getFirstFullyVisibleRow(): number {
+    return this.#visibleRow('first', true);
+  }
+
+  getLastFullyVisibleRow(): number {
+    return this.#visibleRow('last', true);
+  }
+
+  getFirstPartiallyVisibleRow(): number {
+    return this.#visibleRow('first', false);
+  }
+
+  getLastPartiallyVisibleRow(): number {
+    return this.#visibleRow('last', false);
+  }
+
+  getFirstFullyVisibleColumn(): number {
+    return this.#visibleCol('first', true);
+  }
+
+  getLastFullyVisibleColumn(): number {
+    return this.#visibleCol('last', true);
+  }
+
+  getFirstPartiallyVisibleColumn(): number {
+    return this.#visibleCol('first', false);
+  }
+
+  getLastPartiallyVisibleColumn(): number {
+    return this.#visibleCol('last', false);
+  }
+
+  #visibleRow(which: 'first' | 'last', fully: boolean): number {
+    const view = this.view;
+    if (!view) {
+      return -1;
+    }
+    // The scroller, not the root: it is the element the renderer measures, and
+    // an answer taken from a different box would disagree with what was drawn.
+    const top = view.scrollTop;
+    const bottom = top + view.scroller.clientHeight - this.#drawnHeaderHeight();
+    let found = -1;
+    for (let row = 0; row < this.countRows(); row += 1) {
+      const start = this.rowSizes.offsetOf(row);
+      const end = start + this.rowSizes.sizeOf(row);
+      const inside = fully ? start >= top && end <= bottom : end > top && start < bottom;
+      if (inside) {
+        if (which === 'first') {
+          return row;
+        }
+        found = row;
+      }
+    }
+    return found;
+  }
+
+  #visibleCol(which: 'first' | 'last', fully: boolean): number {
+    const view = this.view;
+    if (!view) {
+      return -1;
+    }
+    const left = view.scrollLeft;
+    const right = left + view.scroller.clientWidth - this.#drawnHeaderWidth();
+    let found = -1;
+    for (let col = 0; col < this.countCols(); col += 1) {
+      const start = this.columnSizes.offsetOf(col);
+      const end = start + this.columnSizes.sizeOf(col);
+      const inside = fully ? start >= left && end <= right : end > left && start < right;
+      if (inside) {
+        if (which === 'first') {
+          return col;
+        }
+        found = col;
+      }
+    }
+    return found;
+  }
+
+  /** How wide the table is, headers included. */
+  getTableWidth(): number {
+    return this.columnSizes.total + this.#drawnHeaderWidth();
+  }
+
+  getTableHeight(): number {
+    return this.rowSizes.total + this.#drawnHeaderHeight();
+  }
+
+  /** Re-reads the container's size and draws again. */
+  refreshDimensions(): void {
+    this.render();
+  }
+
+  /** Brings the focused cell into view. */
+  scrollToFocusedCell(): void {
+    const highlight = this.selection.highlight;
+    if (highlight) {
+      this.scrollViewportTo(highlight.row, highlight.col);
+    }
+  }
+
+  // --- indexes ------------------------------------------------------------
+
+  toPhysicalRow(row: number): number | null {
+    return this.rowIndex.toPhysical(row);
+  }
+
+  toPhysicalColumn(col: number): number | null {
+    return this.colIndex.toPhysical(col);
+  }
+
+  toVisualRow(row: number): number | null {
+    return this.rowIndex.toVisual(row);
+  }
+
+  toVisualColumn(col: number): number | null {
+    return this.colIndex.toVisual(col);
+  }
+
+  /**
+   * A column's name.
+   *
+   * An integration that addressed columns by key needs one. A workbook column
+   * has no key, so its header text is the name — which is a real answer rather
+   * than a missing method, and is stable as long as the header is.
+   */
+  colToProp(col: number): string | number {
+    return this.hasColHeaders() ? this.getColHeader(col) : col;
+  }
+
+  /** The column a name refers to, or `-1`. */
+  propToCol(prop: string | number): number {
+    if (typeof prop === 'number') {
+      return prop;
+    }
+    for (let col = 0; col < this.countCols(); col += 1) {
+      if (this.colToProp(col) === prop) {
+        return col;
+      }
+    }
+    return -1;
+  }
+
+  /** The cell an element belongs to, or `null`. */
+  getCoords(element: HTMLElement | null): Coords | null {
+    return element ? (this.view?.cellAt(element) ?? null) : null;
+  }
+
+  /**
+   * The drawn element for a cell, or `null` when it is scrolled out.
+   *
+   * The reference calls this `getCell`; here that name was already taken by the
+   * cell's *value*, and quietly changing what it returns would break every
+   * caller in this codebase to match a name. So the element has its own name,
+   * and `docs/handsontable-parity.md` records the difference rather than
+   * letting the count imply there is none.
+   */
+  getCellElement(row: number, col: number): HTMLTableCellElement | null {
+    return this.view?.elementAt(row, col) ?? null;
+  }
+
+  isLtr(): boolean {
+    return !this.isRtl();
+  }
+
+  /** `1` left-to-right, `-1` right-to-left, for arithmetic on directions. */
+  getDirectionFactor(): 1 | -1 {
+    return this.isRtl() ? -1 : 1;
+  }
+
+  // --- data ---------------------------------------------------------------
+
+  /** Every row's source values — formulas, not their results. */
+  getSourceData(): string[][] {
+    return Array.from({ length: this.countRows() }, (_, row) => this.getSourceDataAtRow(row));
+  }
+
+  getSourceDataArray(): string[][] {
+    return this.getSourceData();
+  }
+
+  getSourceDataAtRow(row: number): string[] {
+    return Array.from({ length: this.countCols() }, (_, col) =>
+      this.getSourceDataAtCell(row, col),
+    );
+  }
+
+  getSourceDataAtCol(col: number): string[] {
+    return Array.from({ length: this.countRows() }, (_, row) =>
+      this.getSourceDataAtCell(row, col),
+    );
+  }
+
+  /** Writes without going through the editor's parsing and validation. */
+  setSourceDataAtCell(row: number, col: number, value: string): void {
+    this.setDataAtCell(row, col, value, 'loadData');
+  }
+
+  getDataAtProp(prop: string | number): string[] {
+    const col = this.propToCol(prop);
+    return col < 0 ? [] : this.getDataAtCol(col);
+  }
+
+  getDataAtRowProp(row: number, prop: string | number): string {
+    const col = this.propToCol(prop);
+    return col < 0 ? '' : this.getDataAtCell(row, col);
+  }
+
+  setDataAtRowProp(row: number, prop: string | number, value: string): void {
+    const col = this.propToCol(prop);
+    if (col >= 0) {
+      this.setDataAtCell(row, col, value);
+    }
+  }
+
+  /** What the clipboard would take, which a `copyable: false` cell withholds. */
+  getCopyableData(row: number, col: number): string {
+    return this.getCellMeta(row, col)['copyable'] === false ? '' : this.getDataAtCell(row, col);
+  }
+
+  getCopyableSourceData(row: number, col: number): string {
+    return this.getCellMeta(row, col)['copyable'] === false
+      ? ''
+      : this.getSourceDataAtCell(row, col);
+  }
+
+  /**
+   * The one type a rectangle has, or `mixed`.
+   *
+   * `mixed` is the useful answer: a caller asking is deciding whether it can
+   * treat the block uniformly, and "they differ" is what it needs to hear.
+   */
+  getDataType(startRow: number, startCol: number, endRow: number, endCol: number): string {
+    let found: string | null = null;
+    for (let row = startRow; row <= endRow; row += 1) {
+      for (let col = startCol; col <= endCol; col += 1) {
+        const type = String(this.getCellMeta(row, col).type ?? 'text');
+        if (found === null) {
+          found = type;
+        } else if (found !== type) {
+          return 'mixed';
+        }
+      }
+    }
+    return found ?? 'text';
+  }
+
+  /** The columns, as a shape — the nearest thing a workbook has to a schema. */
+  getSchema(): Record<string, null> {
+    const schema: Record<string, null> = {};
+    for (let col = 0; col < this.countCols(); col += 1) {
+      schema[String(this.colToProp(col))] = null;
+    }
+    return schema;
+  }
+
+  /** Replaces everything with the given rows. */
+  loadData(data: string[][]): void {
+    if (this.hooks.allows('beforeLoadData', data) === false) {
+      return;
+    }
+    const changes: Array<[number, number, string]> = [];
+    const height = Math.max(data.length, this.countRows());
+    const width = Math.max(this.countCols(), ...data.map((row) => row.length), 0);
+    for (let row = 0; row < height; row += 1) {
+      for (let col = 0; col < width; col += 1) {
+        changes.push([row, col, data[row]?.[col] ?? '']);
+      }
+    }
+    this.setDataAtCells(changes, 'loadData');
+    this.hooks.run('afterLoadData', undefined, data);
+  }
+
+  /** The same, but keeping the index maps — a sort survives it. */
+  updateData(data: string[][]): void {
+    const changes: Array<[number, number, string]> = [];
+    data.forEach((line, row) => {
+      line.forEach((value, col) => {
+        changes.push([row, col, value]);
+      });
+    });
+    this.setDataAtCells(changes, 'updateData');
+    this.hooks.run('afterUpdateData', undefined, data);
+  }
+
+  /** Replaces part of a row, as `Array.prototype.splice` does. */
+  spliceRow(row: number, start: number, amount: number, ...values: string[]): void {
+    const line = this.getSourceDataAtRow(row);
+    const width = line.length;
+    line.splice(start, amount, ...values);
+    this.setDataAtCells(
+      pad(line, width).map((value, col) => [row, col, value] as [number, number, string]),
+      'spliceRow',
+    );
+  }
+
+  spliceCol(col: number, start: number, amount: number, ...values: string[]): void {
+    const line = this.getSourceDataAtCol(col);
+    const height = line.length;
+    line.splice(start, amount, ...values);
+    this.setDataAtCells(
+      pad(line, height).map((value, row) => [row, col, value] as [number, number, string]),
+      'spliceCol',
+    );
+  }
+
+  /** Whether columns may be added or removed at all. */
+  isColumnModificationAllowed(): boolean {
+    const settings = this.getSettings();
+    return settings.allowInsertColumn !== false || settings.allowRemoveColumn !== false;
+  }
+
+  // --- cell meta ----------------------------------------------------------
+
+  /** The settings of every cell, row by row. */
+  getCellsMeta(): GridSettings[] {
+    const all: GridSettings[] = [];
+    for (let row = 0; row < this.countRows(); row += 1) {
+      all.push(...this.getCellMetaAtRow(row));
+    }
+    return all;
+  }
+
+  getCellMetaAtRow(row: number): GridSettings[] {
+    return Array.from({ length: this.countCols() }, (_, col) => this.getCellMeta(row, col));
+  }
+
+  /** The settings without letting a hook change them. */
+  getCellMetaTransient(row: number, col: number): GridSettings {
+    return this.#meta.forCell(row, col);
+  }
+
+  getColumnMeta(col: number): GridSettings {
+    return this.#meta.forColumn(col);
+  }
+
+  /**
+   * Splices rows of per-cell settings, as a splice of the data would.
+   *
+   * Rows, not cells: removing a row has to take that row's settings with it,
+   * or the row below inherits a `readOnly` it never had. Each replacement is a
+   * whole row's worth of settings, one entry per column.
+   */
+  spliceCellsMeta(row: number, amount = 0, ...replacements: GridSettings[][]): void {
+    if (amount > 0) {
+      this.#meta.shift('row', row, -amount);
+    }
+    if (replacements.length > 0) {
+      this.#meta.shift('row', row, replacements.length);
+      replacements.forEach((line, offset) => {
+        line.forEach((settings, col) => {
+          this.setCellMetaObject(row + offset, col, settings);
+        });
+      });
+    }
+    this.render();
+  }
+
+  getCellRenderer(row: number, col: number): unknown {
+    const meta = this.getCellMeta(row, col);
+    return typeof meta.renderer === 'function'
+      ? meta.renderer
+      : getRenderer(String(meta.renderer ?? meta.type ?? 'text'));
+  }
+
+  getCellEditor(row: number, col: number): unknown {
+    const meta = this.getCellMeta(row, col);
+    return typeof meta.editor === 'function'
+      ? meta.editor
+      : getEditor(String(meta.editor ?? meta.type ?? 'text'));
+  }
+
+  getCellValidator(row: number, col: number): unknown {
+    const meta = this.getCellMeta(row, col);
+    return typeof meta.validator === 'function'
+      ? meta.validator
+      : getValidator(String(meta.validator ?? meta.type ?? 'text'));
+  }
+
+  /** Runs every validator, and reports whether all of them passed. */
+  validateCells(callback?: (valid: boolean) => void): void {
+    this.validateRows(
+      Array.from({ length: this.countRows() }, (_, row) => row),
+      callback,
+    );
+  }
+
+  validateRows(rows: number[], callback?: (valid: boolean) => void): void {
+    const cells: Coords[] = [];
+    for (const row of rows) {
+      for (let col = 0; col < this.countCols(); col += 1) {
+        cells.push({ row, col });
+      }
+    }
+    void this.#validateAll(cells, callback);
+  }
+
+  validateColumns(cols: number[], callback?: (valid: boolean) => void): void {
+    const cells: Coords[] = [];
+    for (const col of cols) {
+      for (let row = 0; row < this.countRows(); row += 1) {
+        cells.push({ row, col });
+      }
+    }
+    void this.#validateAll(cells, callback);
+  }
+
+  /**
+   * Validates a list of cells and reports the verdict once.
+   *
+   * A validator may be asynchronous, so the answer is a promise even when
+   * every one of them is not — a caller told "all valid" before the slow one
+   * has answered would be told something untrue.
+   */
+  async #validateAll(cells: Coords[], callback?: (valid: boolean) => void): Promise<boolean> {
+    let allValid = true;
+    for (const { row, col } of cells) {
+      const meta = this.getCellMeta(row, col);
+      const validator = this.getCellValidator(row, col) as
+        | ((value: string, meta: GridSettings) => unknown)
+        | undefined;
+      if (typeof validator !== 'function') {
+        continue;
+      }
+      const result = await validator(this.getSourceDataAtCell(row, col), meta);
+      const valid = typeof result === 'object' && result !== null && 'valid' in result
+        ? (result as { valid: boolean }).valid
+        : result !== false;
+      if (!valid) {
+        allValid = false;
+        this.#invalid.add(row, col);
+      } else {
+        this.#invalid.delete(row, col);
+      }
+    }
+    this.render();
+    callback?.(allValid);
+    return allValid;
+  }
+
+  // --- selection ----------------------------------------------------------
+
+  /** The active layer of the selection, which is the last one added. */
+  getSelectedActive(): [number, number, number, number] | undefined {
+    return this.getSelectedLast();
+  }
+
+  getSelectedRangeActive(): CellRange | undefined {
+    return this.getSelectedRangeLast();
+  }
+
+  getActiveSelectionLayerIndex(): number {
+    return Math.max(this.selection.ranges.length - 1, 0);
+  }
+
+  // --- batching -----------------------------------------------------------
+
+  batchExecution<T>(work: () => T, forceFlush = false): T {
+    this.suspendExecution();
+    try {
+      return work();
+    } finally {
+      this.resumeExecution(forceFlush);
+    }
+  }
+
+  suspendExecution(): void {
+    this.suspendRender();
+  }
+
+  resumeExecution(forceFlush = false): void {
+    this.resumeRender();
+    if (forceFlush) {
+      this.render();
+    }
+  }
+
+  isExecutionSuspended(): boolean {
+    return this.isRenderSuspended();
+  }
+
+  // --- odds and ends ------------------------------------------------------
+
+  // --- bootstrap ----------------------------------------------------------
+
+  /**
+   * Runs the bootstrap again.
+   *
+   * In Handsontable this is what the constructor calls. Here the constructor
+   * does the work itself, so `init` is what a caller reaches for when the grid
+   * has to be rebuilt against changed surroundings — the data grew underneath
+   * it, or a keyboard context was torn down. It is written to be safe to call
+   * twice, which is the only thing that makes it worth exposing at all.
+   */
+  init(): void {
+    if (this.#destroyed) {
+      return;
+    }
+    this.initIndexMappers();
+    this.registerAllShortcutContexts();
+    this.render();
+    this.hooks.run('afterInit', undefined);
+  }
+
+  /**
+   * Sizes the row and column index maps to the data.
+   *
+   * The maps carry the order, the trims and the hides, so this extends them to
+   * reach the data rather than rebuilding them — a rebuild would throw away the
+   * sort a person is currently looking at.
+   */
+  initIndexMappers(): void {
+    this.#syncDimensions(true);
+  }
+
+  /**
+   * Rebuilds the built-in keyboard contexts.
+   *
+   * Only the `core` group is dropped and re-added, so shortcuts a plugin
+   * registered survive — they were not this method's to remove.
+   */
+  registerAllShortcutContexts(): void {
+    for (const name of ['grid', 'editor']) {
+      this.shortcuts.getContext(name)?.removeShortcutsByGroup('core');
+    }
+    this.#bindKeyboard();
+  }
+
+  getInstance(): Grid {
+    return this;
+  }
+
+  /** The name a plugin is registered under, or `null` if it is not ours. */
+  getPluginName(plugin: unknown): string | null {
+    for (const [name, registered] of this.#plugins) {
+      if (registered === plugin) {
+        return name;
+      }
+    }
+    return null;
+  }
+
+  getPluginsNames(): string[] {
+    return [...this.#plugins.keys()];
+  }
+
+  getShortcutManager(): ShortcutManager {
+    return this.shortcuts;
+  }
+
+  /**
+   * Handsontable's focus managers.
+   *
+   * This grid keeps focus on one element and moves a selection inside it, so
+   * there is nothing separate to hand back. Returning the grid rather than
+   * `null` keeps a chained call from throwing.
+   */
+  getFocusManager(): Grid {
+    return this;
+  }
+
+  getFocusScopeManager(): Grid {
+    return this;
+  }
+
+  getActiveEditor(): unknown {
+    return this.#editor;
+  }
+
+  /** Closes the editor. `revert` throws the edit away. */
+  destroyEditor(revert = false): void {
+    this.closeEditor(!revert);
+  }
+
+  getCurrentThemeName(): string | null {
+    return this.getTheme()?.name ?? null;
+  }
+
+  /** Switches theme, taking either a registered theme or a name. */
+  useTheme(theme: unknown): void {
+    this.updateSettings({ theme: theme as GridSettings['theme'] });
+  }
+
+  /** How many columns the grid started with. */
+  getInitialColumnCount(): number {
+    return (this.getSettings().startCols as number) ?? this.countCols();
+  }
+
+  /** The grid as an HTML table, for a caller building a document from it. */
+  toHTML(): string {
+    return this.toTableElement().outerHTML;
+  }
+
+  toTableElement(): HTMLTableElement {
+    const doc = this.view?.root.ownerDocument ?? globalThis.document;
+    const table = doc.createElement('table');
+    const body = doc.createElement('tbody');
+    if (this.hasColHeaders()) {
+      const head = doc.createElement('tr');
+      for (let col = 0; col < this.countCols(); col += 1) {
+        const th = doc.createElement('th');
+        th.textContent = this.getColHeader(col);
+        head.appendChild(th);
+      }
+      body.appendChild(head);
+    }
+    for (let row = 0; row < this.countRows(); row += 1) {
+      const tr = doc.createElement('tr');
+      for (let col = 0; col < this.countCols(); col += 1) {
+        const td = doc.createElement('td');
+        // The text, not the formula: a table pasted into a document shows what
+        // the grid showed.
+        td.textContent = this.getDataAtCell(row, col);
+        tr.appendChild(td);
+      }
+      body.appendChild(tr);
+    }
+    table.appendChild(body);
+    return table;
+  }
+
   destroy(): void {
     if (this.#destroyed) {
       return;
@@ -2006,17 +2796,8 @@ export class Grid {
         0,
       rowHeader: (row) => (this.hasRowHeaders() ? this.getRowHeader(row) : null),
       colHeaderRows: (firstCol, lastCol) => this.getColHeaderRows(firstCol, lastCol),
-      rowHeaderWidth: () => (this.hasRowHeaders() ? this.getRowHeaderWidth() : 0),
-      colHeaderHeight: () => {
-        if (!this.hasColHeaders()) {
-          return 0;
-        }
-        let total = 0;
-        for (let level = 0; level < this.countColHeaderLevels(); level += 1) {
-          total += this.getColHeaderHeight(level);
-        }
-        return total;
-      },
+      rowHeaderWidth: () => this.#drawnHeaderWidth(),
+      colHeaderHeight: () => this.#drawnHeaderHeight(),
       colHeaderLevelHeight: (level) =>
         this.hasColHeaders() ? this.getColHeaderHeight(level) : 0,
       renderColHeader: (th, cell) => {
