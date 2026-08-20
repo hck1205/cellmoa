@@ -68,47 +68,6 @@ fn is_working_day(serial: i64, mask: &[bool; 7], holidays: &[i64]) -> bool {
     !mask[weekday as usize] && !holidays.contains(&serial)
 }
 
-/// Days between two dates under one of the 30/360 conventions.
-fn days_360(start: (i64, u32, u32), end: (i64, u32, u32), european: bool) -> f64 {
-    let (y1, m1, mut d1) = start;
-    let (y2, m2, mut d2) = end;
-    if european {
-        d1 = d1.min(30);
-        d2 = d2.min(30);
-    } else {
-        // The US convention only pulls the end date back when the start date
-        // was also at the end of a month.
-        if d1 == 31 {
-            d1 = 30;
-        }
-        if d2 == 31 && d1 == 30 {
-            d2 = 30;
-        }
-    }
-    ((y2 - y1) * 360 + (m2 as i64 - m1 as i64) * 30 + (d2 as i64 - d1 as i64)) as f64
-}
-
-/// The year fraction between two dates under one of the day-count bases.
-fn year_fraction(start: f64, end: f64, basis: i64) -> Result<f64, CellError> {
-    let (a, b) = if start <= end { (start, end) } else { (end, start) };
-    let (sy, sm, sd) = ymd_from_serial(a)?;
-    let (ey, em, ed) = ymd_from_serial(b)?;
-    Ok(match basis {
-        0 => days_360((sy, sm, sd), (ey, em, ed), false) / 360.0,
-        1 => {
-            // Actual days over the average length of the years spanned.
-            let years = (ey - sy + 1) as f64;
-            let leap_days: i64 = (sy..=ey).filter(|y| is_leap_year(*y)).count() as i64;
-            let average = (365.0 * years + leap_days as f64) / years;
-            (b.floor() - a.floor()) / average
-        }
-        2 => (b.floor() - a.floor()) / 360.0,
-        3 => (b.floor() - a.floor()) / 365.0,
-        4 => days_360((sy, sm, sd), (ey, em, ed), true) / 360.0,
-        _ => return Err(CellError::Num),
-    })
-}
-
 pub const FUNCTIONS: &[Function] = &[
     f("DATE", 3, Some(3), |ctx, a| {
         args!(y = arg_num(ctx, a, 0), m = arg_num(ctx, a, 1), d = arg_num(ctx, a, 2));

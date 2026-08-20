@@ -1134,3 +1134,226 @@ fn distributions_reject_impossible_parameters() {
     assert_eq!(calc("=GAMMALN(0)"), Value::Error(CellError::Num));
     assert_eq!(calc("=CHISQ.DIST(-1,1,TRUE)"), Value::Error(CellError::Num));
 }
+
+// ---------------------------------------------------------------------------
+// Financial
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_loan_payment_is_negative_because_you_pay_it() {
+    // A 200,000 loan at 6% a year over 30 years of monthly payments.
+    let pmt = calc_num("=PMT(0.06/12,360,200000)");
+    assert!((pmt - -1_199.101_050_305_513_8).abs() < 1e-9, "pmt was {pmt}");
+    // Interest and principal add back up to the payment.
+    let ipmt = calc_num("=IPMT(0.06/12,1,360,200000)");
+    let ppmt = calc_num("=PPMT(0.06/12,1,360,200000)");
+    assert!((ipmt + ppmt - pmt).abs() < 1e-9);
+    // The first month is almost all interest.
+    assert!((ipmt - -1000.0).abs() < 1e-9);
+}
+
+#[test]
+fn the_annuity_functions_invert_each_other() {
+    let pv = calc_num("=PV(0.05,10,-1000)");
+    let fmt = format!("=PMT(0.05,10,{pv})");
+    assert!((calc_num(&fmt) - -1000.0).abs() < 1e-9);
+    // 7721.7349 is the present value of ten payments of 1000 at 5%.
+    assert!((calc_num("=NPER(0.05,-1000,7721.734929)") - 10.0).abs() < 1e-6);
+    assert!((calc_num("=RATE(10,-1000,7721.734929)") - 0.05).abs() < 1e-9);
+}
+
+#[test]
+fn a_zero_rate_does_not_divide_by_zero() {
+    assert_eq!(calc_num("=PMT(0,10,1000)"), -100.0);
+    assert_eq!(calc_num("=FV(0,10,-100)"), 1000.0);
+    assert_eq!(calc_num("=PV(0,10,-100)"), 1000.0);
+}
+
+#[test]
+fn net_present_value_and_internal_rate_of_return() {
+    let mut engine = sheet();
+    for (row, v) in (1..=5).zip([-1000, 300, 400, 400, 300]) {
+        type_in(&mut engine, &format!("A{row}"), &v.to_string());
+    }
+    type_in(&mut engine, "C1", "=IRR(A1:A5)");
+    let irr = number(&engine, "C1");
+    // The rate that makes the discounted flows sum to zero.
+    type_in(&mut engine, "C2", &format!("=A1+NPV({irr},A2:A5)"));
+    assert!(number(&engine, "C2").abs() < 1e-9, "NPV at the IRR was not zero");
+    assert!((0.1..0.2).contains(&irr), "irr was {irr}");
+}
+
+#[test]
+fn dated_cash_flows_use_actual_days() {
+    let mut engine = sheet();
+    let rows = [(-10000, "=DATE(2024,1,1)"), (6000, "=DATE(2024,7,1)"), (6000, "=DATE(2025,1,1)")];
+    for (i, (amount, date)) in rows.iter().enumerate() {
+        let row = i + 1;
+        type_in(&mut engine, &format!("A{row}"), &amount.to_string());
+        type_in(&mut engine, &format!("B{row}"), date);
+    }
+    type_in(&mut engine, "D1", "=XIRR(A1:A3,B1:B3)");
+    let rate = number(&engine, "D1");
+    type_in(&mut engine, "D2", &format!("=XNPV({rate},A1:A3,B1:B3)"));
+    assert!(number(&engine, "D2").abs() < 1e-6, "XNPV at the XIRR was not zero");
+}
+
+#[test]
+fn depreciation_methods() {
+    assert_eq!(calc_num("=SLN(10000,1000,5)"), 1800.0);
+    assert_eq!(calc_num("=SYD(10000,1000,5,1)"), 3000.0);
+    assert_eq!(calc_num("=SYD(10000,1000,5,5)"), 600.0);
+    // Double declining takes 2/5 of the book value in the first year.
+    assert_eq!(calc_num("=DDB(10000,1000,5,1)"), 4000.0);
+    assert_eq!(calc_num("=DDB(10000,1000,5,2)"), 2400.0);
+    // The whole life sums to the depreciable amount.
+    let total: f64 = (1..=5).map(|p| calc_num(&format!("=SYD(10000,1000,5,{p})"))).sum();
+    assert!((total - 9000.0).abs() < 1e-9);
+}
+
+#[test]
+fn effective_and_nominal_rates_are_inverses() {
+    let effective = calc_num("=EFFECT(0.06,12)");
+    assert!((effective - 0.061_677_811_863_589_28).abs() < 1e-12);
+    assert!((calc_num(&format!("=NOMINAL({effective},12)")) - 0.06).abs() < 1e-12);
+}
+
+// ---------------------------------------------------------------------------
+// Engineering
+// ---------------------------------------------------------------------------
+
+#[test]
+fn number_bases_round_trip() {
+    assert_eq!(calc("=DEC2BIN(9)"), Value::Text("1001".into()));
+    assert_eq!(calc("=DEC2BIN(9,8)"), Value::Text("00001001".into()));
+    assert_eq!(calc_num("=BIN2DEC(\"1001\")"), 9.0);
+    // Negative numbers use ten-digit two's complement.
+    assert_eq!(calc("=DEC2BIN(-1)"), Value::Text("1111111111".into()));
+    assert_eq!(calc_num("=BIN2DEC(\"1111111111\")"), -1.0);
+    assert_eq!(calc("=DEC2HEX(255)"), Value::Text("FF".into()));
+    assert_eq!(calc_num("=HEX2DEC(\"FFFFFFFFFF\")"), -1.0);
+    assert_eq!(calc("=BIN2HEX(\"11111111\")"), Value::Text("FF".into()));
+    assert_eq!(calc("=DEC2BIN(512)"), Value::Error(CellError::Num));
+}
+
+#[test]
+fn bitwise_operations() {
+    assert_eq!(calc_num("=BITAND(12,10)"), 8.0);
+    assert_eq!(calc_num("=BITOR(12,10)"), 14.0);
+    assert_eq!(calc_num("=BITXOR(12,10)"), 6.0);
+    assert_eq!(calc_num("=BITLSHIFT(1,4)"), 16.0);
+    assert_eq!(calc_num("=BITRSHIFT(16,4)"), 1.0);
+    assert_eq!(calc("=BITAND(-1,1)"), Value::Error(CellError::Num));
+}
+
+#[test]
+fn complex_arithmetic_through_the_text_form() {
+    assert_eq!(calc("=COMPLEX(3,4)"), Value::Text("3+4i".into()));
+    assert_eq!(calc_num("=IMABS(\"3+4i\")"), 5.0);
+    assert_eq!(calc_num("=IMREAL(\"3+4i\")"), 3.0);
+    assert_eq!(calc_num("=IMAGINARY(\"3+4i\")"), 4.0);
+    assert_eq!(calc("=IMSUM(\"3+4i\",\"1+2i\")"), Value::Text("4+6i".into()));
+    assert_eq!(calc("=IMPRODUCT(\"3+4i\",\"1+2i\")"), Value::Text("-5+10i".into()));
+    assert_eq!(calc("=IMCONJUGATE(\"3+4i\")"), Value::Text("3-4i".into()));
+    // i squared is -1.
+    assert_eq!(calc_num("=IMREAL(IMPOWER(\"i\",2))"), -1.0);
+}
+
+#[test]
+fn unit_conversion_refuses_to_mix_quantities() {
+    assert_eq!(calc_num("=CONVERT(1,\"km\",\"m\")"), 1000.0);
+    assert_eq!(calc_num("=CONVERT(1,\"kg\",\"g\")"), 1000.0);
+    assert_eq!(calc_num("=CONVERT(1,\"hr\",\"min\")"), 60.0);
+    assert!((calc_num("=CONVERT(1,\"mi\",\"km\")") - 1.609344).abs() < 1e-12);
+    // Length is not time.
+    assert_eq!(calc("=CONVERT(1,\"m\",\"sec\")"), Value::Error(CellError::NA));
+}
+
+#[test]
+fn error_and_step_functions() {
+    assert!((calc_num("=ERF(1)") - 0.842_700_792_949_715).abs() < 1e-12);
+    assert!((calc_num("=ERFC(1)") - 0.157_299_207_050_285).abs() < 1e-12);
+    assert_eq!(calc_num("=DELTA(5,5)"), 1.0);
+    assert_eq!(calc_num("=DELTA(5,4)"), 0.0);
+    assert_eq!(calc_num("=GESTEP(5,4)"), 1.0);
+}
+
+// ---------------------------------------------------------------------------
+// Database functions
+// ---------------------------------------------------------------------------
+
+/// A table in A1:C6 with headers, and a criteria range in E1:F2.
+fn employee_table() -> Engine {
+    let mut engine = sheet();
+    let rows = [
+        ("Name", "Dept", "Salary"),
+        ("Ann", "Eng", "100"),
+        ("Bob", "Sales", "80"),
+        ("Cal", "Eng", "120"),
+        ("Dee", "Sales", "90"),
+        ("Eve", "Eng", "110"),
+    ];
+    for (i, (name, dept, salary)) in rows.iter().enumerate() {
+        let row = i + 1;
+        type_in(&mut engine, &format!("A{row}"), name);
+        type_in(&mut engine, &format!("B{row}"), dept);
+        type_in(&mut engine, &format!("C{row}"), salary);
+    }
+    // Criteria: Dept = Eng.
+    type_in(&mut engine, "E1", "Dept");
+    type_in(&mut engine, "E2", "Eng");
+    engine
+}
+
+#[test]
+fn database_functions_aggregate_matching_records() {
+    let mut engine = employee_table();
+    type_in(&mut engine, "H1", "=DSUM(A1:C6,\"Salary\",E1:E2)");
+    type_in(&mut engine, "H2", "=DAVERAGE(A1:C6,\"Salary\",E1:E2)");
+    type_in(&mut engine, "H3", "=DCOUNT(A1:C6,\"Salary\",E1:E2)");
+    type_in(&mut engine, "H4", "=DMAX(A1:C6,3,E1:E2)");
+    assert_eq!(number(&engine, "H1"), 330.0);
+    assert_eq!(number(&engine, "H2"), 110.0);
+    assert_eq!(number(&engine, "H3"), 3.0);
+    // The field can be given by position as well as by name.
+    assert_eq!(number(&engine, "H4"), 120.0);
+}
+
+#[test]
+fn criteria_columns_are_combined_with_and() {
+    let mut engine = employee_table();
+    type_in(&mut engine, "F1", "Salary");
+    type_in(&mut engine, "F2", ">105");
+    type_in(&mut engine, "H1", "=DSUM(A1:C6,\"Salary\",E1:F2)");
+    assert_eq!(number(&engine, "H1"), 230.0);
+}
+
+#[test]
+fn criteria_rows_are_alternatives() {
+    let mut engine = employee_table();
+    // Dept = Eng on one row, Dept = Sales on the next.
+    type_in(&mut engine, "E3", "Sales");
+    type_in(&mut engine, "H1", "=DCOUNT(A1:C6,\"Salary\",E1:E3)");
+    assert_eq!(number(&engine, "H1"), 5.0);
+}
+
+#[test]
+fn dget_insists_on_exactly_one_record() {
+    let mut engine = employee_table();
+    type_in(&mut engine, "F1", "Name");
+    type_in(&mut engine, "F2", "Cal");
+    type_in(&mut engine, "H1", "=DGET(A1:C6,\"Salary\",E1:F2)");
+    assert_eq!(number(&engine, "H1"), 120.0);
+
+    // Three engineers match, which is not one record.
+    type_in(&mut engine, "H2", "=DGET(A1:C6,\"Salary\",E1:E2)");
+    assert_eq!(value(&engine, "H2"), Value::Error(CellError::Num));
+}
+
+#[test]
+fn a_criteria_header_naming_no_field_is_an_error() {
+    let mut engine = employee_table();
+    type_in(&mut engine, "E1", "Nonexistent");
+    type_in(&mut engine, "H1", "=DSUM(A1:C6,\"Salary\",E1:E2)");
+    assert_eq!(value(&engine, "H1"), Value::Error(CellError::Value));
+}

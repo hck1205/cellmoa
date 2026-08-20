@@ -33,7 +33,19 @@ macro_rules! categories {
     };
 }
 
-categories!(math, logical, text, info, stats, lookup, date, distributions);
+categories!(
+    math,
+    logical,
+    text,
+    info,
+    stats,
+    lookup,
+    date,
+    distributions,
+    engineering,
+    financial,
+    database
+);
 
 /// Criteria matching is shared by several categories but exports no functions
 /// of its own.
