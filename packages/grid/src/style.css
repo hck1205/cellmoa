@@ -427,6 +427,24 @@
 }
 
 
+/* Right-to-left layout. The panes mirror; the cells themselves inherit. */
+.cm-grid--rtl .cm-menu,
+.cm-grid--rtl .cm-provenance {
+  text-align: right;
+}
+
+.cm-grid--rtl .cm-menu-item--submenu::after {
+  content: '\25c2';
+  float: left;
+  margin-right: 12px;
+  margin-left: 0;
+}
+
+.cm-grid--rtl .cm-collapse,
+.cm-grid--rtl .cm-dropdown {
+  float: left;
+}
+
 /* --- Features with no Handsontable counterpart ------------------------- */
 
 /* A cell an agent last touched. */

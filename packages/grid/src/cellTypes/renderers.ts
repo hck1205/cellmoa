@@ -28,15 +28,22 @@ function applyCommon({ td, cell, meta }: RenderContext): void {
   }
 }
 
-/** Puts text into a cell, escaping it unless HTML was asked for. */
-function write(td: HTMLTableCellElement, text: string, allowHtml: boolean): void {
-  if (allowHtml) {
-    // Only when the grid was configured for it: writing arbitrary cell content
-    // as HTML is how a spreadsheet becomes an injection vector.
-    td.innerHTML = text;
-  } else {
+/**
+ * Puts text into a cell, escaping it unless HTML was asked for.
+ *
+ * `allowHtml` is off by default, and that is the important half: cell content
+ * comes from a file someone sent you, and writing it as HTML is how a
+ * spreadsheet becomes an injection vector. When it is switched on, a
+ * `sanitizer` may be supplied to clean the markup first — and a grid that
+ * allows HTML without one is trusting whoever wrote the file.
+ */
+function write(td: HTMLTableCellElement, text: string, meta: RenderContext['meta']): void {
+  if (meta.allowHtml !== true) {
     td.textContent = text;
+    return;
   }
+  const sanitizer = meta.sanitizer;
+  td.innerHTML = typeof sanitizer === 'function' ? String((sanitizer as (html: string) => string)(text)) : text;
 }
 
 /** The default: whatever the engine says the cell shows. */
@@ -49,7 +56,7 @@ export const textRenderer: CellRenderer = (context) => {
     td.classList.add(String(meta.placeholderCellClassName ?? 'htPlaceholder'));
     return;
   }
-  write(td, text, meta.allowHtml === true);
+  write(td, text, meta);
 };
 
 /** Right-aligned, with tabular figures so columns of numbers line up. */
@@ -58,10 +65,16 @@ export const numericRenderer: CellRenderer = (context) => {
   context.td.classList.add('cm-numeric');
 };
 
-/** Text, but always as HTML. */
+/**
+ * Text, but always as HTML.
+ *
+ * Asking for this renderer is the consent that `allowHtml` otherwise withholds,
+ * so it does not check the setting — but it still runs the sanitizer when one
+ * is configured.
+ */
 export const htmlRenderer: CellRenderer = (context) => {
   applyCommon(context);
-  write(context.td, context.cell?.text ?? '', true);
+  write(context.td, context.cell?.text ?? '', { ...context.meta, allowHtml: true });
 };
 
 /** A checkbox, checked when the cell matches the checked template. */

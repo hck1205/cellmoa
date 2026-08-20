@@ -66,6 +66,18 @@ export interface ViewModel {
   renderColHeader?(th: HTMLTableCellElement, cell: ColHeaderCell): void;
   /** The same for a row header. */
   renderRowHeader?(th: HTMLTableCellElement, row: number): void;
+  /**
+   * ARIA roles and indexes on the table, its rows and its cells.
+   *
+   * A grid built out of `<div>`s and absolute positions is invisible to a
+   * screen reader without them: what the eye reads as a table is, to anything
+   * that cannot see it, a pile of unrelated boxes.
+   */
+  ariaTags?(): boolean;
+  /** `rtl` mirrors the layout, for languages written right to left. */
+  direction?(): 'ltr' | 'rtl';
+  /** A theme name, applied as a class on the root. */
+  themeName?(): string | null;
   /** Called before drawing, so the data for the window can be fetched. */
   prepare(startRow: number, endRow: number, startCol: number, endCol: number): void;
   /** Fills in one cell. */
@@ -123,6 +135,7 @@ export class View {
     this.#document = container.ownerDocument;
 
     this.root = this.#element('div', CLASS.root);
+    this.#applyChrome();
     this.root.style.position = 'relative';
     this.root.style.overflow = 'hidden';
 
@@ -204,6 +217,7 @@ export class View {
 
   /** Draws, or redraws, the visible window. */
   render(): void {
+    this.#applyChrome();
     const rows = this.#model.rowSizes();
     const cols = this.#model.colSizes();
     const headerWidth = this.#model.rowHeaderWidth();
@@ -361,6 +375,9 @@ export class View {
         const tr = this.#element('tr', CLASS.header) as unknown as HTMLTableRowElement;
         tr.style.height = `${headerHeight / Math.max(levels.length, 1)}px`;
         tr.dataset.level = String(level);
+        if (this.#model.ariaTags?.() !== false) {
+          tr.setAttribute('role', 'row');
+        }
         if (withRowHeader && headerWidth > 0) {
           const corner = this.#element('th', CLASS.corner);
           corner.style.width = `${headerWidth}px`;
@@ -375,6 +392,10 @@ export class View {
         }
         for (const cell of cells) {
           const th = this.#element('th', CLASS.colHeader);
+          if (this.#model.ariaTags?.() !== false) {
+            th.setAttribute('role', 'columnheader');
+            th.setAttribute('aria-colindex', String(cell.col + 1));
+          }
           let width = 0;
           for (let col = cell.col; col < cell.col + cell.colspan; col += 1) {
             width += cols.sizeOf(col);
@@ -393,10 +414,18 @@ export class View {
       });
     }
 
+    const aria = this.#model.ariaTags?.() !== false;
     for (let row = firstRow; row <= lastRow; row += 1) {
       const tr = this.#document.createElement('tr');
       tr.style.height = `${rows.sizeOf(row)}px`;
       tr.dataset.row = String(row);
+      if (aria) {
+        tr.setAttribute('role', 'row');
+        // One-based, and counted in the whole table rather than in the window
+        // being drawn: a screen reader announcing "row 1 of 12" while the user
+        // is at row 400 would be worse than saying nothing.
+        tr.setAttribute('aria-rowindex', String(row + 1));
+      }
       // Each pane draws its own slice, so the row is placed by its own offset
       // within that slice rather than by its index in the sheet.
       tr.style.position = 'absolute';
@@ -405,6 +434,9 @@ export class View {
 
       if (withRowHeader && headerWidth > 0) {
         const th = this.#element('th', CLASS.rowHeader);
+        if (aria) {
+          th.setAttribute('role', 'rowheader');
+        }
         th.style.width = `${headerWidth}px`;
         th.dataset.row = String(row);
         th.textContent = this.#model.rowHeader(row) ?? String(row + 1);
@@ -417,6 +449,10 @@ export class View {
         td.style.width = `${cols.sizeOf(col)}px`;
         td.dataset.row = String(row);
         td.dataset.col = String(col);
+        if (aria) {
+          td.setAttribute('role', 'gridcell');
+          td.setAttribute('aria-colindex', String(col + 1));
+        }
         this.#model.renderCell({ row, col, td });
         tr.appendChild(td);
       }
@@ -427,6 +463,37 @@ export class View {
     // table needs an explicit height to hold them.
     pane.table.style.height = `${rows.total + headerHeight}px`;
     pane.table.style.width = `${cols.total + headerWidth}px`;
+  }
+
+  /**
+   * Puts the language direction, the theme and the ARIA role on the root.
+   *
+   * Re-applied on every render rather than once at construction, because all
+   * three are settings and settings change.
+   */
+  #applyChrome(): void {
+    const direction = this.#model.direction?.() ?? 'ltr';
+    this.root.dir = direction;
+    this.root.classList.toggle(`${CLASS.root}--rtl`, direction === 'rtl');
+
+    for (const existing of [...this.root.classList]) {
+      if (existing.startsWith('cm-theme-')) {
+        this.root.classList.remove(existing);
+      }
+    }
+    const theme = this.#model.themeName?.();
+    if (theme) {
+      this.root.classList.add(`cm-theme-${theme}`);
+    }
+    if (this.#model.ariaTags?.() !== false) {
+      this.root.setAttribute('role', 'grid');
+      this.root.setAttribute('aria-rowcount', String(this.#model.rowCount()));
+      this.root.setAttribute('aria-colcount', String(this.#model.colCount()));
+    } else {
+      this.root.removeAttribute('role');
+      this.root.removeAttribute('aria-rowcount');
+      this.root.removeAttribute('aria-colcount');
+    }
   }
 
   #onScroll = (): void => {

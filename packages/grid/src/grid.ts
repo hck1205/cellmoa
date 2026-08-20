@@ -37,6 +37,7 @@ import type { BasePlugin } from './plugins/base.js';
 // Importing the plugins for their side effect: each module registers itself,
 // and a grid built without them would silently have no features.
 import './plugins/index.js';
+import { DEFAULT_LANGUAGE, phrase } from './i18n/index.js';
 import { ShortcutManager } from './shortcuts.js';
 import { SizeMap } from './sizes.js';
 import { View } from './view.js';
@@ -432,6 +433,34 @@ export class Grid {
       start: { row: range.topRow, col: range.startCol },
       end: { row: range.bottomRow, col: range.endCol },
     }));
+  }
+
+  /**
+   * A phrase in the grid's language.
+   *
+   * `count` chooses between "Remove row" and "Remove rows": one command, one
+   * key, and the number decides — which is why a menu item's label is a
+   * function of the selection rather than a fixed string.
+   */
+  getTranslatedPhrase(key: string, count?: number): string {
+    return phrase(String(this.getSettings().language ?? DEFAULT_LANGUAGE), key, count);
+  }
+
+  /**
+   * The locale used for formatting.
+   *
+   * Separate from the language on purpose: someone reading an English
+   * interface may still want German number formatting.
+   */
+  getLocale(): string {
+    return String(
+      this.getSettings().locale ?? this.getSettings().language ?? DEFAULT_LANGUAGE,
+    );
+  }
+
+  /** Whether the grid is laid out right-to-left. */
+  isRtl(): boolean {
+    return this.getSettings().layoutDirection === 'rtl';
   }
 
   /** Whether there is anything to undo. */
@@ -914,15 +943,26 @@ export class Grid {
    */
   #syncDimensions(initial = false): void {
     const settings = this.getSettings();
-    const rows = Math.max(
-      this.#data.rowCount,
-      initial ? ((settings.startRows as number) ?? 0) : 0,
-      (settings.minRows as number) ?? 0,
+    // Spare rows are empty rows kept below the data so there is always
+    // somewhere to type. They are counted from the data, not from the current
+    // extent, or every render would add another one.
+    const spareRows = (settings.minSpareRows as number) ?? 0;
+    const spareCols = (settings.minSpareCols as number) ?? 0;
+    const rows = Math.min(
+      Math.max(
+        this.#data.rowCount + spareRows,
+        initial ? ((settings.startRows as number) ?? 0) : 0,
+        (settings.minRows as number) ?? 0,
+      ),
+      (settings.maxRows as number) ?? Number.MAX_SAFE_INTEGER,
     );
-    const cols = Math.max(
-      this.#data.colCount,
-      initial ? ((settings.startCols as number) ?? 0) : 0,
-      (settings.minCols as number) ?? 0,
+    const cols = Math.min(
+      Math.max(
+        this.#data.colCount + spareCols,
+        initial ? ((settings.startCols as number) ?? 0) : 0,
+        (settings.minCols as number) ?? 0,
+      ),
+      (settings.maxCols as number) ?? Number.MAX_SAFE_INTEGER,
     );
     // Only ever grows here: shrinking would throw away a sort or a hidden
     // column, and the extent of a spreadsheet is what the user has reached,
@@ -1271,7 +1311,17 @@ export class Grid {
     }
     const grid = this.shortcuts.getContext('grid')!;
     const editor = this.shortcuts.getContext('editor')!;
+    /**
+     * Mirrors a horizontal step when the grid is laid out right to left.
+     *
+     * The arrow keys are about the screen, not about the data: in an RTL sheet
+     * the leftward arrow moves toward the higher column number, because that is
+     * where "left" is. Vertical movement is unaffected.
+     */
+    const mirror = (col: number): number => (this.isRtl() ? -col : col);
+
     const move = (row: number, col: number) => () => {
+      col = mirror(col);
       const wrapped = this.#selection.moveBy(row, col, this.#wraps({ row, col }));
       if (wrapped) {
         this.#afterSelection();
@@ -1282,6 +1332,7 @@ export class Grid {
       }
     };
     const extend = (rowDelta: number, colDelta: number) => () => {
+      colDelta = mirror(colDelta);
       const last = this.#selection.last;
       const highlight = this.#selection.highlight;
       if (!last || !highlight) {
@@ -1293,6 +1344,7 @@ export class Grid {
       this.#afterSelection();
     };
     const edge = (rowDelta: number, colDelta: number, extending: boolean) => () => {
+      colDelta = mirror(colDelta);
       const highlight = this.#selection.highlight;
       if (!highlight) {
         return;
@@ -1562,6 +1614,12 @@ export class Grid {
       renderRowHeader: (th, row) => {
         this.hooks.run('afterGetRowHeader', undefined, row, th);
       },
+      ariaTags: () => this.getSettings().ariaTags !== false,
+      direction: () => (this.isRtl() ? 'rtl' : 'ltr'),
+      themeName: () =>
+        (this.getSettings().themeName as string | undefined) ??
+        (this.getSettings().theme as string | undefined) ??
+        null,
       prepare: (startRow, endRow, startCol, endCol) =>
         this.#ensureVisible(startRow, endRow, startCol, endCol),
       renderCell: (context) => this.#renderCell(context),

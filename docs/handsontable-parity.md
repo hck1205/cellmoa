@@ -114,6 +114,21 @@ autocomplete/select/multiSelect 8종.
 | 헤더 (배열·함수·기본 A1 표기) | ✅ | |
 | batch / suspendRender | ✅ | |
 
+## 문서 가이드 섹션 (플러그인 밖)
+
+| 섹션 | 상태 | 비고 |
+|---|:--:|---|
+| 접근성 (`ariaTags`, 역할·인덱스) | ✅ | `role="grid"`/`row`/`gridcell`/`columnheader`, `aria-rowindex`·`aria-colindex`는 창이 아니라 표 전체 기준 |
+| 국제화 — 언어 (`language`) | ✅ | Handsontable 언어 파일 21종 · 구문 108개를 소스에서 추출. 빠진 키는 en-US로 메움 |
+| 국제화 — 로케일 (`locale`) | ✅ | 언어와 분리. 영어 UI + 독일식 숫자 서식이 가능해야 함 |
+| 국제화 — 레이아웃 방향 (`layoutDirection`) | ✅ | `dir` + 화살표 키 좌우 반전 (화살표는 데이터가 아니라 화면 기준) |
+| 스타일링 — 테마 (`themeName`) | ✅ | 루트에 `cm-theme-*` 클래스 |
+| 행 — 여분 행 (`minSpareRows`/`Cols`) | ✅ | 데이터 기준으로 계산 — 아니면 렌더마다 한 줄씩 늘어남 |
+| 보안 (`allowHtml`, `sanitizer`) | ✅ | 기본은 텍스트. HTML 허용 시 sanitizer를 통과 |
+| 최적화 — batch / suspendRender | ✅ | |
+| 내비게이션 — 단축키 · 검색 | ✅ | `ShortcutManager`, `search` 플러그인 |
+| 데이터 관리 — 서버 데이터 | ✅ | `dataProvider` 플러그인 |
+
 ## cellmoa 고유 기능 ➕
 
 Handsontable에는 대응물이 없고 VisiGrid 축에서 가져오는 것들. 그리드가 이걸

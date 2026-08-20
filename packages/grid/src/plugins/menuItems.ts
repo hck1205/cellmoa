@@ -8,6 +8,7 @@
  */
 
 import type { Grid } from '../grid.js';
+import { PHRASE } from '../i18n/keys.js';
 import type { MenuItem, MenuSelection } from '../menu.js';
 import { SEPARATOR } from '../menu.js';
 
@@ -80,6 +81,14 @@ export const DEFAULT_DROPDOWN_MENU: string[] = [
   ITEM.alignment,
 ];
 
+/**
+ * Stands in for "nothing selected" when a label needs a count.
+ *
+ * A phrase with a singular and a plural has to be given one or the other, and
+ * with no selection the singular reads better than the plural.
+ */
+const EMPTY: MenuSelection = { start: { row: 0, col: 0 }, end: { row: 0, col: 0 } };
+
 /** The first selected rectangle, or `null` when nothing is selected. */
 function first(selection: MenuSelection[]): MenuSelection | null {
   return selection[0] ?? null;
@@ -121,7 +130,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
   const items: Record<string, MenuItem> = {
     [ITEM.rowAbove]: {
       key: ITEM.rowAbove,
-      name: 'Insert row above',
+      name: () => grid.getTranslatedPhrase(PHRASE.rowAbove),
       disabled: nothingSelected,
       callback: (_key, ranges) => {
         const range = first(ranges);
@@ -132,7 +141,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
     },
     [ITEM.rowBelow]: {
       key: ITEM.rowBelow,
-      name: 'Insert row below',
+      name: () => grid.getTranslatedPhrase(PHRASE.rowBelow),
       disabled: nothingSelected,
       callback: (_key, ranges) => {
         const range = first(ranges);
@@ -143,7 +152,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
     },
     [ITEM.columnLeft]: {
       key: ITEM.columnLeft,
-      name: 'Insert column left',
+      name: () => grid.getTranslatedPhrase(PHRASE.columnLeft),
       disabled: nothingSelected,
       callback: (_key, ranges) => {
         const range = first(ranges);
@@ -154,7 +163,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
     },
     [ITEM.columnRight]: {
       key: ITEM.columnRight,
-      name: 'Insert column right',
+      name: () => grid.getTranslatedPhrase(PHRASE.columnRight),
       disabled: nothingSelected,
       callback: (_key, ranges) => {
         const range = first(ranges);
@@ -165,10 +174,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
     },
     [ITEM.removeRow]: {
       key: ITEM.removeRow,
-      name: () => {
-        const range = first(selection());
-        return range && rowsIn(range) > 1 ? 'Remove rows' : 'Remove row';
-      },
+      name: () => grid.getTranslatedPhrase(PHRASE.removeRow, rowsIn(first(selection()) ?? EMPTY)),
       disabled: nothingSelected,
       callback: (_key, ranges) => {
         const range = first(ranges);
@@ -179,10 +185,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
     },
     [ITEM.removeColumn]: {
       key: ITEM.removeColumn,
-      name: () => {
-        const range = first(selection());
-        return range && colsIn(range) > 1 ? 'Remove columns' : 'Remove column';
-      },
+      name: () => grid.getTranslatedPhrase(PHRASE.removeColumn, colsIn(first(selection()) ?? EMPTY)),
       disabled: nothingSelected,
       callback: (_key, ranges) => {
         const range = first(ranges);
@@ -193,7 +196,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
     },
     [ITEM.clearColumn]: {
       key: ITEM.clearColumn,
-      name: 'Clear column',
+      name: () => grid.getTranslatedPhrase(PHRASE.clearColumn),
       disabled: nothingSelected,
       callback: (_key, ranges) => {
         const range = first(ranges);
@@ -211,19 +214,19 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
     },
     [ITEM.undo]: {
       key: ITEM.undo,
-      name: 'Undo',
+      name: () => grid.getTranslatedPhrase(PHRASE.undo),
       disabled: () => !grid.canUndo(),
       callback: () => grid.undo(),
     },
     [ITEM.redo]: {
       key: ITEM.redo,
-      name: 'Redo',
+      name: () => grid.getTranslatedPhrase(PHRASE.redo),
       disabled: () => !grid.canRedo(),
       callback: () => grid.redo(),
     },
     [ITEM.readOnly]: {
       key: ITEM.readOnly,
-      name: 'Read only',
+      name: () => grid.getTranslatedPhrase(PHRASE.readOnly),
       disabled: nothingSelected,
       checked: () => {
         const range = first(selection());
@@ -245,26 +248,26 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
     },
     [ITEM.alignment]: {
       key: ITEM.alignment,
-      name: 'Alignment',
+      name: () => grid.getTranslatedPhrase(PHRASE.alignment),
       disabled: nothingSelected,
       submenu: {
         items: (
           [
-            ['alignment:left', 'Left', 'htLeft'],
-            ['alignment:center', 'Center', 'htCenter'],
-            ['alignment:right', 'Right', 'htRight'],
-            ['alignment:justify', 'Justify', 'htJustify'],
+            ['alignment:left', PHRASE.alignLeft, 'htLeft'],
+            ['alignment:center', PHRASE.alignCenter, 'htCenter'],
+            ['alignment:right', PHRASE.alignRight, 'htRight'],
+            ['alignment:justify', PHRASE.alignJustify, 'htJustify'],
             [SEPARATOR, '', ''],
-            ['alignment:top', 'Top', 'htTop'],
-            ['alignment:middle', 'Middle', 'htMiddle'],
-            ['alignment:bottom', 'Bottom', 'htBottom'],
+            ['alignment:top', PHRASE.alignTop, 'htTop'],
+            ['alignment:middle', PHRASE.alignMiddle, 'htMiddle'],
+            ['alignment:bottom', PHRASE.alignBottom, 'htBottom'],
           ] as const
         ).map(([key, name, className]) =>
           key === SEPARATOR
             ? { key: SEPARATOR }
             : {
                 key,
-                name,
+                name: () => grid.getTranslatedPhrase(name),
                 callback: (_k: string, ranges: MenuSelection[]) => {
                   const range = first(ranges);
                   if (range) {
@@ -275,7 +278,11 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
         ),
       },
     },
-    [ITEM.noItems]: { key: ITEM.noItems, name: 'No available options', disabled: true },
+    [ITEM.noItems]: {
+      key: ITEM.noItems,
+      name: () => grid.getTranslatedPhrase(PHRASE.noItems),
+      disabled: true,
+    },
     [ITEM.separator]: { key: SEPARATOR },
   };
 
@@ -283,7 +290,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
     const clipboard = grid.getPlugin('copyPaste') as unknown as { getCopyableText(): string };
     items[ITEM.copy] = {
       key: ITEM.copy,
-      name: 'Copy',
+      name: () => grid.getTranslatedPhrase(PHRASE.copy),
       disabled: nothingSelected,
       // Writing to the system clipboard needs a user gesture the menu has
       // already consumed, so the text is handed to the async clipboard API and
@@ -292,7 +299,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
     };
     items[ITEM.cut] = {
       key: ITEM.cut,
-      name: 'Cut',
+      name: () => grid.getTranslatedPhrase(PHRASE.cut),
       disabled: nothingSelected,
       callback: () => {
         void navigator.clipboard?.writeText(clipboard.getCopyableText());
@@ -310,9 +317,11 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
       key: ITEM.mergeCells,
       name: () => {
         const range = first(selection());
-        return range && merge.getCoveringArea(topRow(range), startCol(range))
-          ? 'Unmerge cells'
-          : 'Merge cells';
+        return grid.getTranslatedPhrase(
+          range && merge.getCoveringArea(topRow(range), startCol(range))
+            ? PHRASE.unmergeCells
+            : PHRASE.mergeCells,
+        );
       },
       disabled: nothingSelected,
       callback: () => merge.toggleMerge(),
@@ -326,7 +335,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
     };
     items[ITEM.freezeColumn] = {
       key: ITEM.freezeColumn,
-      name: 'Freeze column',
+      name: () => grid.getTranslatedPhrase(PHRASE.freezeColumn),
       disabled: nothingSelected,
       callback: (_key, ranges) => {
         const range = first(ranges);
@@ -337,7 +346,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
     };
     items[ITEM.unfreezeColumn] = {
       key: ITEM.unfreezeColumn,
-      name: 'Unfreeze column',
+      name: () => grid.getTranslatedPhrase(PHRASE.unfreezeColumn),
       disabled: nothingSelected,
       callback: (_key, ranges) => {
         const range = first(ranges);
@@ -355,7 +364,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
     };
     items[ITEM.hiddenRowsHide] = {
       key: ITEM.hiddenRowsHide,
-      name: 'Hide row',
+      name: () => grid.getTranslatedPhrase(PHRASE.hideRow),
       disabled: nothingSelected,
       callback: (_key, ranges) => {
         const range = first(ranges);
@@ -367,7 +376,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
     };
     items[ITEM.hiddenRowsShow] = {
       key: ITEM.hiddenRowsShow,
-      name: 'Show row',
+      name: () => grid.getTranslatedPhrase(PHRASE.showRow),
       callback: () => hidden.show(),
     };
   }
@@ -379,7 +388,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
     };
     items[ITEM.hiddenColumnsHide] = {
       key: ITEM.hiddenColumnsHide,
-      name: 'Hide column',
+      name: () => grid.getTranslatedPhrase(PHRASE.hideColumn),
       disabled: nothingSelected,
       callback: (_key, ranges) => {
         const range = first(ranges);
@@ -391,7 +400,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
     };
     items[ITEM.hiddenColumnsShow] = {
       key: ITEM.hiddenColumnsShow,
-      name: 'Show column',
+      name: () => grid.getTranslatedPhrase(PHRASE.showColumn),
       callback: () => hidden.show(),
     };
   }
@@ -406,9 +415,11 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
       key: ITEM.addComment,
       name: () => {
         const range = first(selection());
-        return range && comments.getComment(topRow(range), startCol(range))
-          ? 'Edit comment'
-          : 'Add comment';
+        return grid.getTranslatedPhrase(
+          range && comments.getComment(topRow(range), startCol(range))
+            ? PHRASE.editComment
+            : PHRASE.addComment,
+        );
       },
       disabled: nothingSelected,
       callback: (_key, ranges) => {
@@ -420,7 +431,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
     };
     items[ITEM.removeComment] = {
       key: ITEM.removeComment,
-      name: 'Delete comment',
+      name: () => grid.getTranslatedPhrase(PHRASE.removeComment),
       disabled: () => {
         const range = first(selection());
         return range === null || !comments.getComment(topRow(range), startCol(range));
@@ -464,17 +475,17 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
     };
     items[ITEM.exportFile] = {
       key: ITEM.exportFile,
-      name: 'Export to file',
+      name: () => grid.getTranslatedPhrase(PHRASE.exportFile),
       submenu: {
         items: [
           {
             key: 'export_file:csv',
-            name: 'Export to CSV',
+            name: () => grid.getTranslatedPhrase(PHRASE.exportCsv),
             callback: () => exporter.downloadFile('csv', { columnHeaders: true }),
           },
           {
             key: 'export_file:xlsx',
-            name: 'Export to Excel',
+            name: () => grid.getTranslatedPhrase(PHRASE.exportXlsx),
             callback: () => exporter.downloadFile('xlsx'),
           },
         ],

@@ -345,7 +345,10 @@ export const DEFAULT_SETTINGS: GridSettings = {
   copyPaste: true,
   layoutDirection: 'inherit',
   language: 'en-US',
-  locale: 'en-US',
+  // No default: an unset locale means "follow the language", which is what
+  // someone who set only `language` meant. Defaulting it to en-US would make
+  // a French grid format its numbers in English.
+  locale: undefined,
   ariaTags: true,
   renderAllRows: false,
   renderAllColumns: false,
