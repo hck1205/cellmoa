@@ -176,10 +176,7 @@ impl RangeRef {
                 self.start.col.max(other.start.col),
                 self.start.row.max(other.start.row),
             ),
-            end: CellRef::new(
-                self.end.col.min(other.end.col),
-                self.end.row.min(other.end.row),
-            ),
+            end: CellRef::new(self.end.col.min(other.end.col), self.end.row.min(other.end.row)),
         })
     }
 

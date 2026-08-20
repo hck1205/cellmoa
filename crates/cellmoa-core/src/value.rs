@@ -180,9 +180,7 @@ impl Value {
             Ordering::Equal => match (self, other) {
                 (Value::Number(a), Value::Number(b)) => a.partial_cmp(b),
                 // Text comparison is case-insensitive, as in Excel.
-                (Value::Text(a), Value::Text(b)) => {
-                    Some(a.to_lowercase().cmp(&b.to_lowercase()))
-                }
+                (Value::Text(a), Value::Text(b)) => Some(a.to_lowercase().cmp(&b.to_lowercase())),
                 (Value::Bool(a), Value::Bool(b)) => Some(a.cmp(b)),
                 _ => Some(Ordering::Equal),
             },

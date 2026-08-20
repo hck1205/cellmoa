@@ -105,7 +105,10 @@ impl Commit {
 pub enum EditError {
     /// The caller edited from a revision that is no longer current. Carries the
     /// current revision so the caller can rebase and retry.
-    RevisionConflict { expected: u64, actual: u64 },
+    RevisionConflict {
+        expected: u64,
+        actual: u64,
+    },
     UnknownSheet(SheetId),
     NothingToUndo,
     NothingToRedo,
@@ -224,16 +227,7 @@ impl Document {
 
         let revision = self.workbook.bump_revision();
         let index = self.commits.len();
-        self.commits.push(Commit {
-            revision,
-            actor,
-            kind,
-            ops,
-            inverse,
-            label,
-            at,
-            undone: false,
-        });
+        self.commits.push(Commit { revision, actor, kind, ops, inverse, label, at, undone: false });
         if matches!(kind, CommitKind::Edit) {
             self.undo_stack.push(index);
             // A fresh edit invalidates the redo branch, as in any editor.
@@ -250,8 +244,7 @@ impl Document {
             .undo_stack
             .iter()
             .rposition(|&i| {
-                !self.commits[i].undone
-                    && only_by.is_none_or(|id| self.commits[i].actor.id == id)
+                !self.commits[i].undone && only_by.is_none_or(|id| self.commits[i].actor.id == id)
             })
             .ok_or(EditError::NothingToUndo)?;
         let index = self.undo_stack.remove(pos);
@@ -538,11 +531,8 @@ mod tests {
     #[test]
     fn defined_names_are_reversible() {
         let mut d = doc();
-        let define = |to: &str| Op::DefineName {
-            name: "Tax".into(),
-            refers_to: to.into(),
-            scope: None,
-        };
+        let define =
+            |to: &str| Op::DefineName { name: "Tax".into(), refers_to: to.into(), scope: None };
         d.apply(Actor::human("u1"), vec![define("Sheet1!$A$1")], None).unwrap();
         d.apply(Actor::human("u1"), vec![define("Sheet1!$B$1")], None).unwrap();
         d.undo(Actor::human("u1"), None).unwrap();
