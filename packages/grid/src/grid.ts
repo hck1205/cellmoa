@@ -31,6 +31,11 @@ import {
   MetaManager,
 } from './settings.js';
 import type { CellData, Coords, GridSettings } from './settings.js';
+import { getPluginConstructor, registeredPlugins } from './plugins/base.js';
+import type { BasePlugin } from './plugins/base.js';
+// Importing the plugins for their side effect: each module registers itself,
+// and a grid built without them would silently have no features.
+import './plugins/index.js';
 import { ShortcutManager } from './shortcuts.js';
 import { SizeMap } from './sizes.js';
 import { View } from './view.js';
@@ -85,6 +90,16 @@ export class Grid {
   #editing: Coords | null = null;
   #invalid = new Set<string>();
   #listening = true;
+  #plugins = new Map<string, BasePlugin>();
+  /**
+   * Columns and rows whose size a person chose.
+   *
+   * Automatic sizing must not overwrite a width someone dragged, and it cannot
+   * tell one from a width it set itself by looking at the size map — so the
+   * grid records which ones came from a deliberate choice.
+   */
+  #manualWidths = new Set<number>();
+  #manualHeights = new Set<number>();
 
   constructor(container: HTMLElement, options: GridOptions) {
     this.#container = container;
@@ -105,6 +120,7 @@ export class Grid {
     this.#mount();
     this.#bindKeyboard();
     this.#bindPointer();
+    this.#createPlugins();
     this.hooks.run('afterInit', undefined);
   }
 
@@ -126,6 +142,11 @@ export class Grid {
       this.#selection.setMode(settings.selectionMode as SelectionMode);
     }
     this.#syncDimensions();
+    // Every plugin re-reads the settings, so a feature can be switched on
+    // after the grid was built.
+    for (const plugin of this.#plugins.values()) {
+      plugin.updatePlugin();
+    }
     this.hooks.run('afterUpdateSettings', settings);
     if (redraw) {
       this.render();
@@ -520,12 +541,32 @@ export class Grid {
   /** Resizes a column. Passing `null` restores the default. */
   setColWidth(col: number, width: number | null): void {
     this.#colSizes.setSize(col, width);
+    if (width === null) {
+      this.#manualWidths.delete(col);
+    } else {
+      this.#manualWidths.add(col);
+    }
     this.render();
   }
 
   setRowHeight(row: number, height: number | null): void {
     this.#rowSizes.setSize(row, height);
+    if (height === null) {
+      this.#manualHeights.delete(row);
+    } else {
+      this.#manualHeights.add(row);
+    }
     this.render();
+  }
+
+  /** Whether a column's width was chosen rather than measured. */
+  isColumnWidthManual(col: number): boolean {
+    return this.#manualWidths.has(col);
+  }
+
+  /** Whether a row's height was chosen rather than measured. */
+  isRowHeightManual(row: number): boolean {
+    return this.#manualHeights.has(row);
   }
 
   /** The size maps, for plugins that resize in bulk. */
@@ -612,12 +653,36 @@ export class Grid {
     }
   }
 
+  /**
+   * A plugin by name, or `undefined` when nothing is registered under it.
+   *
+   * The instance exists whether or not the plugin is switched on, so a caller
+   * can turn one on through its own methods.
+   */
+  getPlugin<T extends BasePlugin = BasePlugin>(name: string): T | undefined {
+    return this.#plugins.get(name) as T | undefined;
+  }
+
+  /** Every plugin this grid holds. */
+  getPlugins(): BasePlugin[] {
+    return [...this.#plugins.values()];
+  }
+
+  /** Whether a plugin is registered and running. */
+  isPluginEnabled(name: string): boolean {
+    return this.#plugins.get(name)?.isPluginEnabled() ?? false;
+  }
+
   /** Releases the grid. */
   destroy(): void {
     if (this.#destroyed) {
       return;
     }
     this.hooks.run('beforeDestroy', undefined);
+    for (const plugin of this.#plugins.values()) {
+      plugin.destroy();
+    }
+    this.#plugins.clear();
     this.#view?.destroy();
     this.#view = null;
     this.#destroyed = true;
@@ -1248,6 +1313,21 @@ export class Grid {
         this.beginEditing(coords.row, coords.col);
       }
     });
+  }
+
+  /**
+   * Builds one of every registered plugin.
+   *
+   * All of them, not only the ones the settings ask for: a plugin that does not
+   * exist cannot be switched on later, and `updateSettings` has to be able to.
+   */
+  #createPlugins(): void {
+    for (const constructor of registeredPlugins()) {
+      const plugin = new constructor(this);
+      this.#plugins.set(constructor.pluginName, plugin);
+      plugin.enablePlugin();
+    }
+    void getPluginConstructor;
   }
 
   #mount(): void {

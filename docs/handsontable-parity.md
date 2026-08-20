@@ -30,12 +30,12 @@ Handsontable 저장소(`handsontable/handsontable`)의 소스와 문서에서 �
 
 | 플러그인 | 상태 | 비고 |
 |---|:--:|---|
-| `autoColumnSize` | ⬜ | |
+| `autoColumnSize` | ✅ | |
 | `autoRowSize` | ⬜ | |
 | `autofill` | ⬜ | |
 | `bindRowsWithHeaders` | ⬜ | |
 | `collapsibleColumns` | ⬜ | |
-| `columnSorting` | ⬜ | |
+| `columnSorting` | ✅ | |
 | `columnSummary` | ⬜ | |
 | `comments` | ⬜ | |
 | `contextMenu` | ⬜ | |
@@ -47,20 +47,20 @@ Handsontable 저장소(`handsontable/handsontable`)의 소스와 문서에서 �
 | `dropdownMenu` | ⬜ | |
 | `emptyDataState` | ⬜ | |
 | `exportFile` | ⬜ | |
-| `filters` | ⬜ | |
-| `formulas` | ⬜ | |
-| `hiddenColumns` | ⬜ | |
-| `hiddenRows` | ⬜ | |
+| `filters` | ✅ | |
+| `formulas` | ✅ | 엔진 내장 (플러그인이 아니라 일급) |
+| `hiddenColumns` | ✅ | |
+| `hiddenRows` | ✅ | |
 | `loading` | ⬜ | |
-| `manualColumnFreeze` | ⬜ | |
-| `manualColumnMove` | ⬜ | |
-| `manualColumnResize` | ⬜ | |
+| `manualColumnFreeze` | ✅ | |
+| `manualColumnMove` | ✅ | |
+| `manualColumnResize` | ✅ | |
 | `manualResize` | ⬜ | |
-| `manualRowMove` | ⬜ | |
-| `manualRowResize` | ⬜ | |
+| `manualRowMove` | ✅ | |
+| `manualRowResize` | ✅ | |
 | `mergeCells` | ⬜ | |
 | `moveCells` | ⬜ | |
-| `multiColumnSorting` | ⬜ | |
+| `multiColumnSorting` | ✅ | |
 | `multipleSelectionHandles` | ⬜ | |
 | `nestedHeaders` | ⬜ | |
 | `nestedRows` | ⬜ | |
@@ -70,7 +70,7 @@ Handsontable 저장소(`handsontable/handsontable`)의 소스와 문서에서 �
 | `selectionHandles` | ⬜ | |
 | `stretchColumns` | ⬜ | |
 | `touchScroll` | ⬜ | |
-| `trimRows` | ⬜ | |
+| `trimRows` | ✅ | |
 | `undoRedo` | ⬜ | |
 
 ## 셀 타입 (13개)

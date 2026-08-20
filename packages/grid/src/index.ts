@@ -6,6 +6,16 @@ export { Engine, EngineError } from './engine.js';
 export type { EngineResponse, WasmSource } from './engine.js';
 
 export { Grid } from './grid.js';
+
+export {
+  BasePlugin,
+  getPluginConstructor,
+  pluginNames,
+  registerPlugin,
+  registeredPlugins,
+} from './plugins/base.js';
+export type { PluginConstructor } from './plugins/base.js';
+export * from './plugins/index.js';
 export type { CellChange, ChangeSource, GridOptions } from './grid.js';
 
 export { DataSource, WriteConflict, cellRef, columnLetters, lettersToColumn, rangeRef } from './dataSource.js';
