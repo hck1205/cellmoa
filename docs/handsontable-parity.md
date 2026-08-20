@@ -31,7 +31,7 @@ Handsontable 저장소(`handsontable/handsontable`)의 소스와 문서에서 �
 | 플러그인 | 상태 | 비고 |
 |---|:--:|---|
 | `autoColumnSize` | ✅ | |
-| `autoRowSize` | ⬜ | |
+| `autoRowSize` | ✅ | |
 | `autofill` | ✅ | 수식은 상대 참조를 이동시켜 채움 ➕ |
 | `bindRowsWithHeaders` | ⬜ | |
 | `collapsibleColumns` | ✅ | 접기는 숨김일 뿐 — 수식은 계속 그 열을 읽음 |
@@ -42,20 +42,20 @@ Handsontable 저장소(`handsontable/handsontable`)의 소스와 문서에서 �
 | `copyPaste` | ✅ | `text/plain` + `text/html` 양쪽 기록. 자기 복사본 붙여넣기는 수식 참조 이동 ➕ |
 | `customBorders` | ⬜ | |
 | `dataProvider` | ⬜ | |
-| `dialog` | ⬜ | |
+| `dialog` | ✅ | 모달 — 열려 있는 동안 키보드가 셀에 닿지 않음 |
 | `dragToScroll` | ⬜ | |
 | `dropdownMenu` | ✅ | 열 헤더 버튼. contextMenu와 메뉴 위젯 공유 |
-| `emptyDataState` | ⬜ | |
+| `emptyDataState` | ✅ | 빈 표와 필터가 비운 표를 구분해서 말함 |
 | `exportFile` | ✅ | CSV는 화면 값으로, `.xlsx`는 엔진이 직접 (수식·스타일 보존) ➕ |
 | `filters` | ✅ | |
 | `formulas` | ✅ | 엔진 내장 (플러그인이 아니라 일급) |
 | `hiddenColumns` | ✅ | |
 | `hiddenRows` | ✅ | |
-| `loading` | ⬜ | |
+| `loading` | ✅ | 참조 카운트 — 먼저 끝난 작업이 나중 작업의 오버레이를 걷어가지 않음 |
 | `manualColumnFreeze` | ✅ | |
 | `manualColumnMove` | ✅ | |
 | `manualColumnResize` | ✅ | |
-| `manualResize` | ⬜ | |
+| `manualResize` | ✅ | Handsontable에서도 등록된 플러그인이 아니라 공유 유틸 디렉터리. 여기서는 공유 기반 클래스 + `manualResize: true` 축약 |
 | `manualRowMove` | ✅ | |
 | `manualRowResize` | ✅ | |
 | `mergeCells` | ✅ | 코너 셀만 값 유지, 나머지는 비움 |
@@ -64,11 +64,11 @@ Handsontable 저장소(`handsontable/handsontable`)의 소스와 문서에서 �
 | `multipleSelectionHandles` | ⬜ | |
 | `nestedHeaders` | ✅ | 뷰가 헤더를 다단으로 그림 |
 | `nestedRows` | ⬜ | |
-| `notification` | ⬜ | |
+| `notification` | ✅ | 메시지마다 id. 서로 밀어내지 않고 쌓임 |
 | `pagination` | ⬜ | |
 | `search` | ✅ | 표시된 값을 검색 (수식 결과 기준) |
 | `selectionHandles` | ⬜ | |
-| `stretchColumns` | ⬜ | |
+| `stretchColumns` | ✅ | `last` / `all`. 늘린 결과가 아니라 원래 너비에서 계산 |
 | `touchScroll` | ⬜ | |
 | `trimRows` | ✅ | |
 | `undoRedo` | ✅ | 엔진 저널 기반. 액터별 undo/redo 가능 ➕. `clear()`는 감사 추적을 지울 수 없으므로 예외를 던짐 |

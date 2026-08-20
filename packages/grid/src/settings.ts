@@ -220,6 +220,14 @@ export interface GridSettings {
   bindRowsWithHeaders?: boolean | string;
   autoColumnSize?: unknown;
   autoRowSize?: unknown;
+  /** An alias for `stretchH`, matching the plugin's name. */
+  stretchColumns?: 'none' | 'last' | 'all';
+  /** Turns both `manualRowResize` and `manualColumnResize` on. */
+  manualResize?: boolean;
+  dialog?: unknown;
+  notification?: unknown;
+  loading?: unknown;
+  emptyDataState?: unknown;
 
   // --- appearance -------------------------------------------------------
   themeName?: string;
