@@ -24,6 +24,9 @@ pub enum CellError {
     Cycle,
     /// `#SPILL!` — an array result cannot expand into the target area.
     Spill,
+    /// `#CALC!` — the calculation produced nothing, as when `FILTER` matches
+    /// no rows.
+    Calc,
 }
 
 impl CellError {
@@ -39,12 +42,13 @@ impl CellError {
             CellError::Value => "#VALUE!",
             CellError::Cycle => "#CYCLE!",
             CellError::Spill => "#SPILL!",
+            CellError::Calc => "#CALC!",
         }
     }
 
     /// Parses an error literal such as `#DIV/0!`. Case-insensitive.
     pub fn parse(s: &str) -> Option<CellError> {
-        const ALL: [CellError; 9] = [
+        const ALL: [CellError; 10] = [
             CellError::Div0,
             CellError::NA,
             CellError::Name,
@@ -54,6 +58,7 @@ impl CellError {
             CellError::Value,
             CellError::Cycle,
             CellError::Spill,
+            CellError::Calc,
         ];
         ALL.into_iter().find(|e| e.as_str().eq_ignore_ascii_case(s))
     }

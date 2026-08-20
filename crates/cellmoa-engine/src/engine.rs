@@ -33,6 +33,8 @@ pub struct Engine {
     /// Seeds the per-cell random source. Part of the document's identity: the
     /// same seed and the same edits give the same `RAND()` values.
     seed: u64,
+    /// The clock `TODAY` and `NOW` read, as a serial number.
+    now: Option<f64>,
 }
 
 impl Default for Engine {
@@ -52,6 +54,7 @@ impl Engine {
             asts: BTreeMap::new(),
             graph: DepGraph::new(),
             seed: 0,
+            now: None,
         };
         engine.rebuild();
         engine
@@ -61,6 +64,34 @@ impl Engine {
     pub fn with_seed(mut self, seed: u64) -> Engine {
         self.seed = seed;
         self
+    }
+
+    /// Supplies the clock as a serial number.
+    ///
+    /// Without one, `TODAY()` and `NOW()` report `#N/A`. That is deliberate:
+    /// an engine that reads the system clock by itself cannot be replayed, so
+    /// the host decides what "now" means and records it.
+    pub fn with_now_serial(mut self, serial: f64) -> Engine {
+        self.now = Some(serial);
+        self.rebuild();
+        self
+    }
+
+    /// Supplies the clock from a Unix timestamp in milliseconds.
+    pub fn with_now_epoch_millis(self, millis: i64) -> Engine {
+        // Serial 25569 is 1970-01-01, the Unix epoch.
+        let serial = 25_569.0 + millis as f64 / 86_400_000.0;
+        self.with_now_serial(serial)
+    }
+
+    /// Reads the host's clock. Explicit by design — calling this is the point
+    /// at which a workbook stops being reproducible.
+    pub fn with_system_clock(self) -> Engine {
+        let millis = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
+        self.with_now_epoch_millis(millis)
     }
 
     pub fn workbook(&self) -> &Workbook {
@@ -266,7 +297,8 @@ impl Engine {
                         addr.sheet,
                         CellRef::new(addr.col, addr.row),
                     )
-                    .with_seed(self.cell_seed(addr));
+                    .with_seed(self.cell_seed(addr))
+                    .with_now(self.now);
                     eval_to_value(&mut ctx, &expr)
                 }
                 // Present in the graph but not in the AST cache: the formula

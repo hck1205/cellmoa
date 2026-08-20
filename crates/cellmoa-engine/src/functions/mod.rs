@@ -13,8 +13,10 @@ use std::collections::HashMap;
 use std::sync::OnceLock;
 
 pub mod criteria;
+pub mod date;
 pub mod info;
 pub mod logical;
+pub mod lookup;
 pub mod math;
 pub mod stats;
 pub mod text;
@@ -113,7 +115,15 @@ pub const fn lazy(
 
 /// Every category's catalogue, in registration order.
 fn catalogues() -> &'static [&'static [Function]] {
-    &[math::FUNCTIONS, logical::FUNCTIONS, text::FUNCTIONS, info::FUNCTIONS, stats::FUNCTIONS]
+    &[
+        math::FUNCTIONS,
+        logical::FUNCTIONS,
+        text::FUNCTIONS,
+        info::FUNCTIONS,
+        stats::FUNCTIONS,
+        lookup::FUNCTIONS,
+        date::FUNCTIONS,
+    ]
 }
 
 fn registry() -> &'static HashMap<String, &'static Function> {

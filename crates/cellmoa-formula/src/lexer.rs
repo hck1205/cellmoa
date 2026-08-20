@@ -210,7 +210,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_error_literal(&mut self, start: usize) -> Result<TokKind, ParseError> {
-        const LITERALS: [CellError; 9] = [
+        const LITERALS: [CellError; 10] = [
             CellError::Div0,
             CellError::Name,
             CellError::Null,
@@ -219,6 +219,7 @@ impl<'a> Lexer<'a> {
             CellError::Value,
             CellError::Cycle,
             CellError::Spill,
+            CellError::Calc,
             // `#N/A` is checked last: it is a prefix of nothing, but keeping the
             // longer literals first makes the intent explicit.
             CellError::NA,

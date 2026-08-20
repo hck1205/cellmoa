@@ -1,6 +1,7 @@
 //! The cellmoa calculation engine: reference resolution, the dependency graph,
 //! incremental recalculation, and the built-in function library.
 
+pub mod datetime;
 pub mod engine;
 pub mod eval;
 pub mod functions;

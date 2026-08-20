@@ -763,3 +763,271 @@ fn mode_reports_nothing_when_nothing_repeats() {
     type_in(&mut engine, "C1", "=MODE.SNGL(A1:A3)");
     assert_eq!(value(&engine, "C1"), Value::Error(CellError::NA));
 }
+
+// ---------------------------------------------------------------------------
+// Lookup
+// ---------------------------------------------------------------------------
+
+/// A price list in A1:C4, sorted by the code in column A.
+fn price_list() -> Engine {
+    let mut engine = sheet();
+    let rows = [
+        ("10", "apple", "1.5"),
+        ("20", "banana", "2.5"),
+        ("30", "cherry", "3.5"),
+        ("40", "date", "4.5"),
+    ];
+    for (i, (code, name, price)) in rows.iter().enumerate() {
+        let row = i + 1;
+        type_in(&mut engine, &format!("A{row}"), code);
+        type_in(&mut engine, &format!("B{row}"), name);
+        type_in(&mut engine, &format!("C{row}"), price);
+    }
+    engine
+}
+
+#[test]
+fn vlookup_exact_and_approximate() {
+    let mut engine = price_list();
+    type_in(&mut engine, "E1", "=VLOOKUP(30,A1:C4,2,FALSE)");
+    // Approximate matching takes the largest code at or below 25.
+    type_in(&mut engine, "E2", "=VLOOKUP(25,A1:C4,2,TRUE)");
+    type_in(&mut engine, "E3", "=VLOOKUP(25,A1:C4,2,FALSE)");
+    type_in(&mut engine, "E4", "=VLOOKUP(5,A1:C4,2,TRUE)");
+    assert_eq!(value(&engine, "E1"), Value::Text("cherry".into()));
+    assert_eq!(value(&engine, "E2"), Value::Text("banana".into()));
+    assert_eq!(value(&engine, "E3"), Value::Error(CellError::NA));
+    // Below every key, so there is nothing to fall back to.
+    assert_eq!(value(&engine, "E4"), Value::Error(CellError::NA));
+}
+
+#[test]
+fn vlookup_defaults_to_approximate_matching() {
+    let mut engine = price_list();
+    // The omitted fourth argument is TRUE, which is why this finds a row at all.
+    type_in(&mut engine, "E1", "=VLOOKUP(25,A1:C4,2)");
+    assert_eq!(value(&engine, "E1"), Value::Text("banana".into()));
+}
+
+#[test]
+fn an_out_of_range_column_index_is_a_ref_error() {
+    let mut engine = price_list();
+    type_in(&mut engine, "E1", "=VLOOKUP(10,A1:C4,9,FALSE)");
+    assert_eq!(value(&engine, "E1"), Value::Error(CellError::Ref));
+}
+
+#[test]
+fn exact_lookup_accepts_wildcards() {
+    let mut engine = price_list();
+    type_in(&mut engine, "E1", "=MATCH(\"ban*\",B1:B4,0)");
+    assert_eq!(number(&engine, "E1"), 2.0);
+}
+
+#[test]
+fn match_and_index_compose_into_a_lookup() {
+    let mut engine = price_list();
+    type_in(&mut engine, "E1", "=INDEX(C1:C4,MATCH(\"cherry\",B1:B4,0))");
+    assert_eq!(number(&engine, "E1"), 3.5);
+}
+
+#[test]
+fn index_returns_a_reference_so_it_can_end_a_range() {
+    let mut engine = price_list();
+    // A1:INDEX(A1:A4,3) is A1:A3.
+    type_in(&mut engine, "E1", "=SUM(A1:INDEX(A1:A4,3))");
+    assert_eq!(number(&engine, "E1"), 60.0);
+}
+
+#[test]
+fn index_with_a_zero_index_yields_a_whole_column() {
+    let mut engine = price_list();
+    type_in(&mut engine, "E1", "=SUM(INDEX(A1:C4,0,3))");
+    assert_eq!(number(&engine, "E1"), 12.0);
+}
+
+#[test]
+fn hlookup_searches_the_first_row() {
+    let mut engine = sheet();
+    for (col, (head, body)) in [("A", ("1", "one")), ("B", ("2", "two")), ("C", ("3", "three"))] {
+        type_in(&mut engine, &format!("{col}1"), head);
+        type_in(&mut engine, &format!("{col}2"), body);
+    }
+    type_in(&mut engine, "A4", "=HLOOKUP(2,A1:C2,2,FALSE)");
+    assert_eq!(value(&engine, "A4"), Value::Text("two".into()));
+}
+
+#[test]
+fn xlookup_returns_its_fallback_instead_of_an_error() {
+    let mut engine = price_list();
+    type_in(&mut engine, "E1", "=XLOOKUP(99,A1:A4,B1:B4,\"missing\")");
+    type_in(&mut engine, "E2", "=XLOOKUP(20,A1:A4,B1:B4,\"missing\")");
+    assert_eq!(value(&engine, "E1"), Value::Text("missing".into()));
+    assert_eq!(value(&engine, "E2"), Value::Text("banana".into()));
+}
+
+#[test]
+fn offset_moves_and_resizes_a_reference() {
+    let mut engine = price_list();
+    type_in(&mut engine, "E1", "=SUM(OFFSET(A1,0,2,4,1))");
+    type_in(&mut engine, "E2", "=OFFSET(A1,2,1)");
+    assert_eq!(number(&engine, "E1"), 12.0);
+    assert_eq!(value(&engine, "E2"), Value::Text("cherry".into()));
+    // Stepping off the top of the sheet is a #REF!.
+    type_in(&mut engine, "E3", "=OFFSET(A1,-1,0)");
+    assert_eq!(value(&engine, "E3"), Value::Error(CellError::Ref));
+}
+
+#[test]
+fn indirect_builds_a_reference_from_text() {
+    let mut engine = price_list();
+    type_in(&mut engine, "E1", "=INDIRECT(\"B\"&2)");
+    assert_eq!(value(&engine, "E1"), Value::Text("banana".into()));
+    type_in(&mut engine, "E2", "=INDIRECT(\"not a reference\")");
+    assert_eq!(value(&engine, "E2"), Value::Error(CellError::Ref));
+}
+
+#[test]
+fn address_composes_a_reference_string() {
+    assert_eq!(calc("=ADDRESS(2,3)"), Value::Text("$C$2".into()));
+    assert_eq!(calc("=ADDRESS(2,3,4)"), Value::Text("C2".into()));
+    assert_eq!(calc("=ADDRESS(1,1,1,TRUE,\"My Sheet\")"), Value::Text("'My Sheet'!$A$1".into()));
+}
+
+#[test]
+fn transpose_and_the_dynamic_array_helpers() {
+    let mut engine = price_list();
+    type_in(&mut engine, "E1", "=SUM(TRANSPOSE(A1:A4))");
+    type_in(&mut engine, "E2", "=SUM(SEQUENCE(4))");
+    type_in(&mut engine, "E3", "=COUNT(UNIQUE({1,1,2,3}))");
+    type_in(&mut engine, "E4", "=SUM(FILTER(A1:A4,A1:A4>20))");
+    assert_eq!(number(&engine, "E1"), 100.0);
+    assert_eq!(number(&engine, "E2"), 10.0);
+    assert_eq!(number(&engine, "E3"), 3.0);
+    assert_eq!(number(&engine, "E4"), 70.0);
+}
+
+#[test]
+fn formulatext_shows_the_source_of_another_cell() {
+    let mut engine = sheet();
+    type_in(&mut engine, "A1", "=1+1");
+    type_in(&mut engine, "B1", "=FORMULATEXT(A1)");
+    type_in(&mut engine, "B2", "=FORMULATEXT(C9)");
+    assert_eq!(value(&engine, "B1"), Value::Text("=1+1".into()));
+    assert_eq!(value(&engine, "B2"), Value::Error(CellError::NA));
+}
+
+// ---------------------------------------------------------------------------
+// Dates and times
+// ---------------------------------------------------------------------------
+
+#[test]
+fn dates_are_serial_numbers() {
+    assert_eq!(calc_num("=DATE(2024,1,1)"), 45292.0);
+    assert_eq!(calc_num("=YEAR(45292)"), 2024.0);
+    assert_eq!(calc_num("=MONTH(45292)"), 1.0);
+    assert_eq!(calc_num("=DAY(45292)"), 1.0);
+    // Dates subtract to a day count.
+    assert_eq!(calc_num("=DATE(2024,3,1)-DATE(2024,2,1)"), 29.0);
+}
+
+#[test]
+fn the_1900_leap_year_bug_is_reproduced() {
+    // Serial 60 is a day that never existed, and every spreadsheet keeps it.
+    assert_eq!(calc_num("=DAY(60)"), 29.0);
+    assert_eq!(calc_num("=MONTH(60)"), 2.0);
+    assert_eq!(calc_num("=DATE(1900,3,1)"), 61.0);
+    assert_eq!(calc_num("=DATE(1900,1,1)"), 1.0);
+}
+
+#[test]
+fn out_of_range_date_parts_roll_over() {
+    assert_eq!(calc_num("=DATE(2024,13,1)"), calc_num("=DATE(2025,1,1)"));
+    assert_eq!(calc_num("=DATE(2024,3,0)"), calc_num("=DATE(2024,2,29)"));
+}
+
+#[test]
+fn times_are_fractions_of_a_day() {
+    assert_eq!(calc_num("=TIME(12,0,0)"), 0.5);
+    assert_eq!(calc_num("=HOUR(0.75)"), 18.0);
+    assert_eq!(calc_num("=MINUTE(TIME(1,30,0))"), 30.0);
+    // Past midnight, a time wraps.
+    assert_eq!(calc_num("=TIME(25,0,0)"), calc_num("=TIME(1,0,0)"));
+}
+
+#[test]
+fn weekday_numbering_depends_on_the_second_argument() {
+    // 2024-01-01 was a Monday.
+    assert_eq!(calc_num("=WEEKDAY(DATE(2024,1,1))"), 2.0);
+    assert_eq!(calc_num("=WEEKDAY(DATE(2024,1,1),2)"), 1.0);
+    assert_eq!(calc_num("=WEEKDAY(DATE(2024,1,1),3)"), 0.0);
+}
+
+#[test]
+fn month_arithmetic_clamps_to_the_target_month() {
+    // One month after 31 January is the end of February, not 3 March.
+    assert_eq!(calc_num("=EDATE(DATE(2024,1,31),1)"), calc_num("=DATE(2024,2,29)"));
+    assert_eq!(calc_num("=EOMONTH(DATE(2024,2,10),0)"), calc_num("=DATE(2024,2,29)"));
+    assert_eq!(calc_num("=EOMONTH(DATE(2023,2,10),0)"), calc_num("=DATE(2023,2,28)"));
+}
+
+#[test]
+fn datedif_reports_elapsed_units() {
+    assert_eq!(calc_num("=DATEDIF(DATE(2020,1,15),DATE(2024,3,10),\"Y\")"), 4.0);
+    assert_eq!(calc_num("=DATEDIF(DATE(2020,1,15),DATE(2024,3,10),\"M\")"), 49.0);
+    // Whole months past the last whole year.
+    assert_eq!(calc_num("=DATEDIF(DATE(2020,1,15),DATE(2024,3,10),\"YM\")"), 1.0);
+}
+
+#[test]
+fn iso_week_numbers_follow_the_thursday_rule() {
+    // 2021-01-01 was a Friday, so it belongs to week 53 of 2020.
+    assert_eq!(calc_num("=ISOWEEKNUM(DATE(2021,1,1))"), 53.0);
+    assert_eq!(calc_num("=ISOWEEKNUM(DATE(2021,1,4))"), 1.0);
+    assert_eq!(calc_num("=ISOWEEKNUM(DATE(2024,1,1))"), 1.0);
+}
+
+#[test]
+fn working_days_skip_weekends_and_holidays() {
+    // 2024-01-01 (Mon) to 2024-01-07 (Sun) is five working days.
+    assert_eq!(calc_num("=NETWORKDAYS(DATE(2024,1,1),DATE(2024,1,7))"), 5.0);
+    let mut engine = sheet();
+    type_in(&mut engine, "A1", "=DATE(2024,1,3)");
+    type_in(&mut engine, "B1", "=NETWORKDAYS(DATE(2024,1,1),DATE(2024,1,7),A1)");
+    assert_eq!(number(&engine, "B1"), 4.0);
+    // Five working days after Monday is the following Monday.
+    assert_eq!(calc_num("=WORKDAY(DATE(2024,1,1),5)"), calc_num("=DATE(2024,1,8)"));
+}
+
+#[test]
+fn year_fractions_follow_the_requested_basis() {
+    // A full year is exactly 1 under the 30/360 basis.
+    assert_eq!(calc_num("=YEARFRAC(DATE(2024,1,1),DATE(2025,1,1),0)"), 1.0);
+    assert_eq!(calc_num("=YEARFRAC(DATE(2024,1,1),DATE(2024,7,1),0)"), 0.5);
+    // 2024 is a leap year, so actual/365 overshoots.
+    assert_eq!(calc_num("=YEARFRAC(DATE(2024,1,1),DATE(2025,1,1),3)"), 366.0 / 365.0);
+}
+
+#[test]
+fn text_dates_and_times_parse() {
+    assert_eq!(calc_num("=DATEVALUE(\"2024-01-01\")"), 45292.0);
+    assert_eq!(calc_num("=DATEVALUE(\"1/1/2024\")"), 45292.0);
+    assert_eq!(calc_num("=TIMEVALUE(\"12:00\")"), 0.5);
+    assert_eq!(calc_num("=TIMEVALUE(\"6:00 PM\")"), 0.75);
+    assert_eq!(calc("=DATEVALUE(\"not a date\")"), Value::Error(CellError::Value));
+}
+
+#[test]
+fn the_clock_is_an_input_rather_than_something_the_engine_reads() {
+    // Without a clock the engine refuses to invent one, because a workbook that
+    // reads the system time cannot be replayed.
+    let mut engine = sheet();
+    type_in(&mut engine, "A1", "=TODAY()");
+    assert_eq!(value(&engine, "A1"), Value::Error(CellError::NA));
+
+    let mut engine = Engine::new().with_now_serial(45292.5);
+    engine.add_sheet("Sheet1");
+    type_in(&mut engine, "A1", "=TODAY()");
+    type_in(&mut engine, "A2", "=NOW()");
+    assert_eq!(number(&engine, "A1"), 45292.0);
+    assert_eq!(number(&engine, "A2"), 45292.5);
+}

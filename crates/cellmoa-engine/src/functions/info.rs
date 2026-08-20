@@ -52,7 +52,11 @@ pub const FUNCTIONS: &[Function] = &[
             Some(CellError::Num) => Operand::number(6.0),
             Some(CellError::NA) => Operand::number(7.0),
             Some(CellError::Spill) => Operand::number(9.0),
-            Some(CellError::Cycle) => Operand::number(14.0),
+            Some(CellError::Calc) => Operand::number(14.0),
+            // #CYCLE! has no Excel number of its own; 20 is outside the range
+            // Excel uses so that a formula switching on ERROR.TYPE cannot
+            // mistake it for one of them.
+            Some(CellError::Cycle) => Operand::number(20.0),
             None => Operand::error(CellError::NA),
         }
     }),

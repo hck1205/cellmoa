@@ -62,6 +62,14 @@ pub struct EvalCtx<'a> {
     pub array_context: bool,
     /// Set if any function used makes the formula volatile.
     pub volatile: bool,
+    /// The current date and time as a serial number, or `None` when the host
+    /// has not supplied a clock.
+    ///
+    /// The engine never reads the system clock on its own. `TODAY()` and
+    /// `NOW()` are as corrosive to reproducibility as `RAND()` is, so the time
+    /// is an input the host provides and the journal records, not something the
+    /// engine helps itself to.
+    pub now: Option<f64>,
     /// Deterministic random source for `RAND` and `RANDBETWEEN`.
     ///
     /// A spreadsheet engine that reaches for the system entropy pool cannot be
@@ -83,6 +91,7 @@ impl<'a> EvalCtx<'a> {
             cell,
             array_context: false,
             volatile: false,
+            now: None,
             rng: Rng::seeded(0),
             depth: 0,
             name_stack: Vec::new(),
@@ -92,6 +101,12 @@ impl<'a> EvalCtx<'a> {
     /// Reseeds the random source, which the engine does per cell.
     pub fn with_seed(mut self, seed: u64) -> EvalCtx<'a> {
         self.rng = Rng::seeded(seed);
+        self
+    }
+
+    /// Supplies the clock `TODAY` and `NOW` read.
+    pub fn with_now(mut self, now: Option<f64>) -> EvalCtx<'a> {
+        self.now = now;
         self
     }
 
