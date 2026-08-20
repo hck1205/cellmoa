@@ -18,6 +18,15 @@ export interface NotificationOptions {
   /** An id of your own, so the same message does not stack up. */
   id?: string;
   closable?: boolean;
+  /**
+   * Buttons on the message.
+   *
+   * A message that reports a failure the reader can do something about should
+   * offer to do it — "could not load" with a **Refetch** button is a different
+   * message from "could not load" alone. The message goes away when an action
+   * is taken, because the action is the reader's answer to it.
+   */
+  actions?: Array<{ label: string; onClick: () => void }>;
 }
 
 export class Notification extends BasePlugin {
@@ -62,6 +71,18 @@ export class Notification extends BasePlugin {
     text.className = 'cm-notification-text';
     text.textContent = options.message;
     element.appendChild(text);
+
+    for (const action of options.actions ?? []) {
+      const button = doc.createElement('button');
+      button.type = 'button';
+      button.className = 'cm-notification-action';
+      button.textContent = action.label;
+      button.addEventListener('click', () => {
+        this.hide(id);
+        action.onClick();
+      });
+      element.appendChild(button);
+    }
 
     if (options.closable !== false) {
       const close = doc.createElement('button');

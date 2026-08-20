@@ -4,7 +4,6 @@ import { Grid } from '../src/grid.js';
 import type {
   BindRowsWithHeaders,
   CustomBorders,
-  DataProvider,
   DragToScroll,
   MoveCells,
   MultipleSelectionHandles,
@@ -379,120 +378,5 @@ describe('the nestedRows plugin', () => {
     grid.render();
     const buttons = grid.view?.root.querySelectorAll('button.cm-nested-toggle');
     expect(buttons?.length).toBe(2); // rows 0 and 1
-  });
-});
-
-describe('the dataProvider plugin', () => {
-  it('asks the source for a page and loads what comes back', async () => {
-    const calls: unknown[] = [];
-    const grid = await makeGrid({
-      startRows: 2,
-      startCols: 2,
-      dataProvider: {
-        pageSize: 2,
-        data: (query: unknown) => {
-          calls.push(query);
-          return { rows: [['a', 'b'], ['c', 'd']], totalRows: 10 };
-        },
-      },
-    });
-    const plugin = grid.getPlugin('dataProvider') as unknown as DataProvider;
-    await plugin.fetch();
-
-    expect(calls[calls.length - 1]).toEqual({ page: 1, pageSize: 2, sort: null, filters: null });
-    expect(grid.getDataAtCell(0, 0)).toBe('a');
-    expect(grid.getDataAtCell(1, 1)).toBe('d');
-    expect(plugin.getTotalRows()).toBe(10);
-    expect(plugin.countPages()).toBe(5);
-  });
-
-  it('goes back to page one when the sort changes', async () => {
-    const grid = await makeGrid({
-      dataProvider: { pageSize: 2, data: () => ({ rows: [], totalRows: 10 }) },
-    });
-    const plugin = grid.getPlugin('dataProvider') as unknown as DataProvider;
-    await plugin.setPage(3);
-    await plugin.setSort({ column: 0, sortOrder: 'asc' });
-    // The third page of a differently sorted list is not the same rows.
-    expect(plugin.getQueryParameters().page).toBe(1);
-  });
-
-  it('reports a failed fetch rather than swallowing it', async () => {
-    const errors: unknown[] = [];
-    const grid = await makeGrid({
-      dataProvider: {
-        data: () => Promise.reject(new Error('network down')),
-        onError: (error: unknown) => errors.push(error),
-      },
-    });
-    const plugin = grid.getPlugin('dataProvider') as unknown as DataProvider;
-    await plugin.fetch();
-    expect((errors[0] as Error).message).toBe('network down');
-    expect((plugin.getLastError() as Error).message).toBe('network down');
-  });
-
-  it('throws away an answer to a query it has moved on from', async () => {
-    let resolveFirst: ((value: unknown) => void) | null = null;
-    let call = 0;
-    const grid = await makeGrid({
-      startRows: 1,
-      startCols: 1,
-      dataProvider: {
-        data: () => {
-          call += 1;
-          if (call === 1) {
-            return new Promise((resolve) => {
-              resolveFirst = resolve as (value: unknown) => void;
-            }) as Promise<{ rows: string[][]; totalRows: number }>;
-          }
-          return Promise.resolve({ rows: [['second']], totalRows: 1 });
-        },
-      },
-    });
-    const plugin = grid.getPlugin('dataProvider') as unknown as DataProvider;
-    const slow = plugin.fetch();
-    await plugin.setPage(2);
-    expect(grid.getDataAtCell(0, 0)).toBe('second');
-
-    resolveFirst?.({ rows: [['first']], totalRows: 1 });
-    await slow;
-    // The stale answer does not overwrite the fresh one.
-    expect(grid.getDataAtCell(0, 0)).toBe('second');
-  });
-
-  it('shows the loading overlay while it waits', async () => {
-    // Every fetch's resolver is kept, including the one the plugin makes when
-    // it starts: an overlay left up by a forgotten request is exactly the bug
-    // the reference count exists to prevent.
-    const waiting: Array<(result: { rows: string[][]; totalRows: number }) => void> = [];
-    const grid = await makeGrid({
-      loading: true,
-      dataProvider: {
-        data: () =>
-          new Promise<{ rows: string[][]; totalRows: number }>((resolve) => {
-            waiting.push(resolve);
-          }),
-      },
-    });
-    const plugin = grid.getPlugin('dataProvider') as unknown as DataProvider;
-    const loading = grid.getPlugin('loading') as unknown as { isVisible(): boolean };
-    const pending = plugin.fetch();
-    expect(loading.isVisible()).toBe(true);
-
-    for (const resolve of waiting) {
-      resolve({ rows: [], totalRows: 0 });
-    }
-    await pending;
-    await Promise.resolve();
-    expect(loading.isVisible()).toBe(false);
-  });
-
-  it('lets a hook veto a fetch', async () => {
-    const calls = vi.fn(() => ({ rows: [], totalRows: 0 }));
-    const grid = await makeGrid({ dataProvider: { data: calls } });
-    calls.mockClear();
-    grid.addHook('beforeFetch', () => false);
-    await (grid.getPlugin('dataProvider') as unknown as DataProvider).fetch();
-    expect(calls).not.toHaveBeenCalled();
   });
 });

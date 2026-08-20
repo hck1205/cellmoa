@@ -41,7 +41,7 @@ Handsontable 저장소(`handsontable/handsontable`)의 소스와 문서에서 �
 | `contextMenu` | ✅ | 항목 키는 Handsontable과 동일. 켜져 있는 플러그인의 명령만 나타남. "에이전트 변경 되돌리기" 추가 ➕ |
 | `copyPaste` | ✅ | `text/plain` + `text/html` 양쪽 기록. 자기 복사본 붙여넣기는 수식 참조 이동 ➕ |
 | `customBorders` | ✅ | 테두리는 셀 메타 — 수식이 읽는 값은 그대로 |
-| `dataProvider` | ✅ | 정렬·필터·페이지를 질의로 서버에 보냄. 늦게 온 응답은 버림 |
+| `dataProvider` | ✅ | 읽기(`fetchRows`·abort·페이지·정렬·필터)와 쓰기(CRUD 3종·낙관적 반영·롤백·직렬화) |
 | `dialog` | ✅ | 모달 — 열려 있는 동안 키보드가 셀에 닿지 않음 |
 | `dragToScroll` | ✅ | 경계 밖으로 나간 만큼만 스크롤 |
 | `dropdownMenu` | ✅ | 열 헤더 버튼. contextMenu와 메뉴 위젯 공유 |
@@ -129,6 +129,35 @@ methods   146/146 present  (0 named by the reference and missing)
 | 헤더 (배열·함수·기본 A1 표기) | ✅ | |
 | batch / suspendRender | ✅ | |
 
+## 서버 데이터 (`dataProvider`)
+
+문서 5쪽(개요·설정·CRUD·페칭·마이그레이션)의 계약을 그대로 구현했다.
+
+| 항목 | 상태 |
+|---|:--:|
+| `fetchRows(query, { signal })` · 앞선 요청 abort | ✅ |
+| `rowId` (열 이름 또는 함수) | ✅ |
+| `onRowsCreate` / `onRowsUpdate` / `onRowsRemove` | ✅ |
+| 낙관적 반영 → 서버 거부 시 롤백 | ✅ |
+| 검증기 실패 시 전송 안 함 + 롤백 | ✅ |
+| `beforeRowsMutation` veto · `afterRowsMutation(Error)` | ✅ |
+| 뮤테이션 직렬화 (서버가 보는 순서 = 사용자 순서) | ✅ |
+| 성공 후 `skipLoading` 재조회 | ✅ |
+| `page`/`pageSize`를 Pagination에서 가져옴 | ✅ |
+| `modifyRowHeader` 전역 행 번호 | ✅ |
+| 충돌 설정 4종(`trimRows`·`manualRowMove`·`manualColumnMove`·`multiColumnSorting`) 시 비활성 + 경고 | ✅ |
+| Notification 오류 토스트 + **Refetch** 버튼 | ✅ |
+| `fetchData` · `getQueryParameters` · `getRowId` · `createRows` · `updateRows` · `removeRows` | ✅ |
+
+### 하나 다른 것: 언두 스택
+
+Handsontable은 `onRowsUpdate`가 있으면 일부 편집 소스를 **로컬 언두 스택에
+쌓지 않는다** — 클라이언트 언두가 서버 데이터와 싸우지 않게 하려는 것이다.
+
+여기에는 로컬 언두 스택이 없다. 언두는 엔진 저널을 되짚는다(그래서 행위자별
+언두가 가능하다). 쌓지 않을 스택이 없으므로 이 규칙은 구현할 대상이 없다.
+비워둔 것이 아니라 해당 사항이 없는 것이고, 그 차이를 적어둔다.
+
 ## 설정 162개
 
 이름만 있고 아무 동작도 안 하는 설정이 없는지는 `node scripts/parity.mjs`가
@@ -165,7 +194,7 @@ settings  162/162 read  (0 declared but never consulted)
 | 보안 (`allowHtml`, `sanitizer`) | ✅ | 기본은 텍스트. HTML 허용 시 sanitizer를 통과 |
 | 최적화 — batch / suspendRender | ✅ | |
 | 내비게이션 — 단축키 · 검색 | ✅ | `ShortcutManager`, `search` 플러그인 |
-| 데이터 관리 — 서버 데이터 | ✅ | `dataProvider` 플러그인 |
+| 데이터 관리 — 서버 데이터 | ✅ | `dataProvider` 플러그인 (아래 참고) |
 | 셀 기능 — 조건부 서식 | ✅ | `cells` 함수 (Handsontable과 동일한 방식) |
 | 셀 기능 — 숫자 서식 (`numericFormat`) | ✅ | `Intl.NumberFormat`. 숫자가 아닌 값은 건드리지 않음 |
 | 내비게이션 — 헤더 이동 (`navigableHeaders`) | ✅ | 헤더는 인덱스 -1 |

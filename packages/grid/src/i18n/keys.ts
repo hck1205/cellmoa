@@ -63,6 +63,13 @@ export const PHRASE = {
   showRow: 'ContextMenu:items.showRow',
   hideColumn: 'ContextMenu:items.hideColumn',
   showColumn: 'ContextMenu:items.showColumn',
+
+  DATA_PROVIDER_ERROR_FETCH: 'DataProvider:errors.fetch',
+  DATA_PROVIDER_ERROR_CREATE: 'DataProvider:errors.create',
+  DATA_PROVIDER_ERROR_UPDATE: 'DataProvider:errors.update',
+  DATA_PROVIDER_ERROR_REMOVE: 'DataProvider:errors.remove',
+  DATA_PROVIDER_ERROR_REQUEST_FAILED: 'DataProvider:errors.requestFailed',
+  DATA_PROVIDER_REFETCH: 'DataProvider:buttons.refetch',
 } as const;
 
 export type PhraseKey = (typeof PHRASE)[keyof typeof PHRASE];
