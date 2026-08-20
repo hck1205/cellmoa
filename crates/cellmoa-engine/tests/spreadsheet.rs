@@ -9,10 +9,14 @@ use cellmoa_core::value::{CellError, Value};
 use cellmoa_engine::Engine;
 
 /// A one-sheet workbook to type into.
+///
+/// The sheet is part of the starting workbook rather than an edit, which is how
+/// a real document begins — so the revisions counted below are only the edits
+/// under test.
 fn sheet() -> Engine {
-    let mut engine = Engine::new();
-    engine.add_sheet("Sheet1");
-    engine
+    let mut workbook = cellmoa_core::model::Workbook::new();
+    workbook.add_sheet("Sheet1");
+    Engine::from_workbook(workbook)
 }
 
 fn at(a1: &str) -> CellAddr {

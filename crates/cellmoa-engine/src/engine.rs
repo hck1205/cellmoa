@@ -102,8 +102,22 @@ impl Engine {
         self.doc.revision()
     }
 
+    /// Adds a sheet, recording it in the journal.
+    ///
+    /// Going through the journal rather than straight to the workbook is what
+    /// keeps a replay faithful: a sheet added outside the log would be missing
+    /// when the log is replayed, and every write into it would land nowhere.
     pub fn add_sheet(&mut self, name: impl Into<String>) -> SheetId {
-        self.doc.workbook.add_sheet(name)
+        self.add_sheet_as(Actor::system(), name)
+    }
+
+    /// Adds a sheet on behalf of a named actor.
+    pub fn add_sheet_as(&mut self, actor: Actor, name: impl Into<String>) -> SheetId {
+        let name = name.into();
+        self.doc
+            .apply(actor, vec![Op::AddSheet { name }], None)
+            .expect("an unguarded AddSheet cannot be rejected");
+        (self.doc.workbook.sheet_count() - 1) as SheetId
     }
 
     /// The value a cell currently shows.
@@ -160,6 +174,22 @@ impl Engine {
         Ok(())
     }
 
+    /// Evaluates a formula without storing it anywhere.
+    ///
+    /// The formula is evaluated as though it sat in the bottom-right corner of
+    /// the sheet: far enough from the data that it cannot reference itself, and
+    /// a definite position for the implicit intersection rule to work from.
+    pub fn evaluate(&self, sheet: SheetId, formula: &str) -> Result<Value, String> {
+        let expr = parse(formula).map_err(|e| e.to_string())?;
+        let at = CellRef::new(
+            cellmoa_core::reference::MAX_COLS - 1,
+            cellmoa_core::reference::MAX_ROWS - 1,
+        );
+        let mut ctx =
+            EvalCtx::new(&self.doc.workbook, sheet, at).with_seed(self.seed).with_now(self.now);
+        Ok(eval_to_value(&mut ctx, &expr))
+    }
+
     /// Applies several edits as one commit, then recalculates once.
     ///
     /// Doing it in one pass is not only faster: a batch that sets `A1` and `B1`
@@ -170,11 +200,30 @@ impl Engine {
         edits: Vec<(CellAddr, &str)>,
         expected_revision: Option<u64>,
     ) -> Result<(), EditError> {
+        self.apply_labeled(actor, edits, expected_revision, None, None)
+    }
+
+    /// [`Engine::apply`] with a description and timestamp for the audit trail.
+    pub fn apply_labeled(
+        &mut self,
+        actor: Actor,
+        edits: Vec<(CellAddr, &str)>,
+        expected_revision: Option<u64>,
+        label: Option<String>,
+        at: Option<i64>,
+    ) -> Result<(), EditError> {
         let ops: Vec<Op> = edits
             .iter()
             .map(|(addr, input)| Op::SetCell { addr: *addr, content: parse_input(input) })
             .collect();
-        self.doc.apply(actor, ops, expected_revision)?;
+        match label {
+            Some(label) => {
+                self.doc.apply_labeled(actor, ops, expected_revision, label, at)?;
+            }
+            None => {
+                self.doc.apply(actor, ops, expected_revision)?;
+            }
+        }
         let touched: Vec<CellAddr> = edits.iter().map(|(addr, _)| *addr).collect();
         for &addr in &touched {
             self.refresh_cell(addr);

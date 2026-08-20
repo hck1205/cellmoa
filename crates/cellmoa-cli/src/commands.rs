@@ -1,7 +1,7 @@
 //! The commands themselves.
 
 use crate::args::Args;
-use cellmoa_core::edit::{Actor, Journal};
+use cellmoa_core::edit::Journal;
 use cellmoa_core::fingerprint::fingerprint;
 use cellmoa_core::model::{CellAddr, Workbook};
 use cellmoa_core::reference::RangeRef;
@@ -122,7 +122,7 @@ fn eval(args: &Args) -> Outcome {
     args.reject_unknown(&["file", "sheet", "seed", "now"]).map_err(|e| e.to_string())?;
     let formula = positional(args, 0, "a formula to evaluate")?;
 
-    let mut engine = match args.value("file") {
+    let engine = match args.value("file") {
         Some(path) => open(args, path)?,
         None => {
             let mut engine = Engine::new();
@@ -131,16 +131,8 @@ fn eval(args: &Args) -> Outcome {
         }
     };
     let sheet = sheet_id(&engine, args.value("sheet"))?;
-
-    // The formula is written into a cell well clear of any data, so that a
-    // reference in it resolves the way it would in the sheet.
-    let scratch = CellAddr::new(sheet, cellmoa_core::reference::MAX_COLS - 1, 0);
-    let input = if formula.starts_with('=') { formula.to_string() } else { format!("={formula}") };
-    engine
-        .set(Actor::script("cli"), scratch, &input)
-        .map_err(|e| format!("cannot evaluate: {e}"))?;
-
-    println!("{}", engine.value(scratch));
+    let value = engine.evaluate(sheet, formula).map_err(|e| format!("cannot evaluate: {e}"))?;
+    println!("{value}");
     Ok(ExitCode::from(OK))
 }
 
