@@ -35,3 +35,9 @@ export type { CopyPasteSettings } from './copyPaste.js';
 
 export { MergeCells } from './mergeCells.js';
 export type { MergedArea } from './mergeCells.js';
+export * from './undoRedo.js';
+export * from './search.js';
+export * from './columnSummary.js';
+export * from './exportFile.js';
+export * from './nestedHeaders.js';
+export * from './collapsibleColumns.js';

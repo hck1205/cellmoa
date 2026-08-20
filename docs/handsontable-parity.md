@@ -34,9 +34,9 @@ Handsontable 저장소(`handsontable/handsontable`)의 소스와 문서에서 �
 | `autoRowSize` | ⬜ | |
 | `autofill` | ✅ | 수식은 상대 참조를 이동시켜 채움 ➕ |
 | `bindRowsWithHeaders` | ⬜ | |
-| `collapsibleColumns` | ⬜ | |
+| `collapsibleColumns` | ✅ | 접기는 숨김일 뿐 — 수식은 계속 그 열을 읽음 |
 | `columnSorting` | ✅ | |
-| `columnSummary` | ⬜ | |
+| `columnSummary` | ✅ | 고정된 숫자가 아니라 수식을 씀 — 위 값이 바뀌면 따라감 ➕ |
 | `comments` | ✅ | 주석은 셀 메타에만 저장 — 워크북/수식에 영향 없음 |
 | `contextMenu` | ⬜ | |
 | `copyPaste` | ✅ | `text/plain` + `text/html` 양쪽 기록. 자기 복사본 붙여넣기는 수식 참조 이동 ➕ |
@@ -46,7 +46,7 @@ Handsontable 저장소(`handsontable/handsontable`)의 소스와 문서에서 �
 | `dragToScroll` | ⬜ | |
 | `dropdownMenu` | ⬜ | |
 | `emptyDataState` | ⬜ | |
-| `exportFile` | ⬜ | |
+| `exportFile` | ✅ | CSV는 화면 값으로, `.xlsx`는 엔진이 직접 (수식·스타일 보존) ➕ |
 | `filters` | ✅ | |
 | `formulas` | ✅ | 엔진 내장 (플러그인이 아니라 일급) |
 | `hiddenColumns` | ✅ | |
@@ -62,16 +62,16 @@ Handsontable 저장소(`handsontable/handsontable`)의 소스와 문서에서 �
 | `moveCells` | ⬜ | |
 | `multiColumnSorting` | ✅ | |
 | `multipleSelectionHandles` | ⬜ | |
-| `nestedHeaders` | ⬜ | |
+| `nestedHeaders` | ✅ | 뷰가 헤더를 다단으로 그림 |
 | `nestedRows` | ⬜ | |
 | `notification` | ⬜ | |
 | `pagination` | ⬜ | |
-| `search` | ⬜ | |
+| `search` | ✅ | 표시된 값을 검색 (수식 결과 기준) |
 | `selectionHandles` | ⬜ | |
 | `stretchColumns` | ⬜ | |
 | `touchScroll` | ⬜ | |
 | `trimRows` | ✅ | |
-| `undoRedo` | ⬜ | |
+| `undoRedo` | ✅ | 엔진 저널 기반. 액터별 undo/redo 가능 ➕. `clear()`는 감사 추적을 지울 수 없으므로 예외를 던짐 |
 
 ## 셀 타입 (13개)
 

@@ -39,7 +39,7 @@ import './plugins/index.js';
 import { ShortcutManager } from './shortcuts.js';
 import { SizeMap } from './sizes.js';
 import { View } from './view.js';
-import type { CellRenderContext } from './view.js';
+import type { CellRenderContext, ColHeaderCell } from './view.js';
 
 /** How the grid was told to change something, for the `afterChange` hook. */
 export type ChangeSource =
@@ -375,6 +375,9 @@ export class Grid {
 
   /** Undoes the last change. */
   undo(): void {
+    if (this.hooks.allows('beforeUndo') === false) {
+      return;
+    }
     this.#data.undo();
     this.#syncDimensions();
     this.hooks.run('afterUndo', undefined);
@@ -383,6 +386,9 @@ export class Grid {
 
   /** Re-applies the last undone change. */
   redo(): void {
+    if (this.hooks.allows('beforeRedo') === false) {
+      return;
+    }
     this.#data.redo();
     this.#syncDimensions();
     this.hooks.run('afterRedo', undefined);
@@ -397,10 +403,72 @@ export class Grid {
    * the edits a person made in the meantime.
    */
   undoBy(actor: string): void {
+    if (this.hooks.allows('beforeUndo', actor) === false) {
+      return;
+    }
     this.#data.undo(actor);
     this.#syncDimensions();
     this.hooks.run('afterUndo', undefined, actor);
     this.render();
+  }
+
+  /** Puts back what `undoBy` took away, for the same actor. */
+  redoBy(actor: string): void {
+    if (this.hooks.allows('beforeRedo', actor) === false) {
+      return;
+    }
+    this.#data.redo(actor);
+    this.#syncDimensions();
+    this.hooks.run('afterRedo', undefined, actor);
+    this.render();
+  }
+
+  /**
+   * How deep the column header is.
+   *
+   * One row unless a plugin says otherwise, which is what `nestedHeaders`
+   * changes. The height of the header area follows from this, so it has to be
+   * asked before anything is laid out.
+   */
+  countColHeaderLevels(): number {
+    return Math.max((this.hooks.run('modifyColHeaderLevels', 1) as number) ?? 1, 1);
+  }
+
+  /**
+   * The column header, as rows of cells.
+   *
+   * The plain case is one row of one-column cells. A plugin that wants a nested
+   * header replaces the whole structure through the hook, because the levels
+   * above the bottom one are not per-column at all — they are spans.
+   */
+  getColHeaderRows(firstCol: number, lastCol: number): ColHeaderCell[][] {
+    if (!this.hasColHeaders()) {
+      return [];
+    }
+    const plain: ColHeaderCell[] = [];
+    for (let col = firstCol; col <= lastCol; col += 1) {
+      plain.push({ col, colspan: 1, level: 0, label: this.getColHeader(col) });
+    }
+    const levels = this.hooks.run('modifyColHeaderRows', [plain], firstCol, lastCol);
+    return (levels as ColHeaderCell[][]) ?? [plain];
+  }
+
+  /**
+   * Whether a row is hidden — present in the data but not drawn.
+   *
+   * Hidden is not the same as trimmed: a hidden row still counts, still holds
+   * its values and is still what a formula referring to it reads. Anything
+   * walking the table by visual index has to be able to tell the two apart.
+   */
+  isRowHidden(row: number): boolean {
+    const physical = this.rowIndex.toPhysical(row);
+    return physical !== null && this.rowIndex.isHidden(physical);
+  }
+
+  /** The same for a column. */
+  isColumnHidden(col: number): boolean {
+    const physical = this.colIndex.toPhysical(col);
+    return physical !== null && this.colIndex.isHidden(physical);
   }
 
   /** Who changed a cell, when, and why. */
@@ -1345,9 +1413,13 @@ export class Grid {
         (this.getSettings().fixedColumnsLeft as number) ??
         0,
       rowHeader: (row) => (this.hasRowHeaders() ? this.getRowHeader(row) : null),
-      colHeader: (col) => (this.hasColHeaders() ? this.getColHeader(col) : null),
+      colHeaderRows: (firstCol, lastCol) => this.getColHeaderRows(firstCol, lastCol),
       rowHeaderWidth: () => (this.hasRowHeaders() ? DEFAULT_ROW_HEADER_WIDTH : 0),
-      colHeaderHeight: () => (this.hasColHeaders() ? DEFAULT_ROW_HEIGHT : 0),
+      colHeaderHeight: () =>
+        this.hasColHeaders() ? DEFAULT_ROW_HEIGHT * this.countColHeaderLevels() : 0,
+      renderColHeader: (th, cell) => {
+        this.hooks.run('afterGetColHeader', undefined, cell.col, th, cell.level);
+      },
       prepare: (startRow, endRow, startCol, endCol) =>
         this.#ensureVisible(startRow, endRow, startCol, endCol),
       renderCell: (context) => this.#renderCell(context),

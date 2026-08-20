@@ -184,6 +184,20 @@ impl Document {
         &self.commits
     }
 
+    /// The commits undo would take back, in the order it would take them —
+    /// the last is the next to go.
+    ///
+    /// This is not the same as "every commit not yet undone": undoing pushes a
+    /// commit of its own, and that one is not itself undoable.
+    pub fn undoable(&self) -> impl Iterator<Item = &Commit> {
+        self.undo_stack.iter().map(move |&i| &self.commits[i])
+    }
+
+    /// The commits redo would put back, likewise last-first.
+    pub fn redoable(&self) -> impl Iterator<Item = &Commit> {
+        self.redo_stack.iter().map(move |&(original, _)| &self.commits[original])
+    }
+
     /// Commits that touched a cell, oldest first — the provenance of that cell.
     pub fn history_of(&self, addr: CellAddr) -> impl Iterator<Item = &Commit> {
         self.commits.iter().filter(move |c| c.touches(addr))

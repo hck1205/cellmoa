@@ -165,6 +165,38 @@ fn evaluating_a_formula_does_not_change_the_workbook() {
 }
 
 #[test]
+fn undo_state_counts_what_each_actor_can_take_back() {
+    let mut session = Session::new();
+    ok(
+        &mut session,
+        json!({ "op": "write", "cells": [{ "cell": "A1", "input": "1" }],
+                             "who": { "kind": "human", "id": "ada" } }),
+    );
+    ok(
+        &mut session,
+        json!({ "op": "write", "cells": [{ "cell": "A2", "input": "2" }],
+                             "who": { "kind": "agent", "id": "bot" } }),
+    );
+
+    let state = ok(&mut session, json!({ "op": "undo_state" }));
+    assert_eq!(state["canUndo"], json!(true));
+    assert_eq!(state["canRedo"], json!(false));
+    assert_eq!(state["undoCount"], json!(2));
+    assert_eq!(state["nextUndo"]["actor"]["id"], json!("bot"));
+    assert_eq!(
+        state["undoByActor"],
+        json!([{ "actor": "ada", "count": 1 }, { "actor": "bot", "count": 1 }])
+    );
+
+    // Taking back only the agent's work leaves the person's alone.
+    ok(&mut session, json!({ "op": "undo", "only_by": "bot" }));
+    let after = ok(&mut session, json!({ "op": "undo_state" }));
+    assert_eq!(after["undoByActor"], json!([{ "actor": "ada", "count": 1 }]));
+    assert_eq!(after["redoByActor"], json!([{ "actor": "bot", "count": 1 }]));
+    assert_eq!(after["nextRedo"]["actor"]["kind"], json!("agent"));
+}
+
+#[test]
 fn translating_a_formula_moves_its_relative_references() {
     let mut session = Session::new();
     let response =

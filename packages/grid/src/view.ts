@@ -26,6 +26,23 @@ export interface CellRenderContext {
   td: HTMLTableCellElement;
 }
 
+/**
+ * One cell in the column header.
+ *
+ * A header can be more than one row deep — a group label spanning several
+ * columns above the columns themselves — so a cell carries its own span and
+ * knows which level it is on.
+ */
+export interface ColHeaderCell {
+  /** The leftmost column this cell sits above. */
+  col: number;
+  /** How many columns it spans. */
+  colspan: number;
+  /** Which header row it is on, 0 at the top. */
+  level: number;
+  label: string;
+}
+
 /** Everything the view reads from the grid. */
 export interface ViewModel {
   rowCount(): number;
@@ -36,9 +53,17 @@ export interface ViewModel {
   fixedColumnsStart(): number;
   /** Whether headers are drawn, and what they say. */
   rowHeader(row: number): string | null;
-  colHeader(col: number): string | null;
+  /**
+   * The column header, as rows of cells covering `firstCol`..`lastCol`.
+   *
+   * An empty array means no column header at all. One row of one-column cells
+   * is the ordinary case; more rows are a nested header.
+   */
+  colHeaderRows(firstCol: number, lastCol: number): ColHeaderCell[][];
   rowHeaderWidth(): number;
   colHeaderHeight(): number;
+  /** Called after a header cell is built, so a plugin can decorate it. */
+  renderColHeader?(th: HTMLTableCellElement, cell: ColHeaderCell): void;
   /** Called before drawing, so the data for the window can be fetched. */
   prepare(startRow: number, endRow: number, startCol: number, endCol: number): void;
   /** Fills in one cell. */
@@ -329,21 +354,41 @@ export class View {
     pane.table.style.top = '0';
 
     if (withColHeader && headerHeight > 0) {
-      const tr = this.#element('tr', CLASS.header) as unknown as HTMLTableRowElement;
-      tr.style.height = `${headerHeight}px`;
-      if (withRowHeader && headerWidth > 0) {
-        const corner = this.#element('th', CLASS.corner);
-        corner.style.width = `${headerWidth}px`;
-        tr.appendChild(corner);
-      }
-      for (let col = firstCol; col <= lastCol; col += 1) {
-        const th = this.#element('th', CLASS.colHeader);
-        th.style.width = `${cols.sizeOf(col)}px`;
-        th.dataset.col = String(col);
-        th.textContent = this.#model.colHeader(col) ?? columnLetters(col);
-        tr.appendChild(th);
-      }
-      pane.body.appendChild(tr);
+      const levels = this.#model.colHeaderRows(firstCol, lastCol);
+      levels.forEach((cells, level) => {
+        const tr = this.#element('tr', CLASS.header) as unknown as HTMLTableRowElement;
+        tr.style.height = `${headerHeight / Math.max(levels.length, 1)}px`;
+        tr.dataset.level = String(level);
+        if (withRowHeader && headerWidth > 0) {
+          const corner = this.#element('th', CLASS.corner);
+          corner.style.width = `${headerWidth}px`;
+          // The corner is one cell however deep the header is, so it spans the
+          // remaining rows rather than being repeated on each of them.
+          if (level === 0 && levels.length > 1) {
+            corner.rowSpan = levels.length;
+          }
+          if (level === 0 || levels.length === 1) {
+            tr.appendChild(corner);
+          }
+        }
+        for (const cell of cells) {
+          const th = this.#element('th', CLASS.colHeader);
+          let width = 0;
+          for (let col = cell.col; col < cell.col + cell.colspan; col += 1) {
+            width += cols.sizeOf(col);
+          }
+          th.style.width = `${width}px`;
+          th.dataset.col = String(cell.col);
+          th.dataset.level = String(cell.level);
+          if (cell.colspan > 1) {
+            th.colSpan = cell.colspan;
+          }
+          th.textContent = cell.label !== '' ? cell.label : columnLetters(cell.col);
+          this.#model.renderColHeader?.(th, cell);
+          tr.appendChild(th);
+        }
+        pane.body.appendChild(tr);
+      });
     }
 
     for (let row = firstRow; row <= lastRow; row += 1) {

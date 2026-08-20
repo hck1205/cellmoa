@@ -18,6 +18,7 @@ use cellmoa_engine::{catalogue, Engine};
 use cellmoa_xlsx::Package;
 use protocol::{CellView, Request, Response, Who, Write};
 use serde_json::json;
+use std::collections::BTreeMap;
 
 /// One open workbook.
 pub struct Session {
@@ -130,6 +131,7 @@ impl Session {
                 let passed = report.passed();
                 self.ok(json!({ "passed": passed, "report": report }))
             }
+            Request::UndoState => self.undo_state(),
             Request::Journal => {
                 let journal = Journal::of(&self.engine.doc);
                 self.ok(json!({ "journal": journal }))
@@ -353,6 +355,44 @@ impl Session {
             })),
             Err(e) => Response::error("bad_formula", e),
         }
+    }
+
+    fn undo_state(&self) -> Response {
+        // Per actor as well as in total: the whole point of an actor-scoped
+        // undo is that a person can take back what an agent did without
+        // touching their own work, and a button for that has to know whether
+        // there is anything there.
+        let tally = |commits: Vec<&cellmoa_core::edit::Commit>| {
+            let mut counts: BTreeMap<&str, usize> = BTreeMap::new();
+            for commit in &commits {
+                *counts.entry(commit.actor.id.as_str()).or_default() += 1;
+            }
+            let by_actor: Vec<_> =
+                counts.iter().map(|(id, n)| json!({ "actor": id, "count": n })).collect();
+            let next = commits.last().map(|c| {
+                json!({
+                    "revision": c.revision,
+                    "label": c.label,
+                    "actor": {
+                        "kind": format!("{:?}", c.actor.kind).to_lowercase(),
+                        "id": c.actor.id,
+                    },
+                })
+            });
+            (commits.len(), by_actor, next)
+        };
+        let (undo_count, undo_by_actor, next_undo) = tally(self.engine.doc.undoable().collect());
+        let (redo_count, redo_by_actor, next_redo) = tally(self.engine.doc.redoable().collect());
+        self.ok(json!({
+            "canUndo": undo_count > 0,
+            "canRedo": redo_count > 0,
+            "undoCount": undo_count,
+            "redoCount": redo_count,
+            "undoByActor": undo_by_actor,
+            "redoByActor": redo_by_actor,
+            "nextUndo": next_undo,
+            "nextRedo": next_redo,
+        }))
     }
 
     fn translate(&self, formula: &str, rows: i64, cols: i64) -> Response {

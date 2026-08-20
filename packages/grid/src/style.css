@@ -17,6 +17,9 @@
   --cm-error-fg: #c0392b;
   --cm-readonly-fg: #999;
   --cm-agent-marker: #7a5af8;
+  --cm-comment-bg: #fffbe6;
+  --cm-comment-marker: #c08a00;
+  --cm-search-bg: rgba(255, 210, 0, 0.35);
 
   position: relative;
   overflow: hidden;
@@ -122,6 +125,62 @@
   color: var(--cm-cell-fg);
 }
 
+
+/* A merged cell: the corner spans, the covered ones are not drawn. */
+.cm-grid .cm-merged {
+  text-align: left;
+  vertical-align: top;
+}
+
+/* A cell carrying a comment, marked by a corner triangle. */
+.cm-grid .htCommentCell {
+  position: relative;
+}
+
+.cm-grid .htCommentCell::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  border-top: 6px solid var(--cm-comment-marker);
+  border-left: 6px solid transparent;
+}
+
+.cm-grid .cm-comment {
+  position: absolute;
+  z-index: 20;
+  box-sizing: border-box;
+  min-width: 180px;
+  min-height: 60px;
+  padding: 4px;
+  border: 1px solid var(--cm-border);
+  font: inherit;
+  background: var(--cm-comment-bg);
+  color: var(--cm-cell-fg);
+  resize: both;
+}
+
+/* A search hit. Marked, never edited: a search is not a change. */
+.cm-grid .htSearchResult {
+  background: var(--cm-search-bg);
+}
+
+/* The fold control on a collapsible nested header. */
+.cm-grid .cm-collapse {
+  float: right;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1px solid var(--cm-border);
+  border-radius: 2px;
+  font: inherit;
+  font-size: 10px;
+  line-height: 1;
+  background: var(--cm-cell-bg);
+  color: var(--cm-header-fg);
+  cursor: pointer;
+}
+
 @media (prefers-color-scheme: dark) {
   .cm-grid {
     --cm-border: #3a3a3a;
@@ -131,5 +190,8 @@
     --cm-cell-fg: #eee;
     --cm-selected-bg: rgba(90, 150, 255, 0.18);
     --cm-readonly-fg: #777;
+    --cm-comment-bg: #2b2b1f;
+    --cm-comment-marker: #d0a000;
+    --cm-search-bg: rgba(255, 210, 0, 0.22);
   }
 }

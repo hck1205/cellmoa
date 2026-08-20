@@ -145,6 +145,11 @@ pub enum Request {
     Fingerprint,
     /// Check the workbook against a specification.
     Verify { spec: Spec },
+    /// What undo and redo would do next.
+    ///
+    /// A toolbar needs this to grey out its buttons, and the per-actor counts
+    /// are what let it offer "undo the agent's changes" separately from "undo".
+    UndoState,
     /// The whole edit journal, for saving or replaying.
     Journal,
     /// The built-in function catalogue.

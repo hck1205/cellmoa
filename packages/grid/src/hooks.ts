@@ -80,7 +80,21 @@ export const HOOK_NAMES = [
   'modifyTransformStart',
 ] as const;
 
-export type HookName = (typeof HOOK_NAMES)[number];
+/**
+ * Hooks this grid fires that Handsontable does not have.
+ *
+ * They are listed apart from the ported ones so the parity count stays honest:
+ * 253 is the number of Handsontable hooks, and quietly padding it with our own
+ * would make the figure mean nothing.
+ */
+export const EXTRA_HOOK_NAMES = [
+  /** Asks how many rows deep the column header is. */
+  'modifyColHeaderLevels',
+  /** Replaces the column header's structure, for a nested header. */
+  'modifyColHeaderRows',
+] as const;
+
+export type HookName = (typeof HOOK_NAMES)[number] | (typeof EXTRA_HOOK_NAMES)[number];
 
 /** A hook handler. The return value only matters for `before*` hooks. */
 export type HookHandler = (...args: any[]) => unknown;
@@ -92,7 +106,7 @@ interface Registration {
   removed?: boolean;
 }
 
-const KNOWN = new Set<string>(HOOK_NAMES);
+const KNOWN = new Set<string>([...HOOK_NAMES, ...EXTRA_HOOK_NAMES]);
 
 /** Whether a name is one of the hooks this grid fires. */
 export function isHookName(name: string): name is HookName {
