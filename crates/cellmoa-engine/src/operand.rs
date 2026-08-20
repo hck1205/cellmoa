@@ -124,6 +124,26 @@ impl Operand {
         }
     }
 
+    /// The shape, clamped to the data that actually exists.
+    ///
+    /// `COUNTIF(A:A,"<>x")` has to visit positions rather than stored cells,
+    /// because a criterion can match a blank. Walking the literal shape would
+    /// mean a million iterations per whole-column argument, so the shape is
+    /// trimmed to the sheet's used range first — positions past the last cell
+    /// with anything in it cannot differ from one another.
+    pub fn effective_shape(&self, wb: &Workbook) -> (usize, usize) {
+        let Operand::Ref(areas) = self else { return self.shape() };
+        let [area] = areas.as_slice() else { return self.shape() };
+        let Some(sheet) = wb.sheet(area.sheet) else { return (0, 0) };
+        let Some(used) = sheet.used_range() else { return (0, 0) };
+        if used.end.row < area.range.start.row || used.end.col < area.range.start.col {
+            return (0, 0);
+        }
+        let rows = (used.end.row.min(area.range.end.row) - area.range.start.row + 1) as usize;
+        let cols = (used.end.col.min(area.range.end.col) - area.range.start.col + 1) as usize;
+        (rows.min(area.range.height() as usize), cols.min(area.range.width() as usize))
+    }
+
     /// The value at a position within this operand's shape.
     ///
     /// Reading past the end of a one-row or one-column operand repeats it,
@@ -366,6 +386,17 @@ mod tests {
 
         let col = Operand::Array(Array::column(vec![Value::Number(7.0), Value::Number(8.0)]));
         assert_eq!(col.value_at(&wb, 1, 5), Value::Number(8.0));
+    }
+
+    #[test]
+    fn the_effective_shape_stops_at_the_last_cell_with_data() {
+        let wb = wb();
+        // A1:A1048576 has four cells in it; the effective shape is four rows.
+        assert_eq!(area("A1:A1048576").effective_shape(&wb), (4, 1));
+        // Starting below the data gives nothing to iterate.
+        assert_eq!(area("A100:A200").effective_shape(&wb), (0, 0));
+        // A literal array is unaffected.
+        assert_eq!(Operand::Array(Array::row(vec![Value::Blank; 3])).effective_shape(&wb), (1, 3));
     }
 
     #[test]

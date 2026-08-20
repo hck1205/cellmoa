@@ -12,9 +12,11 @@ use cellmoa_formula::ast::Expr;
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
+pub mod criteria;
 pub mod info;
 pub mod logical;
 pub mod math;
+pub mod stats;
 pub mod text;
 
 /// How a function receives its arguments.
@@ -111,7 +113,7 @@ pub const fn lazy(
 
 /// Every category's catalogue, in registration order.
 fn catalogues() -> &'static [&'static [Function]] {
-    &[math::FUNCTIONS, logical::FUNCTIONS, text::FUNCTIONS, info::FUNCTIONS]
+    &[math::FUNCTIONS, logical::FUNCTIONS, text::FUNCTIONS, info::FUNCTIONS, stats::FUNCTIONS]
 }
 
 fn registry() -> &'static HashMap<String, &'static Function> {

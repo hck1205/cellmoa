@@ -547,3 +547,219 @@ fn a_deep_dependency_chain_evaluates_without_overflowing() {
     }
     assert_eq!(number(&engine, "A5000"), 5000.0);
 }
+
+// ---------------------------------------------------------------------------
+// Statistics and criteria
+// ---------------------------------------------------------------------------
+
+/// Fills A1:B7 with a small sales table:
+/// column A is a region, column B an amount.
+fn sales_table() -> Engine {
+    let mut engine = sheet();
+    let rows = [
+        ("North", "100"),
+        ("South", "200"),
+        ("North", "300"),
+        ("East", "-50"),
+        ("North", ""),
+        ("South", "400"),
+        ("Northwest", "10"),
+    ];
+    for (i, (region, amount)) in rows.iter().enumerate() {
+        let row = i + 1;
+        type_in(&mut engine, &format!("A{row}"), region);
+        if !amount.is_empty() {
+            type_in(&mut engine, &format!("B{row}"), amount);
+        }
+    }
+    engine
+}
+
+#[test]
+fn counting_distinguishes_numbers_text_and_blanks() {
+    let mut engine = sales_table();
+    type_in(&mut engine, "D1", "=COUNT(B1:B7)");
+    type_in(&mut engine, "D2", "=COUNTA(A1:A7)");
+    type_in(&mut engine, "D3", "=COUNTBLANK(B1:B7)");
+    assert_eq!(number(&engine, "D1"), 6.0);
+    assert_eq!(number(&engine, "D2"), 7.0);
+    assert_eq!(number(&engine, "D3"), 1.0);
+}
+
+#[test]
+fn count_reads_a_typed_literal_but_not_text_in_a_cell() {
+    assert_eq!(calc_num("=COUNT(1,\"1\",TRUE)"), 3.0);
+    let mut engine = sheet();
+    type_in(&mut engine, "A1", "1");
+    type_in(&mut engine, "A2", "not a number");
+    type_in(&mut engine, "B1", "=COUNT(A1:A2)");
+    assert_eq!(number(&engine, "B1"), 1.0);
+}
+
+#[test]
+fn count_ignores_an_error_in_the_range() {
+    let mut engine = sheet();
+    type_in(&mut engine, "A1", "1");
+    type_in(&mut engine, "A2", "=1/0");
+    type_in(&mut engine, "B1", "=COUNT(A1:A2)");
+    // Every other aggregate would propagate the #DIV/0!.
+    assert_eq!(number(&engine, "B1"), 1.0);
+}
+
+#[test]
+fn sumif_and_countif_match_on_criteria() {
+    let mut engine = sales_table();
+    type_in(&mut engine, "D1", "=SUMIF(A1:A7,\"North\",B1:B7)");
+    type_in(&mut engine, "D2", "=COUNTIF(A1:A7,\"North\")");
+    type_in(&mut engine, "D3", "=SUMIF(B1:B7,\">100\")");
+    assert_eq!(number(&engine, "D1"), 400.0);
+    // "North" is an equality test, so "Northwest" does not match.
+    assert_eq!(number(&engine, "D2"), 3.0);
+    assert_eq!(number(&engine, "D3"), 900.0);
+}
+
+#[test]
+fn criteria_take_wildcards() {
+    let mut engine = sales_table();
+    type_in(&mut engine, "D1", "=COUNTIF(A1:A7,\"North*\")");
+    type_in(&mut engine, "D2", "=SUMIF(A1:A7,\"*outh\",B1:B7)");
+    assert_eq!(number(&engine, "D1"), 4.0);
+    assert_eq!(number(&engine, "D2"), 600.0);
+}
+
+#[test]
+fn a_sum_range_is_stretched_to_match_the_criteria_range() {
+    let mut engine = sales_table();
+    // B1 alone, resized to B1:B7 — Excel's rule.
+    type_in(&mut engine, "D1", "=SUMIF(A1:A7,\"North\",B1)");
+    assert_eq!(number(&engine, "D1"), 400.0);
+}
+
+#[test]
+fn sumifs_applies_every_criterion() {
+    let mut engine = sales_table();
+    type_in(&mut engine, "D1", "=SUMIFS(B1:B7,A1:A7,\"North\",B1:B7,\">150\")");
+    type_in(&mut engine, "D2", "=COUNTIFS(A1:A7,\"North\",B1:B7,\">150\")");
+    assert_eq!(number(&engine, "D1"), 300.0);
+    assert_eq!(number(&engine, "D2"), 1.0);
+}
+
+#[test]
+fn a_criteria_range_can_be_a_whole_column() {
+    let mut engine = sales_table();
+    // The engine must not walk a million rows to answer this.
+    type_in(&mut engine, "D1", "=COUNTIF(A:A,\"North\")");
+    type_in(&mut engine, "D2", "=SUMIF(A:A,\"North\",B:B)");
+    assert_eq!(number(&engine, "D1"), 3.0);
+    assert_eq!(number(&engine, "D2"), 400.0);
+}
+
+#[test]
+fn maxifs_handles_an_all_negative_match() {
+    let mut engine = sales_table();
+    type_in(&mut engine, "D1", "=MAXIFS(B1:B7,A1:A7,\"East\")");
+    type_in(&mut engine, "D2", "=MAXIFS(B1:B7,A1:A7,\"Nowhere\")");
+    assert_eq!(number(&engine, "D1"), -50.0);
+    // Nothing matched, so the answer is zero rather than a negative infinity.
+    assert_eq!(number(&engine, "D2"), 0.0);
+}
+
+#[test]
+fn averages_and_extremes() {
+    let mut engine = sales_table();
+    type_in(&mut engine, "D1", "=AVERAGE(B1:B7)");
+    type_in(&mut engine, "D2", "=MAX(B1:B7)");
+    type_in(&mut engine, "D3", "=MIN(B1:B7)");
+    type_in(&mut engine, "D4", "=MEDIAN(B1:B7)");
+    assert_eq!(number(&engine, "D1"), 960.0 / 6.0);
+    assert_eq!(number(&engine, "D2"), 400.0);
+    assert_eq!(number(&engine, "D3"), -50.0);
+    assert_eq!(number(&engine, "D4"), 150.0);
+}
+
+#[test]
+fn averaging_nothing_is_a_division_by_zero() {
+    let mut engine = sheet();
+    // The formula sits outside the range it reads; putting it inside would be
+    // a self-reference, and correctly reports a cycle instead.
+    type_in(&mut engine, "C1", "=AVERAGE(A1:A9)");
+    type_in(&mut engine, "C2", "=MAX(A1:A9)");
+    assert_eq!(value(&engine, "C1"), Value::Error(CellError::Div0));
+    // MAX of nothing, however, is zero.
+    assert_eq!(value(&engine, "C2"), Value::Number(0.0));
+}
+
+#[test]
+fn an_aggregate_over_its_own_cell_is_a_cycle() {
+    assert_eq!(calc("=SUM(A1:A9)"), Value::Error(CellError::Cycle));
+}
+
+#[test]
+fn sample_and_population_spread_differ_by_their_denominator() {
+    let mut engine = sheet();
+    for (row, n) in (1..=5).zip([2, 4, 4, 4, 5]) {
+        type_in(&mut engine, &format!("A{row}"), &n.to_string());
+    }
+    type_in(&mut engine, "C1", "=VAR.P(A1:A5)");
+    type_in(&mut engine, "C2", "=STDEV.P(A1:A5)");
+    type_in(&mut engine, "C3", "=VAR.S(A1:A5)");
+    // 2,4,4,4,5 has a mean of 3.8 and a squared-deviation total of 4.8.
+    assert_eq!(number(&engine, "C1"), 4.8 / 5.0);
+    assert_eq!(number(&engine, "C2"), (4.8f64 / 5.0).sqrt());
+    assert_eq!(number(&engine, "C3"), 4.8 / 4.0);
+}
+
+#[test]
+fn order_statistics() {
+    let mut engine = sheet();
+    for (row, n) in (1..=5).zip([1, 2, 3, 4, 10]) {
+        type_in(&mut engine, &format!("A{row}"), &n.to_string());
+    }
+    type_in(&mut engine, "C1", "=LARGE(A1:A5,2)");
+    type_in(&mut engine, "C2", "=SMALL(A1:A5,2)");
+    type_in(&mut engine, "C3", "=MEDIAN(A1:A5)");
+    type_in(&mut engine, "C4", "=PERCENTILE.INC(A1:A5,0.5)");
+    type_in(&mut engine, "C5", "=QUARTILE.INC(A1:A5,1)");
+    type_in(&mut engine, "C6", "=RANK(4,A1:A5)");
+    assert_eq!(number(&engine, "C1"), 4.0);
+    assert_eq!(number(&engine, "C2"), 2.0);
+    assert_eq!(number(&engine, "C3"), 3.0);
+    assert_eq!(number(&engine, "C4"), 3.0);
+    assert_eq!(number(&engine, "C5"), 2.0);
+    assert_eq!(number(&engine, "C6"), 2.0);
+}
+
+#[test]
+fn correlation_and_regression_on_a_perfect_line() {
+    let mut engine = sheet();
+    for (row, (x, y)) in (1..=4).zip([(1, 3), (2, 5), (3, 7), (4, 9)]) {
+        type_in(&mut engine, &format!("A{row}"), &x.to_string());
+        type_in(&mut engine, &format!("B{row}"), &y.to_string());
+    }
+    // y = 2x + 1 exactly.
+    type_in(&mut engine, "D1", "=SLOPE(B1:B4,A1:A4)");
+    type_in(&mut engine, "D2", "=INTERCEPT(B1:B4,A1:A4)");
+    type_in(&mut engine, "D3", "=CORREL(A1:A4,B1:B4)");
+    type_in(&mut engine, "D4", "=FORECAST(10,B1:B4,A1:A4)");
+    assert_eq!(number(&engine, "D1"), 2.0);
+    assert_eq!(number(&engine, "D2"), 1.0);
+    assert!((number(&engine, "D3") - 1.0).abs() < 1e-12);
+    assert_eq!(number(&engine, "D4"), 21.0);
+}
+
+#[test]
+fn mode_reports_nothing_when_nothing_repeats() {
+    let mut engine = sheet();
+    for (row, n) in (1..=5).zip([1, 2, 2, 3, 3]) {
+        type_in(&mut engine, &format!("A{row}"), &n.to_string());
+    }
+    type_in(&mut engine, "C1", "=MODE.SNGL(A1:A5)");
+    assert_eq!(number(&engine, "C1"), 2.0);
+
+    let mut engine = sheet();
+    for (row, n) in (1..=3).zip([1, 2, 3]) {
+        type_in(&mut engine, &format!("A{row}"), &n.to_string());
+    }
+    type_in(&mut engine, "C1", "=MODE.SNGL(A1:A3)");
+    assert_eq!(value(&engine, "C1"), Value::Error(CellError::NA));
+}
