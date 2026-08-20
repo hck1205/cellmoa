@@ -7,6 +7,7 @@
 pub mod ast;
 pub mod lexer;
 pub mod parser;
+pub mod translate;
 
 pub use ast::{BinaryOp, ColRef, Expr, Ref, RefKind, RowRef, SheetSpec, UnaryOp};
 pub use lexer::{tokenize, ParseError};

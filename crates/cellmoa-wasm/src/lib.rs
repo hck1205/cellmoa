@@ -134,7 +134,8 @@ pub unsafe extern "C" fn cellmoa_open_bytes(
     let Some(handle) = session.as_mut() else {
         return reply(r#"{"ok":false,"code":"bad_handle","message":"no session"}"#);
     };
-    let bytes = if ptr.is_null() { &[][..] } else { std::slice::from_raw_parts(ptr as *const u8, len) };
+    let bytes =
+        if ptr.is_null() { &[][..] } else { std::slice::from_raw_parts(ptr as *const u8, len) };
     match handle.0.open_bytes(bytes) {
         Ok(()) => reply(&handle.0.dispatch_json(r#"{"op":"sheets"}"#)),
         Err(message) => {
@@ -207,8 +208,7 @@ mod tests {
     fn a_session_round_trips_a_command() {
         unsafe {
             let session = cellmoa_session_new();
-            let answer =
-                send(session, r#"{"op":"write","cells":[{"cell":"A1","input":"=6*7"}]}"#);
+            let answer = send(session, r#"{"op":"write","cells":[{"cell":"A1","input":"=6*7"}]}"#);
             assert!(answer.contains(r#""ok":true"#), "{answer}");
 
             let answer = send(session, r#"{"op":"read","range":"A1"}"#);

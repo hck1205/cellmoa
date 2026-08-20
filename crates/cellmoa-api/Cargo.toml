@@ -9,6 +9,7 @@ repository.workspace = true
 [dependencies]
 cellmoa-core.workspace = true
 cellmoa-engine.workspace = true
+cellmoa-formula.workspace = true
 cellmoa-xlsx.workspace = true
 cellmoa-diff.workspace = true
 serde.workspace = true

@@ -5,8 +5,9 @@ use crate::zip::{Archive, ZipError};
 use cellmoa_core::model::{Cell, CellContent, DefinedName, Sheet, Workbook};
 use cellmoa_core::reference::{CellRef, RangeRef};
 use cellmoa_core::value::{CellError, Value};
-use cellmoa_formula::ast::{Expr, Ref, RefKind};
+use cellmoa_formula::ast::Expr;
 use cellmoa_formula::parse;
+use cellmoa_formula::translate::translate;
 use std::collections::BTreeMap;
 use std::fmt;
 
@@ -372,82 +373,6 @@ fn decode_value(kind: &str, raw: Option<&str>, shared_strings: &[String]) -> Val
     }
 }
 
-/// Shifts every relative reference in an expression, for expanding a shared
-/// formula into the cells that use it.
-pub fn translate(expr: &Expr, dcol: i64, drow: i64) -> Expr {
-    match expr {
-        Expr::Ref(reference) => Expr::Ref(Ref {
-            sheet: reference.sheet.clone(),
-            kind: translate_kind(&reference.kind, dcol, drow),
-        }),
-        Expr::Unary { op, expr } => {
-            Expr::Unary { op: *op, expr: Box::new(translate(expr, dcol, drow)) }
-        }
-        Expr::Binary { op, lhs, rhs } => Expr::Binary {
-            op: *op,
-            lhs: Box::new(translate(lhs, dcol, drow)),
-            rhs: Box::new(translate(rhs, dcol, drow)),
-        },
-        Expr::Func { name, args } => Expr::Func {
-            name: name.clone(),
-            args: args.iter().map(|a| translate(a, dcol, drow)).collect(),
-        },
-        Expr::Paren(inner) => Expr::Paren(Box::new(translate(inner, dcol, drow))),
-        Expr::Array(rows) => Expr::Array(
-            rows.iter().map(|row| row.iter().map(|c| translate(c, dcol, drow)).collect()).collect(),
-        ),
-        other => other.clone(),
-    }
-}
-
-fn translate_kind(kind: &RefKind, dcol: i64, drow: i64) -> RefKind {
-    // A reference shifted off the sheet becomes #REF!, exactly as it would if
-    // the formula had been copied there by hand.
-    match kind {
-        RefKind::Cell(cell) => match cell.offset(dcol, drow) {
-            Ok(moved) => RefKind::Cell(moved),
-            Err(_) => RefKind::Invalid,
-        },
-        RefKind::Range(range) => match range.offset(dcol, drow) {
-            Ok(moved) => RefKind::Range(moved),
-            Err(_) => RefKind::Invalid,
-        },
-        RefKind::Cols(a, b) => {
-            let shift = |c: &cellmoa_formula::ast::ColRef| {
-                if c.abs {
-                    Some(*c)
-                } else {
-                    let moved = c.col as i64 + dcol;
-                    (0..cellmoa_core::reference::MAX_COLS as i64)
-                        .contains(&moved)
-                        .then_some(cellmoa_formula::ast::ColRef { col: moved as u32, abs: c.abs })
-                }
-            };
-            match (shift(a), shift(b)) {
-                (Some(a), Some(b)) => RefKind::Cols(a, b),
-                _ => RefKind::Invalid,
-            }
-        }
-        RefKind::Rows(a, b) => {
-            let shift = |r: &cellmoa_formula::ast::RowRef| {
-                if r.abs {
-                    Some(*r)
-                } else {
-                    let moved = r.row as i64 + drow;
-                    (0..cellmoa_core::reference::MAX_ROWS as i64)
-                        .contains(&moved)
-                        .then_some(cellmoa_formula::ast::RowRef { row: moved as u32, abs: r.abs })
-                }
-            };
-            match (shift(a), shift(b)) {
-                (Some(a), Some(b)) => RefKind::Rows(a, b),
-                _ => RefKind::Invalid,
-            }
-        }
-        RefKind::Invalid => RefKind::Invalid,
-    }
-}
-
 /// The used range of a sheet, as written in the `dimension` element.
 pub fn dimension(sheet: &Sheet) -> String {
     match sheet.used_range() {
@@ -489,25 +414,5 @@ mod tests {
     #[test]
     fn a_shared_string_index_past_the_table_does_not_panic() {
         assert_eq!(decode_value("s", Some("9"), &[]), Value::Text("9".into()));
-    }
-
-    #[test]
-    fn translating_a_formula_moves_only_its_relative_parts() {
-        let expr = parse("$A$1+B2+C$3").unwrap();
-        assert_eq!(translate(&expr, 1, 1).to_string(), "$A$1+C3+D$3");
-    }
-
-    #[test]
-    fn translating_off_the_sheet_yields_a_ref_error() {
-        let expr = parse("A1").unwrap();
-        assert_eq!(translate(&expr, -1, 0).to_string(), "#REF!");
-    }
-
-    #[test]
-    fn translating_a_range_and_a_whole_column() {
-        assert_eq!(translate(&parse("A1:B2").unwrap(), 2, 0).to_string(), "C1:D2");
-        assert_eq!(translate(&parse("A:B").unwrap(), 1, 0).to_string(), "B:C");
-        assert_eq!(translate(&parse("$A:$B").unwrap(), 1, 0).to_string(), "$A:$B");
-        assert_eq!(translate(&parse("1:2").unwrap(), 0, 5).to_string(), "6:7");
     }
 }

@@ -110,6 +110,7 @@ impl Session {
             Request::Redo { who, only_by } => self.redo(&who, only_by.as_deref()),
             Request::AddSheet { name, who } => self.add_sheet(&name, &who),
             Request::Eval { formula, sheet } => self.eval(&formula, sheet.as_deref()),
+            Request::Translate { formula, rows, cols } => self.translate(&formula, rows, cols),
             Request::History { cell, sheet } => self.history(&cell, sheet.as_deref()),
             Request::Fingerprint => {
                 let digests = fingerprint(self.engine.workbook());
@@ -351,6 +352,25 @@ impl Session {
                 "error": value.as_error().map(|e| e.as_str()),
             })),
             Err(e) => Response::error("bad_formula", e),
+        }
+    }
+
+    fn translate(&self, formula: &str, rows: i64, cols: i64) -> Response {
+        let body = formula.strip_prefix('=').unwrap_or(formula);
+        // Anything that is not a formula is carried over unchanged: filling a
+        // column of text must not try to parse it.
+        if !formula.starts_with('=') {
+            return self.ok(json!({ "formula": formula }));
+        }
+        match cellmoa_formula::parse(body) {
+            Ok(expr) => {
+                let moved = cellmoa_formula::translate::translate(&expr, cols, rows);
+                self.ok(json!({ "formula": format!("={moved}") }))
+            }
+            // A formula the parser rejects is copied verbatim rather than
+            // dropped, which is what a spreadsheet does with text it cannot
+            // read.
+            Err(_) => self.ok(json!({ "formula": formula })),
         }
     }
 

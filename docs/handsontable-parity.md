@@ -32,14 +32,14 @@ Handsontable 저장소(`handsontable/handsontable`)의 소스와 문서에서 �
 |---|:--:|---|
 | `autoColumnSize` | ✅ | |
 | `autoRowSize` | ⬜ | |
-| `autofill` | ⬜ | |
+| `autofill` | ✅ | 수식은 상대 참조를 이동시켜 채움 ➕ |
 | `bindRowsWithHeaders` | ⬜ | |
 | `collapsibleColumns` | ⬜ | |
 | `columnSorting` | ✅ | |
 | `columnSummary` | ⬜ | |
-| `comments` | ⬜ | |
+| `comments` | ✅ | 주석은 셀 메타에만 저장 — 워크북/수식에 영향 없음 |
 | `contextMenu` | ⬜ | |
-| `copyPaste` | ⬜ | |
+| `copyPaste` | ✅ | `text/plain` + `text/html` 양쪽 기록. 자기 복사본 붙여넣기는 수식 참조 이동 ➕ |
 | `customBorders` | ⬜ | |
 | `dataProvider` | ⬜ | |
 | `dialog` | ⬜ | |
@@ -58,7 +58,7 @@ Handsontable 저장소(`handsontable/handsontable`)의 소스와 문서에서 �
 | `manualResize` | ⬜ | |
 | `manualRowMove` | ✅ | |
 | `manualRowResize` | ✅ | |
-| `mergeCells` | ⬜ | |
+| `mergeCells` | ✅ | 코너 셀만 값 유지, 나머지는 비움 |
 | `moveCells` | ⬜ | |
 | `multiColumnSorting` | ✅ | |
 | `multipleSelectionHandles` | ⬜ | |

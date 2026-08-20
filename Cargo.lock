@@ -15,6 +15,7 @@ dependencies = [
  "cellmoa-core",
  "cellmoa-diff",
  "cellmoa-engine",
+ "cellmoa-formula",
  "cellmoa-xlsx",
  "serde",
  "serde_json",

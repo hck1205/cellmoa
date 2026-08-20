@@ -17,3 +17,21 @@ export type { HidingSettings } from './hiding.js';
 export { ManualColumnFreeze, ManualColumnMove, ManualRowMove } from './manualMove.js';
 
 export { AutoColumnSize, ManualColumnResize, ManualRowResize } from './manualResize.js';
+
+export { Autofill, extendSeries } from './autofill.js';
+export type { AutofillSettings } from './autofill.js';
+
+export { Comments } from './comments.js';
+export type { Comment, CommentSettings } from './comments.js';
+
+export {
+  CopyPaste,
+  escapeClipboardValue,
+  parseClipboardText,
+  toClipboardHtml,
+  toClipboardText,
+} from './copyPaste.js';
+export type { CopyPasteSettings } from './copyPaste.js';
+
+export { MergeCells } from './mergeCells.js';
+export type { MergedArea } from './mergeCells.js';

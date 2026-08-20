@@ -165,6 +165,25 @@ fn evaluating_a_formula_does_not_change_the_workbook() {
 }
 
 #[test]
+fn translating_a_formula_moves_its_relative_references() {
+    let mut session = Session::new();
+    let response =
+        ok(&mut session, json!({ "op": "translate", "formula": "=A1+$B$2", "rows": 2, "cols": 1 }));
+    assert_eq!(response["formula"], json!("=B3+$B$2"));
+}
+
+#[test]
+fn translating_something_that_is_not_a_formula_leaves_it_alone() {
+    let mut session = Session::new();
+    // Filling a column of text must not go through the parser at all.
+    let response = ok(&mut session, json!({ "op": "translate", "formula": "A1", "rows": 5 }));
+    assert_eq!(response["formula"], json!("A1"));
+    // Nor may an unparseable formula be dropped on the floor.
+    let broken = ok(&mut session, json!({ "op": "translate", "formula": "=SUM(", "rows": 1 }));
+    assert_eq!(broken["formula"], json!("=SUM("));
+}
+
+#[test]
 fn errors_are_reported_in_a_field_of_their_own() {
     let mut session = Session::new();
     ok(&mut session, json!({ "op": "write", "cells": [{ "cell": "A1", "input": "=1/0" }] }));

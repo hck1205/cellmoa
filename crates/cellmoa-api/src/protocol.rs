@@ -120,6 +120,21 @@ pub enum Request {
         #[serde(default)]
         sheet: Option<String>,
     },
+    /// Shift a formula's relative references, as copying it would.
+    ///
+    /// The grid needs this for filling and for pasting: a formula moved one row
+    /// down must mean the same thing one row down, and the shift has to follow
+    /// the same rules the importer uses for shared formulas.
+    Translate {
+        /// The formula, with or without its leading `=`.
+        formula: String,
+        /// Rows to move by; negative moves up.
+        #[serde(default)]
+        rows: i64,
+        /// Columns to move by; negative moves left.
+        #[serde(default)]
+        cols: i64,
+    },
     /// Who changed a cell, and when.
     History {
         cell: String,
