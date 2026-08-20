@@ -32,6 +32,11 @@ export interface UndoState {
 export class UndoRedo extends BasePlugin {
   static override readonly pluginName: string = 'undoRedo';
 
+  /** The setting is `undo`, not the plugin's own name. */
+  static override get settingKeys(): string[] {
+    return ['undo'];
+  }
+
   override isEnabled(): boolean {
     return this.grid.getSettings().undo !== false;
   }

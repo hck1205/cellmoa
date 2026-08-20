@@ -375,10 +375,13 @@ if ('data' in settings) {
     this.#selection.setNavigableHeaders(this.getSettings().navigableHeaders === true);
     this.#view?.layout.setOrder((this.getSettings().layout as LayoutSettings | undefined) ?? {});
     this.#syncDimensions();
-    // Every plugin re-reads the settings, so a feature can be switched on
-    // after the grid was built.
+    // A plugin re-reads the settings when the payload names one it depends on,
+    // so a feature can be switched on after the grid was built — and a plugin
+    // the payload says nothing about keeps whatever state it was holding.
     for (const plugin of this.#plugins.values()) {
-      plugin.updatePlugin();
+      if (plugin.concernedBy(settings)) {
+        plugin.updatePlugin();
+      }
     }
     this.hooks.run('afterUpdateSettings', settings);
     if (redraw) {

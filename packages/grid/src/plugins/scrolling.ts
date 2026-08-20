@@ -138,6 +138,11 @@ registerPlugin(DragToScroll as never);
 export class TouchScroll extends BasePlugin {
   static override readonly pluginName: string = 'touchScroll';
 
+  /** Touch scrolling follows the whole layout, not one setting. */
+  static override get settingKeys(): boolean {
+    return true;
+  }
+
   #start: { x: number; y: number; scrollLeft: number; scrollTop: number } | null = null;
 
   override isEnabled(): boolean {

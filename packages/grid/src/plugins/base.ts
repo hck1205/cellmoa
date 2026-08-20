@@ -20,6 +20,23 @@ export abstract class BasePlugin {
   /** The name the plugin is looked up by. */
   static readonly pluginName: string = 'base';
 
+  /**
+   * Which settings this plugin has to re-read when `updateSettings` is called.
+   *
+   * A plugin whose setting is not in the payload is left alone, and that is the
+   * whole point: the default used to be "every plugin re-reads everything",
+   * which meant `updateSettings({ height: 500 })` tore down and rebuilt the
+   * sorting plugin — silently un-sorting the table for someone who only changed
+   * how tall it was.
+   *
+   * `true` means always, for a plugin that genuinely depends on the settings at
+   * large; `false` means never. Otherwise it is the list of names, which
+   * defaults to the plugin's own.
+   */
+  static get settingKeys(): string[] | boolean {
+    return [this.pluginName];
+  }
+
   protected readonly grid: Grid;
   #enabled = false;
   /** Hooks added while enabled, so they can all be taken off again. */
@@ -45,6 +62,15 @@ export abstract class BasePlugin {
   /** Takes it down again. The base class removes hooks and listeners. */
   protected onDisable(): void {
     // Most plugins need nothing beyond what the base class undoes.
+  }
+
+  /** Whether an `updateSettings` payload is one this plugin has to act on. */
+  concernedBy(settings: object): boolean {
+    const keys = (this.constructor as typeof BasePlugin).settingKeys;
+    if (typeof keys === 'boolean') {
+      return keys;
+    }
+    return keys.some((key) => key in settings);
   }
 
   /** Whether the plugin is currently running. */

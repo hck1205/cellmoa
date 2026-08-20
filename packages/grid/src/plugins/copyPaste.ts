@@ -143,6 +143,11 @@ export function parsePastedValue(text: string, locale = 'en-US'): string {
 export class CopyPaste extends BasePlugin {
   static override readonly pluginName: string = 'copyPaste';
 
+  /** `fragmentSelection` decides whether a selection can be copied at all. */
+  static override get settingKeys(): string[] {
+    return ['copyPaste', 'fragmentSelection'];
+  }
+
   /**
    * The last copy made from this grid.
    *

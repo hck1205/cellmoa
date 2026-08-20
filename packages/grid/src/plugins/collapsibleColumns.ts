@@ -28,6 +28,11 @@ export interface CollapsibleGroup {
 export class CollapsibleColumns extends BasePlugin {
   static override readonly pluginName: string = 'collapsibleColumns';
 
+  /** There is nothing to collapse without the nested header that defines the groups. */
+  static override get settingKeys(): string[] {
+    return ['collapsibleColumns', 'nestedHeaders'];
+  }
+
   /** The header cells currently folded, keyed `level:col`. */
   #collapsed = new Set<string>();
   /** The columns this plugin is folding away. */

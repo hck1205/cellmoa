@@ -83,6 +83,11 @@ export class ManualColumnResize extends ManualResize {
 export class AutoRowSize extends BasePlugin {
   static override readonly pluginName: string = 'autoRowSize';
 
+  /** Sizing reads the widths, the heights and the data, so any change may move it. */
+  static override get settingKeys(): boolean {
+    return true;
+  }
+
   /** Rows this plugin sized itself. */
   #measured = new Set<number>();
 
@@ -147,6 +152,11 @@ registerPlugin(AutoRowSize as never);
  */
 export class StretchColumns extends BasePlugin {
   static override readonly pluginName: string = 'stretchColumns';
+
+  /** Sizing reads the widths, the heights and the data, so any change may move it. */
+  static override get settingKeys(): boolean {
+    return true;
+  }
 
   /**
    * The widths the columns had before any stretching.
@@ -240,6 +250,11 @@ registerPlugin(StretchColumns as never);
  */
 export class AutoColumnSize extends BasePlugin {
   static override readonly pluginName: string = 'autoColumnSize';
+
+  /** Sizing reads the widths, the heights and the data, so any change may move it. */
+  static override get settingKeys(): boolean {
+    return true;
+  }
 
   /** How wide one character is, roughly, at the default font. */
   static readonly CHARACTER_WIDTH = 7;

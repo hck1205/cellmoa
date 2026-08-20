@@ -129,6 +129,31 @@ methods   146/146 present  (0 named by the reference and missing)
 | 헤더 (배열·함수·기본 A1 표기) | ✅ | |
 | batch / suspendRender | ✅ | |
 
+## 플러그인 생명주기 (`tools-and-building/custom-plugins`)
+
+`isEnabled` → `enablePlugin` → (`updatePlugin`)* → `disablePlugin` → `destroy`.
+Handsontable와 같은 순서라서 그쪽에 맞춰 쓴 플러그인이 그대로 옮겨온다.
+
+| 항목 | 여기 | 참조 |
+|---|---|---|
+| 플러그인 이름 | `static pluginName` | `static get PLUGIN_KEY()` |
+| 갱신 대상 설정 | `static get settingKeys()` | `static get SETTING_KEYS()` |
+| 그리드 참조 | `this.grid` | `this.hot` |
+| 훅 등록 (자동 해제) | `this.addHook` | `this.addHook` |
+| DOM 리스너 (자동 해제) | `this.listen` | `this.eventManager` |
+
+`settingKeys`의 기본값은 참조와 같이 `[pluginName]` — 자기 설정이 페이로드에
+없으면 그 플러그인은 건드리지 않는다. 참조를 따라 다르게 선언한 것들:
+
+| 플러그인 | `settingKeys` | 이유 |
+|---|---|---|
+| `undoRedo` | `['undo']` | 설정 이름이 플러그인 이름과 다르다 |
+| `copyPaste` | `+ fragmentSelection` | 선택을 복사할 수 있는지를 그게 정한다 |
+| `collapsibleColumns` | `+ nestedHeaders` | 접을 그룹이 거기서 나온다 |
+| `customBorders` | `+ customBordersProgressive` | 그리는 방식이 바뀐다 |
+| `dataProvider` | `+ 충돌 설정 4종` | 그중 하나가 켜지면 비활성이 되어야 한다 |
+| `autoColumnSize` · `autoRowSize` · `stretchColumns` · `touchScroll` | `true` | 설정 전반에 의존한다 |
+
 ## 서버 데이터 (`dataProvider`)
 
 문서 5쪽(개요·설정·CRUD·페칭·마이그레이션)의 계약을 그대로 구현했다.

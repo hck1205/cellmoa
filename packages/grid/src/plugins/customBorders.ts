@@ -43,6 +43,11 @@ export const DEFAULT_BORDER: BorderEdge = { width: 1, color: '#000' };
 export class CustomBorders extends BasePlugin {
   static override readonly pluginName: string = 'customBorders';
 
+  /** The second setting changes how the first is drawn. */
+  static override get settingKeys(): string[] {
+    return ['customBorders', 'customBordersProgressive'];
+  }
+
   override isEnabled(): boolean {
     const settings = this.grid.getSettings().customBorders;
     return settings === true || Array.isArray(settings);

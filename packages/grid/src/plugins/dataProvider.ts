@@ -148,6 +148,17 @@ export function messageOf(error: unknown, fallback: string): string {
 export class DataProvider extends BasePlugin {
   static override readonly pluginName: string = 'dataProvider';
 
+  /**
+   * Its own setting, and the four that switch it off.
+   *
+   * Turning `manualRowMove` on has to disable this plugin, and turning it
+   * off again has to bring it back — neither happens if the plugin only
+   * ever looks at a payload that names `dataProvider`.
+   */
+  static override get settingKeys(): string[] {
+    return ['dataProvider', ...CONFLICTING];
+  }
+
   #query: QueryParameters = { ...INITIAL_QUERY };
   #totalRows = 0;
   /** Bumped on each fetch, so a slow answer to an old query is discarded. */
