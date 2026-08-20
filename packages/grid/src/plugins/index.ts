@@ -16,7 +16,13 @@ export type { HidingSettings } from './hiding.js';
 
 export { ManualColumnFreeze, ManualColumnMove, ManualRowMove } from './manualMove.js';
 
-export { AutoColumnSize, ManualColumnResize, ManualRowResize } from './manualResize.js';
+export {
+  AutoColumnSize,
+  AutoRowSize,
+  ManualColumnResize,
+  ManualRowResize,
+  StretchColumns,
+} from './manualResize.js';
 
 export { Autofill, extendSeries } from './autofill.js';
 export type { AutofillSettings } from './autofill.js';

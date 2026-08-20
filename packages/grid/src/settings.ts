@@ -14,6 +14,20 @@
 import { CellMap } from './cellMap.js';
 
 import type { HookHandler } from './hooks.js';
+import type { RegisteredTheme } from './themes/index.js';
+import type { DataProviderSettings } from './plugins/dataProvider.js';
+
+/**
+ * One row of a `nestedRows` tree.
+ *
+ * Declared here rather than imported from the plugin: a setting's type has to
+ * be reachable without pulling in the code that acts on it, or every consumer
+ * of `GridSettings` loads every plugin.
+ */
+export interface NestedRow {
+  row: number;
+  children?: NestedRow[];
+}
 
 /** A cell's coordinates in the visual grid. */
 export interface Coords {
@@ -207,7 +221,8 @@ export interface GridSettings {
   hiddenRows?: unknown;
   trimRows?: boolean | number[];
   nestedHeaders?: unknown;
-  nestedRows?: boolean;
+  /** `true` for the defaults, or the tree of parents and children. */
+  nestedRows?: boolean | NestedRow[];
   collapsibleColumns?: unknown;
   columnSummary?: unknown;
   autofill?: unknown;
@@ -233,7 +248,14 @@ export interface GridSettings {
   multipleSelectionHandles?: unknown;
   /** The order of the elements in the slots around the grid. */
   layout?: { top?: string[]; bottom?: string[] };
-  dataProvider?: unknown;
+  /**
+   * Where the rows come from, when they come from somewhere else.
+   *
+   * Typed rather than `unknown` so that writing `fetchRows` gets the query and
+   * the abort signal typed, and a misspelt callback is a compile error rather
+   * than a callback that is never called.
+   */
+  dataProvider?: DataProviderSettings;
 
   // Settings with no Handsontable counterpart.
   /** Show who changed each cell, and mark the ones an agent touched. */
@@ -252,7 +274,8 @@ export interface GridSettings {
 
   // --- appearance -------------------------------------------------------
   themeName?: string;
-  theme?: string;
+  /** A registered theme's name, or the theme itself. */
+  theme?: string | RegisteredTheme;
   parsePastedValue?: boolean;
   filterSelectedItems?: boolean;
   searchInput?: boolean;
@@ -305,9 +328,20 @@ export interface GridSettings {
   ariaTags?: boolean;
 
   // --- type-specific -----------------------------------------------------
-  numericFormat?: { pattern?: string; culture?: string };
-  dateFormat?: string;
-  timeFormat?: string;
+  /**
+   * How a numeric cell is formatted.
+   *
+   * `Intl.NumberFormatOptions`, not Handsontable's `{ pattern, culture }`.
+   * Handsontable formats through numbro; this grid formats through `Intl`,
+   * which every browser already has — so a grid does not ship a second number
+   * formatter to say `$1,234.50`. The type used to say `{ pattern, culture }`
+   * while the renderer read `Intl` options, which made the documented usage a
+   * compile error.
+   */
+  numericFormat?: Intl.NumberFormatOptions;
+  /** `Intl.DateTimeFormatOptions`, for the same reason. */
+  dateFormat?: Intl.DateTimeFormatOptions;
+  timeFormat?: Intl.DateTimeFormatOptions;
   defaultDate?: string;
   correctFormat?: boolean;
   source?: unknown[] | ((query: string, callback: (items: unknown[]) => void) => void);

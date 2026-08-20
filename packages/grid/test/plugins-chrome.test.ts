@@ -284,7 +284,7 @@ describe('sizing plugins', () => {
   });
 
   it('gives the spare width to the last column', async () => {
-    const grid = await makeGrid({ stretchH: 'last', autoColumnSize: false }, 600);
+    const grid = await makeGrid({ ...{ stretchH: 'last', autoColumnSize: false }, viewport: { width: 600, height: 400 } });
     const plugin = grid.getPlugin('stretchColumns') as unknown as StretchColumns;
     const before = grid.getColWidth(2);
     plugin.recalculate();
@@ -298,7 +298,7 @@ describe('sizing plugins', () => {
   });
 
   it('shares the spare width out in proportion', async () => {
-    const grid = await makeGrid({ stretchH: 'all', autoColumnSize: false }, 600);
+    const grid = await makeGrid({ ...{ stretchH: 'all', autoColumnSize: false }, viewport: { width: 600, height: 400 } });
     const plugin = grid.getPlugin('stretchColumns') as unknown as StretchColumns;
     plugin.recalculate();
     // Every column grew, and they all started the same width so they stay equal.
@@ -307,7 +307,7 @@ describe('sizing plugins', () => {
   });
 
   it('gives the widths back when it is switched off', async () => {
-    const grid = await makeGrid({ stretchH: 'last', autoColumnSize: false }, 600);
+    const grid = await makeGrid({ ...{ stretchH: 'last', autoColumnSize: false }, viewport: { width: 600, height: 400 } });
     const before = grid.getColWidth(2);
     const plugin = grid.getPlugin('stretchColumns') as unknown as StretchColumns;
     plugin.recalculate();

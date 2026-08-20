@@ -89,7 +89,7 @@ describe('fetching', () => {
 
   it('aborts the request it has moved on from', async () => {
     const aborted: boolean[] = [];
-    let release: ((result: FetchResult) => void) | null = null;
+    const held: { release?: (result: FetchResult) => void } = {};
     let call = 0;
     const grid = await makeGrid({
       startRows: 1,
@@ -100,7 +100,7 @@ describe('fetching', () => {
           if (call === 1) {
             signal.addEventListener('abort', () => aborted.push(true));
             return new Promise<FetchResult>((resolve) => {
-              release = resolve;
+              held.release = resolve;
             });
           }
           return { rows: [['second']], totalRows: 1 };
@@ -114,7 +114,7 @@ describe('fetching', () => {
     expect(aborted).toEqual([true]);
     expect(grid.getDataAtCell(0, 0)).toBe('second');
 
-    release?.({ rows: [['first']], totalRows: 1 });
+    held.release?.({ rows: [['first']], totalRows: 1 });
     await slow;
     // The overtaken answer does not overwrite the fresh one.
     expect(grid.getDataAtCell(0, 0)).toBe('second');
@@ -123,14 +123,14 @@ describe('fetching', () => {
   it('reports a superseded fetch as an abort, not an error', async () => {
     const aborts: unknown[] = [];
     const errors: unknown[] = [];
-    let release: ((result: FetchResult) => void) | null = null;
+    const held: { release?: (result: FetchResult) => void } = {};
     let slowNext = false;
     const grid = await makeGrid({
       dataProvider: {
         fetchRows: () =>
           slowNext
             ? new Promise<FetchResult>((resolve) => {
-                release = resolve;
+                held.release = resolve;
               })
             : { rows: [], totalRows: 0 },
       },
@@ -144,7 +144,7 @@ describe('fetching', () => {
     const slow = plugin.fetchData();
     slowNext = false;
     await plugin.fetchData({ page: 2 });
-    release?.({ rows: [], totalRows: 0 });
+    held.release?.({ rows: [], totalRows: 0 });
     await slow;
 
     expect(aborts).toHaveLength(1);

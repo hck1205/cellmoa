@@ -125,3 +125,7 @@ export {
 export type { Dictionary, Phrase } from './i18n/index.js';
 export { PHRASE } from './i18n/keys.js';
 export type { PhraseKey } from './i18n/keys.js';
+
+// The reference's type names, over this grid's types. See `types.ts` for what
+// each one is here, and for the places where the two genuinely differ.
+export type * from './types.js';

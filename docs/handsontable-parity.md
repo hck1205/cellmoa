@@ -129,6 +129,30 @@ methods   146/146 present  (0 named by the reference and missing)
 | 헤더 (배열·함수·기본 A1 표기) | ✅ | |
 | batch / suspendRender | ✅ | |
 
+## TypeScript 타입 (`tools-and-building/typescript-types`)
+
+문서가 이름을 대는 타입 36개를 전부 내보낸다. `test/types.test-d.ts`가
+36개를 하나하나 import하는데, 타입 표면은 그 방법으로만 확인할 수 있다 —
+없는 이름은 컴파일 에러가 되고, 런타임에는 아무것도 알려주지 않는다.
+
+대부분은 우리 타입에 참조 이름을 붙인 별칭이다(`HotInstance` = `Grid`,
+`CellCoords` = `Coords`, `CellProperties` = `GridSettings`…). `src/types.ts`가
+각각이 여기서 무엇인지, 그리고 **정말 다른 곳은 어디인지** 적어둔다:
+
+| 타입 | 차이 |
+|---|---|
+| `CellValue` | `string`이다. 워크북은 텍스트를 담고 뜻은 엔진이 정한다 |
+| `Events` | 훅 **이름**은 검사하고 인자는 검사하지 않는다. 253개 훅의 인자를 따로 타이핑하지 않았고, 타입이 그렇다고 말한다 |
+| `OverlayType` | 6개다. 참조는 10개 |
+| `CellMeta` / `CellProperties` | 같은 타입이다. `getCellMeta`가 매번 새 병합본을 주므로 변경 가능한 쪽이 따로 없다 |
+
+### 테스트를 타입 검사한 적이 없었다
+
+`tsconfig.json`의 `include`가 `src`뿐이어서 `test/`는 한 번도 타입
+검사를 받지 않았다. `tsconfig.test.json`을 추가하고 `npm test`가 그것을
+먼저 돌리게 했다. 처음 돌리자 36개가 나왔고, 그중 다섯은 **공개 타입이
+구현과 모순되는 것**이었다 — 아래 커밋 참고.
+
 ## 배치 (`optimization/batch-operations`)
 
 문서는 "렌더링"과 "실행"을 구분한다. 실행은 **그리기가 아닌 모든 것** —
