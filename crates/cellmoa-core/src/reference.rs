@@ -113,7 +113,7 @@ impl fmt::Display for CellRef {
 }
 
 /// A rectangular range. `start` is the top-left corner after normalisation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct RangeRef {
     pub start: CellRef,
     pub end: CellRef,

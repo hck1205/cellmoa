@@ -7,6 +7,14 @@ name = "cellmoa-core"
 version = "0.1.0"
 
 [[package]]
+name = "cellmoa-engine"
+version = "0.1.0"
+dependencies = [
+ "cellmoa-core",
+ "cellmoa-formula",
+]
+
+[[package]]
 name = "cellmoa-formula"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,11 @@
+[package]
+name = "cellmoa-engine"
+description = "Dependency graph, incremental recalculation and the built-in function library for cellmoa"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+cellmoa-core.workspace = true
+cellmoa-formula.workspace = true
