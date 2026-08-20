@@ -7,7 +7,7 @@
  * running, so a menu never offers a command that would do nothing.
  */
 
-import { Menu, SEPARATOR } from '../menu.js';
+import { Menu, SEPARATOR, resolve } from '../menu.js';
 import type { MenuItem, MenuSelection } from '../menu.js';
 import { BasePlugin, registerPlugin } from './base.js';
 import { DEFAULT_CONTEXT_MENU, ITEM, predefinedItems } from './menuItems.js';
@@ -88,13 +88,18 @@ export class ContextMenu extends BasePlugin {
     this.#menu = null;
   }
 
-  /** The items this menu would show right now. */
+  /**
+   * The items this menu would show right now.
+   *
+   * Hidden ones are left out here rather than only at draw time, so a command
+   * the settings forbid cannot be reached through `executeCommand` either.
+   */
   getItems(): MenuItem[] {
     return buildMenu(
       this.grid.getSettings().contextMenu,
       predefinedItems(this.grid),
       DEFAULT_CONTEXT_MENU,
-    );
+    ).filter((item) => !resolve(item.hidden, false));
   }
 
   /** Opens the menu at a point. */

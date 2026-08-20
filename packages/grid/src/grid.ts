@@ -53,6 +53,25 @@ import type { CellRenderContext, ColHeaderCell } from './view.js';
  */
 const DEFAULT_OVERSCAN = 3;
 
+/** Identifies the injected stylesheet, so several grids share one. */
+const CORE_CSS_ID = 'cm-core-css';
+
+/**
+ * The rules the grid cannot lay itself out without.
+ *
+ * Deliberately tiny: this is a fallback for a page that did not load
+ * `style.css`, not a second copy of it.
+ */
+const CORE_CSS = `
+.cm-grid { position: relative; overflow: hidden; }
+.cm-grid .cm-scroller { position: absolute; inset: 0; overflow: auto; }
+.cm-grid .cm-pane { position: absolute; overflow: hidden; }
+.cm-grid table { border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+.cm-grid td, .cm-grid th { box-sizing: border-box; overflow: hidden; }
+.cm-wrapper { display: flex; flex-direction: column; position: relative; height: 100%; }
+.cm-wrapper > .cm-grid { flex: 1 1 auto; min-height: 0; }
+`;
+
 /** How the grid was told to change something, for the `afterChange` hook. */
 export type ChangeSource =
   | 'edit'
@@ -120,7 +139,11 @@ export class Grid {
     this.#engine = options.engine;
     this.#data = new DataSource(options.engine, options.sheet, options.actor);
 
-    const { engine: _engine, sheet: _sheet, ...settings } = options;
+    const { engine: _engine, sheet: _sheet, ...given } = options;
+    // `initialState` is a base the settings are laid over, and it applies only
+    // at construction — `updateSettings` ignores it, because a state that is
+    // "initial" cannot be set again later without the word meaning nothing.
+    const settings: GridSettings = { ...(given.initialState ?? {}), ...given };
     this.#meta.update(settings);
 
     this.#selection = new Selection(
@@ -135,8 +158,113 @@ export class Grid {
     this.#mount();
     this.#bindKeyboard();
     this.#bindPointer();
+    this.#injectCoreCss();
     this.#createPlugins();
+    this.#watchVisibility();
+    this.#checkLicense();
+    this.#checkFormulasSetting();
+    this.#checkDataBinding();
     this.hooks.run('afterInit', undefined);
+  }
+
+  /**
+   * Puts the rules the grid cannot work without into the page.
+   *
+   * Only the structural ones — the panes are absolutely positioned and the
+   * scroller has to scroll, and a grid whose stylesheet failed to load would
+   * otherwise be a pile of text. Everything about how it *looks* stays in
+   * `style.css`, which a caller can replace outright.
+   */
+  #injectCoreCss(): void {
+    const doc = this.#view?.root.ownerDocument;
+    if (!doc || this.getSettings().injectCoreCss === false) {
+      return;
+    }
+    if (doc.getElementById(CORE_CSS_ID)) {
+      return;
+    }
+    const style = doc.createElement('style');
+    style.id = CORE_CSS_ID;
+    style.textContent = CORE_CSS;
+    doc.head.appendChild(style);
+  }
+
+  /**
+   * Redraws when the grid is made visible again.
+   *
+   * A grid laid out while its container is `display: none` measures everything
+   * as zero and draws nothing. Nothing tells it when that changes, so it has to
+   * watch — and a grid on a tab nobody has opened yet is the ordinary case, not
+   * an unusual one.
+   */
+  #watchVisibility(): void {
+    const root = this.#view?.root;
+    if (!root || this.getSettings().observeDOMVisibility === false) {
+      return;
+    }
+    if (typeof IntersectionObserver === 'undefined') {
+      return;
+    }
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        this.render();
+      }
+    });
+    observer.observe(root);
+    this.#listeners.push(() => observer.disconnect());
+  }
+
+  /**
+   * Reports a licence key that names a product this is not.
+   *
+   * cellmoa needs no key. A configuration carried over from Handsontable will
+   * have one, and silently ignoring it would leave the reader believing it is
+   * doing something — so it is said once, and nothing is withheld either way.
+   */
+  /**
+   * Reports a `formulas` configuration that has nothing to configure.
+   *
+   * In Handsontable this switches HyperFormula on. Here the engine is not a
+   * plugin — every grid has one and formulas always work — so the setting is
+   * accepted and says so, rather than being read as "formulas are off".
+   */
+  /**
+   * Reports the data-binding settings, which do not apply here.
+   *
+   * Handsontable binds to an array of arrays or an array of objects, and these
+   * describe that array's shape. This grid binds to a workbook: a cell has an
+   * address, not a key path. Accepting them silently would leave a caller
+   * believing their nested objects were being read.
+   */
+  #checkDataBinding(): void {
+    const settings = this.getSettings();
+    if (settings.dataSchema !== undefined || settings.dataDotNotation !== undefined) {
+      console.info(
+        '`dataSchema` and `dataDotNotation` describe an array-of-objects data source. ' +
+          'cellmoa reads a workbook, where a cell is addressed rather than keyed, so they ' +
+          'have no effect. Use `valueGetter` / `valueSetter` to map between the two.',
+      );
+    }
+  }
+
+  #checkFormulasSetting(): void {
+    const setting = this.getSettings().formulas;
+    if (setting === false) {
+      console.info(
+        'cellmoa calculates formulas natively; `formulas: false` does not switch that off. ' +
+          'A cell whose value should not be a formula is `readOnly` or a `text` type.',
+      );
+    }
+  }
+
+  #checkLicense(): void {
+    const key = this.getSettings().licenseKey;
+    if (typeof key === 'string' && key !== '') {
+      console.info(
+        'cellmoa needs no licence key; `licenseKey` is accepted and ignored so that a ' +
+          'Handsontable configuration works unchanged.',
+      );
+    }
   }
 
   // --- settings ---------------------------------------------------------
@@ -228,6 +356,22 @@ export class Grid {
     return this.colIndex.length;
   }
 
+  /**
+   * The value a renderer should show, after the settings have had their say.
+   *
+   * `valueGetter` replaces the value; `valueFormatter` decides how it reads.
+   * They are separate because they answer different questions — what is this,
+   * and how should it look — and a caller usually wants only one of them.
+   */
+  #displayValue(row: number, col: number, raw: string): string {
+    const meta = this.getCellMeta(row, col);
+    const getter = meta.valueGetter;
+    const value = typeof getter === 'function' ? getter(raw, row, col) : raw;
+    const formatter = meta.valueFormatter;
+    const shown = typeof formatter === 'function' ? formatter(value, row, col) : value;
+    return shown === null || shown === undefined ? '' : String(shown);
+  }
+
   /** The displayed text of a cell. */
   getDataAtCell(row: number, col: number): string {
     const physical = this.#physical(row, col);
@@ -235,7 +379,7 @@ export class Grid {
       return '';
     }
     this.#ensure(physical.row, physical.row, physical.col, physical.col);
-    return this.#data.text(physical.row, physical.col);
+    return this.#displayValue(row, col, this.#data.text(physical.row, physical.col));
   }
 
   /** Everything about a cell, or `null` when it holds nothing. */
@@ -332,6 +476,7 @@ export class Grid {
     if (edits.length === 0) {
       return;
     }
+    this.#warnAboutSourceData(changes);
 
     try {
       this.#data.write(edits, undefined, source === 'edit' ? undefined : source);
@@ -408,6 +553,15 @@ export class Grid {
     const at = index ?? (rows ? this.countRows() : this.countCols());
     const removing = action === 'remove_row' || action === 'remove_col';
 
+    // The same guards the menu reads. A command hidden from the menu that an
+    // API call could still perform would make the setting a suggestion.
+    const settings = this.getSettings();
+    const allowed = removing
+      ? (rows ? settings.allowRemoveRow : settings.allowRemoveColumn)
+      : (rows ? settings.allowInsertRow : settings.allowInsertColumn);
+    if (allowed === false) {
+      return;
+    }
     const hook = removing
       ? (rows ? 'beforeRemoveRow' : 'beforeRemoveCol')
       : (rows ? 'beforeCreateRow' : 'beforeCreateCol');
@@ -801,6 +955,13 @@ export class Grid {
 
   /** What a column header says. */
   getColHeader(col: number): string {
+    // A column's own `title` wins: `colHeaders` names them all at once, and
+    // `title` is how one column says something different without the caller
+    // having to write out the whole list.
+    const own = this.#meta.forColumn(col).title;
+    if (typeof own === 'string') {
+      return this.hooks.run('modifyColHeader', own, col);
+    }
     const setting = this.getSettings().colHeaders;
     let label: string;
     if (Array.isArray(setting)) {
@@ -1081,6 +1242,32 @@ export class Grid {
   }
 
   /**
+   * Reports values the source-data validator rejects.
+   *
+   * It reports rather than refuses, which is the difference from `validator`:
+   * that one guards what a *person* types, this one watches what arrives from
+   * a loader or an API. A write from code that is already wrong is not made
+   * right by being dropped, and dropping it silently is how the wrongness gets
+   * lost.
+   */
+  #warnAboutSourceData(changes: Array<[number, number, string]>): void {
+    const settings = this.getSettings();
+    const validate = settings.sourceDataValidator;
+    if (typeof validate !== 'function') {
+      return;
+    }
+    for (const [row, col, value] of changes) {
+      if (!validate(value, row, col)) {
+        const message = settings.sourceDataWarningMessage;
+        if (message) {
+          console.warn(`${message} (${cellRef(row, col)}: ${JSON.stringify(value)})`);
+        }
+        this.hooks.run('afterSourceDataValidate', undefined, value, row, col);
+      }
+    }
+  }
+
+  /**
    * Grows the index maps so every coordinate in a change can be addressed.
    *
    * Only ever grows: a write past the end extends the grid, and a write inside
@@ -1329,6 +1516,16 @@ export class Grid {
     // cell that holds `" 5 "` compares equal to nothing and sums as nothing.
     if (meta.trimWhitespace !== false) {
       value = value.trim();
+    }
+    // `valueParser` reads what the editor produced back into the shape the
+    // source data uses; `valueSetter` gets the last word on what is stored.
+    const parser = meta.valueParser;
+    if (typeof parser === 'function') {
+      value = String(parser(value, row, col) ?? '');
+    }
+    const setter = meta.valueSetter;
+    if (typeof setter === 'function') {
+      value = String(setter(value, row, col) ?? '');
     }
     const validator = this.#validatorFor(meta);
     const finish = (result: ValidationResult): void => {
@@ -1797,6 +1994,8 @@ export class Grid {
         this.hooks.run('afterGetRowHeader', undefined, row, th);
       },
       ariaTags: () => this.getSettings().ariaTags !== false,
+      fixedRowsBottom: () => (this.getSettings().fixedRowsBottom as number) ?? 0,
+      preventWheel: () => this.getSettings().preventWheel === true,
       direction: () => (this.isRtl() ? 'rtl' : 'ltr'),
       themeName: () =>
         (this.getSettings().themeName as string | undefined) ??
@@ -1917,10 +2116,18 @@ export class Grid {
     }
     const offset =
       axis === 'row' ? settings.viewportRowRenderingOffset : settings.viewportColumnRenderingOffset;
+    const threshold =
+      axis === 'row'
+        ? settings.viewportRowRenderingThreshold
+        : settings.viewportColumnRenderingThreshold;
+    // The threshold is how close to the edge of what is drawn the viewport has
+    // to come before more is drawn. Drawing that much extra is what makes the
+    // margin still be there when the moment arrives.
+    const margin = typeof threshold === 'number' ? Math.max(threshold, 0) : 0;
     if (offset === 'auto' || offset === undefined) {
-      return DEFAULT_OVERSCAN;
+      return DEFAULT_OVERSCAN + margin;
     }
-    return typeof offset === 'number' ? Math.max(offset, 0) : DEFAULT_OVERSCAN;
+    return typeof offset === 'number' ? Math.max(offset, 0) + margin : DEFAULT_OVERSCAN + margin;
   }
 
   /** Fills in one cell of the view. */
@@ -1974,6 +2181,13 @@ export class Grid {
     }
     if (settings.textEllipsis) {
       td.classList.add('cm-ellipsis');
+    }
+    // Text selection inside cells is off by default, because dragging across
+    // cells has to mean "select these cells" and cannot mean both.
+    if (settings.fragmentSelection) {
+      td.classList.add(
+        settings.fragmentSelection === 'cell' ? 'cm-text-select-cell' : 'cm-text-select',
+      );
     }
     this.hooks.run('afterRenderer', undefined, td, row, col, cell, meta);
   }

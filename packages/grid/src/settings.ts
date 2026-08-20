@@ -260,6 +260,22 @@ export interface GridSettings {
   preserveNumericLiteral?: boolean;
   sourceSortFunction?: (a: string, b: string) => number;
   enterCommits?: boolean;
+  title?: string;
+  preventWheel?: boolean;
+  valueGetter?: (value: string, row: number, col: number) => unknown;
+  valueFormatter?: (value: unknown, row: number, col: number) => unknown;
+  valueParser?: (value: string, row: number, col: number) => unknown;
+  valueSetter?: (value: string, row: number, col: number) => unknown;
+  dataDotNotation?: boolean;
+  initialState?: GridSettings;
+  injectCoreCss?: boolean;
+  licenseKey?: string;
+  observeDOMVisibility?: boolean;
+  customBordersProgressive?: boolean;
+  viewportRowRenderingThreshold?: number | 'auto';
+  viewportColumnRenderingThreshold?: number | 'auto';
+  sourceDataValidator?: (value: unknown, row: number, col: number) => boolean;
+  sourceDataWarningMessage?: string;
   tableClassName?: string | string[];
   /** Caps the grid at its parent's size in one direction. */
   preventOverflow?: 'horizontal' | 'vertical' | false;

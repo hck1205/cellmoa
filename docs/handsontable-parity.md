@@ -114,6 +114,27 @@ autocomplete/select/multiSelect 8종.
 | 헤더 (배열·함수·기본 A1 표기) | ✅ | |
 | batch / suspendRender | ✅ | |
 
+## 설정 162개
+
+이름만 있고 아무 동작도 안 하는 설정이 없는지는 `node scripts/parity.mjs`가
+센다. 대조표가 코드보다 더 주장하지 못하게 하려는 것이다 — 설정은 선언되고
+타입이 붙고 export까지 되면서 읽히지 않을 수 있고, 그 상태로 "162개 지원"이라고
+적으면 거짓이 된다.
+
+```
+$ node scripts/parity.mjs
+settings  162/162 read  (0 declared but never consulted)
+```
+
+이 중 넷은 *동작*이 아니라 *답변*이다. 조용히 무시하면 호출자가 뭔가 되고 있다고
+믿게 되므로, 한 번 말하고 넘어간다.
+
+| 설정 | 답변 |
+|---|---|
+| `licenseKey` | cellmoa는 키가 필요 없다. Handsontable 설정을 그대로 써도 되도록 받되 무시한다고 알린다 |
+| `formulas: false` | 엔진이 플러그인이 아니라 내장이라 이걸로 꺼지지 않는다 |
+| `dataSchema` · `dataDotNotation` | 객체 배열 데이터 소스의 모양을 describe하는 설정이다. 워크북은 셀을 주소로 다루지 키로 다루지 않는다 — `valueGetter`/`valueSetter`로 매핑하라고 알린다 |
+
 ## 문서 가이드 섹션 (플러그인 밖)
 
 | 섹션 | 상태 | 비고 |

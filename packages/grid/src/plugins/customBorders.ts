@@ -51,9 +51,7 @@ export class CustomBorders extends BasePlugin {
   protected override onEnable(): void {
     const settings = this.grid.getSettings().customBorders;
     if (Array.isArray(settings)) {
-      for (const spec of settings as BorderSpec[]) {
-        this.#applySpec(spec);
-      }
+      this.#build(settings as BorderSpec[]);
     }
     this.addHook(
       'afterRenderer',
@@ -160,6 +158,40 @@ export class CustomBorders extends BasePlugin {
       return;
     }
     this.setBorders('none');
+  }
+
+  /**
+   * Applies the configured borders.
+   *
+   * A very large configuration blocks the first paint if it is all built up
+   * front, so `customBordersProgressive` builds it in batches after the grid is
+   * on screen. The trade is real and goes both ways — the borders appear a
+   * moment late — so it is a setting rather than a rule.
+   */
+  #build(specs: BorderSpec[]): void {
+    if (this.grid.getSettings().customBordersProgressive !== true) {
+      for (const spec of specs) {
+        this.#applySpec(spec);
+      }
+      return;
+    }
+    const batch = 200;
+    let index = 0;
+    const step = (): void => {
+      if (!this.isPluginEnabled()) {
+        return;
+      }
+      for (const spec of specs.slice(index, index + batch)) {
+        this.#applySpec(spec);
+      }
+      index += batch;
+      if (index < specs.length) {
+        setTimeout(step, 0);
+      } else {
+        this.grid.render();
+      }
+    };
+    setTimeout(step, 0);
   }
 
   #applySpec(spec: BorderSpec): void {

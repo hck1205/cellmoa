@@ -94,6 +94,8 @@ export const EXTRA_HOOK_NAMES = [
   'modifyColHeaderLevels',
   /** Replaces the column header's structure, for a nested header. */
   'modifyColHeaderRows',
+  /** A value arriving from a loader failed `sourceDataValidator`. */
+  'afterSourceDataValidate',
   /** A verification finished. */
   'afterVerify',
   /** A comparison against a snapshot finished. */

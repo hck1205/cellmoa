@@ -205,6 +205,20 @@
   font-weight: 600;
 }
 
+/* Text selection inside cells, off unless `fragmentSelection` asks for it. */
+.cm-grid .cm-text-select,
+.cm-grid .cm-text-select-cell {
+  user-select: text;
+}
+
+/* One option in an editor's list. `visibleRows` counts these, so the height
+   here and the number the editor uses have to agree. */
+.cm-grid .cm-editor-item,
+.cm-grid .cm-editor-option {
+  height: 22px;
+  box-sizing: border-box;
+}
+
 /* The pop-up menu, shared by the context menu and the dropdown menu. */
 .cm-menu {
   z-index: 100;

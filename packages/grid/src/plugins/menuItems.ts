@@ -141,6 +141,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
   const items: Record<string, MenuItem> = {
     [ITEM.rowAbove]: {
       key: ITEM.rowAbove,
+      hidden: () => grid.getSettings().allowInsertRow === false,
       name: () => grid.getTranslatedPhrase(PHRASE.rowAbove),
       disabled: nothingSelected,
       callback: (_key, ranges) => {
@@ -152,6 +153,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
     },
     [ITEM.rowBelow]: {
       key: ITEM.rowBelow,
+      hidden: () => grid.getSettings().allowInsertRow === false,
       name: () => grid.getTranslatedPhrase(PHRASE.rowBelow),
       disabled: nothingSelected,
       callback: (_key, ranges) => {
@@ -163,6 +165,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
     },
     [ITEM.columnLeft]: {
       key: ITEM.columnLeft,
+      hidden: () => grid.getSettings().allowInsertColumn === false,
       name: () => grid.getTranslatedPhrase(PHRASE.columnLeft),
       disabled: nothingSelected,
       callback: (_key, ranges) => {
@@ -174,6 +177,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
     },
     [ITEM.columnRight]: {
       key: ITEM.columnRight,
+      hidden: () => grid.getSettings().allowInsertColumn === false,
       name: () => grid.getTranslatedPhrase(PHRASE.columnRight),
       disabled: nothingSelected,
       callback: (_key, ranges) => {
@@ -185,6 +189,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
     },
     [ITEM.removeRow]: {
       key: ITEM.removeRow,
+      hidden: () => grid.getSettings().allowRemoveRow === false,
       name: () => grid.getTranslatedPhrase(PHRASE.removeRow, rowsIn(first(selection()) ?? EMPTY)),
       disabled: nothingSelected,
       callback: (_key, ranges) => {
@@ -196,6 +201,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
     },
     [ITEM.removeColumn]: {
       key: ITEM.removeColumn,
+      hidden: () => grid.getSettings().allowRemoveColumn === false,
       name: () => grid.getTranslatedPhrase(PHRASE.removeColumn, colsIn(first(selection()) ?? EMPTY)),
       disabled: nothingSelected,
       callback: (_key, ranges) => {

@@ -80,6 +80,10 @@ export interface ViewModel {
   ariaTags?(): boolean;
   /** `rtl` mirrors the layout, for languages written right to left. */
   direction?(): 'ltr' | 'rtl';
+  /** How many rows are frozen at the bottom. */
+  fixedRowsBottom?(): number;
+  /** Swallow the wheel, for a page that scrolls the grid itself. */
+  preventWheel?(): boolean;
   /** A theme name, applied as a class on the root. */
   themeName?(): string | null;
   /** Extra class names for the grid's own elements. */
@@ -110,7 +114,7 @@ export interface ViewModel {
 const CUSTOM_CLASS_MARK = 'cm-custom-';
 
 /** Which pane an element belongs to. */
-type PaneName = 'main' | 'top' | 'left' | 'corner';
+type PaneName = 'main' | 'top' | 'left' | 'corner' | 'bottom' | 'bottomLeft';
 
 interface Pane {
   name: PaneName;
@@ -182,9 +186,11 @@ export class View {
       top: this.#createPane('top'),
       left: this.#createPane('left'),
       corner: this.#createPane('corner'),
+      bottom: this.#createPane('bottom'),
+      bottomLeft: this.#createPane('bottomLeft'),
     };
     // Frozen panes sit above the scrolling one, so their cells win a click.
-    for (const name of ['main', 'left', 'top', 'corner'] as const) {
+    for (const name of ['main', 'left', 'top', 'corner', 'bottom', 'bottomLeft'] as const) {
       this.root.appendChild(this.#panes[name].element);
     }
     this.root.appendChild(this.scroller);
@@ -208,6 +214,15 @@ export class View {
 
     container.appendChild(this.wrapper);
     this.scroller.addEventListener('scroll', this.#onScroll);
+    this.scroller.addEventListener(
+      'wheel',
+      (event) => {
+        if (this.#model.preventWheel?.()) {
+          event.preventDefault();
+        }
+      },
+      { passive: false },
+    );
   }
 
   /** The element holding the grid and everything around it. */
@@ -311,12 +326,66 @@ export class View {
       Math.max(lastCol, fixedCols - 1),
     );
 
-    this.#layoutPanes(headerWidth, headerHeight, frozenWidth, frozenHeight);
+    const bottomFrozen = this.#bottomRange();
+    this.#layoutPanes(headerWidth, headerHeight, frozenWidth, frozenHeight, bottomFrozen);
 
     this.#drawPane(this.#panes.corner, 0, fixedRows - 1, 0, fixedCols - 1, true, true);
     this.#drawPane(this.#panes.top, 0, fixedRows - 1, firstCol, lastCol, true, false);
     this.#drawPane(this.#panes.left, firstRow, lastRow, 0, fixedCols - 1, false, true);
     this.#drawPane(this.#panes.main, firstRow, lastRow, firstCol, lastCol, false, false);
+    if (bottomFrozen) {
+      this.#model.prepare(bottomFrozen.first, bottomFrozen.last, firstCol, lastCol);
+      this.#drawPane(
+        this.#panes.bottomLeft,
+        bottomFrozen.first,
+        bottomFrozen.last,
+        0,
+        fixedCols - 1,
+        false,
+        true,
+      );
+      this.#drawPane(
+        this.#panes.bottom,
+        bottomFrozen.first,
+        bottomFrozen.last,
+        firstCol,
+        lastCol,
+        false,
+        false,
+      );
+    } else {
+      this.#panes.bottom.body.replaceChildren();
+      this.#panes.bottomLeft.body.replaceChildren();
+    }
+  }
+
+  /**
+   * The rows frozen at the bottom, or `null` when none are.
+   *
+   * They come off the end of the sheet, not off the top, so the range moves
+   * whenever the sheet grows — which is what makes a totals row stay under the
+   * data rather than under wherever row 20 happens to be.
+   */
+  #bottomRange(): { first: number; last: number } | null {
+    const count = Math.min(this.#model.fixedRowsBottom?.() ?? 0, this.#model.rowCount());
+    if (count <= 0) {
+      return null;
+    }
+    return { first: this.#model.rowCount() - count, last: this.#model.rowCount() - 1 };
+  }
+
+  /** How tall the bottom frozen area is. */
+  #bottomHeight(): number {
+    const range = this.#bottomRange();
+    if (!range) {
+      return 0;
+    }
+    const rows = this.#model.rowSizes();
+    let total = 0;
+    for (let row = range.first; row <= range.last; row += 1) {
+      total += rows.sizeOf(row);
+    }
+    return total;
   }
 
   /** Releases the DOM and the listeners. */
@@ -376,6 +445,7 @@ export class View {
     headerHeight: number,
     frozenWidth: number,
     frozenHeight: number,
+    bottomFrozen: { first: number; last: number } | null,
   ): void {
     const place = (
       pane: Pane,
@@ -396,11 +466,27 @@ export class View {
     place(this.#panes.top, headerWidth + frozenWidth, 0, 'auto', `${headerHeight + frozenHeight}px`);
     place(this.#panes.left, 0, headerHeight + frozenHeight, `${headerWidth + frozenWidth}px`, 'auto');
     place(this.#panes.main, headerWidth + frozenWidth, headerHeight + frozenHeight, 'auto', 'auto');
+    const bottomHeight = bottomFrozen ? this.#bottomHeight() : 0;
+    const bottomTop = Math.max(this.scroller.clientHeight - bottomHeight, 0);
+    place(this.#panes.bottomLeft, 0, bottomTop, `${headerWidth + frozenWidth}px`, `${bottomHeight}px`);
+    place(this.#panes.bottom, headerWidth + frozenWidth, bottomTop, 'auto', `${bottomHeight}px`);
+    this.#panes.bottom.element.hidden = !bottomFrozen;
+    this.#panes.bottomLeft.element.hidden = !bottomFrozen;
+
     // Only the panes that scroll get an offset; the corner never moves.
     this.#panes.top.table.style.transform = `translateX(${-this.scroller.scrollLeft}px)`;
     this.#panes.left.table.style.transform = `translateY(${-this.scroller.scrollTop}px)`;
     this.#panes.main.table.style.transform =
       `translate(${-this.scroller.scrollLeft}px, ${-this.scroller.scrollTop}px)`;
+    // The bottom panes hold rows from the end of the sheet, so their contents
+    // are offset by where those rows actually sit rather than by the scroll.
+    if (bottomFrozen) {
+      const rows = this.#model.rowSizes();
+      const offset = rows.offsetOf(bottomFrozen.first) - headerHeight;
+      this.#panes.bottom.table.style.transform =
+        `translate(${-this.scroller.scrollLeft}px, ${-offset}px)`;
+      this.#panes.bottomLeft.table.style.transform = `translateY(${-offset}px)`;
+    }
   }
 
   /**

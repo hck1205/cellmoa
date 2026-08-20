@@ -74,8 +74,13 @@ function isRead(name) {
     new RegExp(`\\bsettings(?:\\s*\\.|\\?\\.)\\s*${name}\\b`),
     new RegExp(`\\boptions(?:\\s*\\.|\\?\\.)\\s*${name}\\b`),
     new RegExp(`\\bcellProperties(?:\\s*\\.|\\?\\.)\\s*${name}\\b`),
+    // Bracket access, which is how a plugin reads a setting it does not own.
+    new RegExp(`\\[['"]${name}['"]\\]`),
     new RegExp(`['"]${name}['"]\\s*(?:\\]|,)?\\s*(?:in\\b|\\?\\?|===)`),
-    new RegExp(`\\.${name}\\s*(?:\\?\\?|===|!==|>|<|\\|\\||&&)`),
+    new RegExp(`\\.${name}\\s*(?:\\?\\?|===|!==|>|<|\\|\\||&&|;)`),
+    // Read off a resolved meta object, which is how a per-column setting is
+    // consulted: `forColumn(col).title`.
+    new RegExp(`for(?:Column|Cell)\\([^)]*\\)\\.${name}\\b`),
     // Destructured out of the settings object.
     new RegExp(`\\{[^}]*\\b${name}\\b[^}]*\\}\\s*=\\s*(?:this\\.)?(?:settings|options|getSettings\\(\\))`),
   ];
@@ -89,7 +94,9 @@ function isRead(name) {
   }
   // `settings.ts` may act on a setting itself (defaults are not action).
   const own = sources.get('settings.ts') ?? '';
-  const acting = new RegExp(`\\bthis\\.#table\\.${name}\\b|\\bresolved\\.${name}\\b`);
+  const acting = new RegExp(
+    `\\bthis\\.#table\\.${name}\\b|\\bresolved\\.${name}\\b|\\bsettings\\.${name}\\b`,
+  );
   return acting.test(own) ? 'settings.ts' : null;
 }
 

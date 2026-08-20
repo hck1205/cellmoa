@@ -7,7 +7,7 @@
  * the commands in it act on.
  */
 
-import { Menu } from '../menu.js';
+import { Menu, resolve } from '../menu.js';
 import type { MenuItem } from '../menu.js';
 import { BasePlugin, registerPlugin } from './base.js';
 import { buildMenu } from './contextMenu.js';
@@ -73,7 +73,7 @@ export class DropdownMenu extends BasePlugin {
       this.grid.getSettings().dropdownMenu,
       predefinedItems(this.grid),
       DEFAULT_DROPDOWN_MENU,
-    );
+    ).filter((item) => !resolve(item.hidden, false));
   }
 
   /** Opens the menu below a column's button, selecting that column first. */
