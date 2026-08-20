@@ -19,6 +19,9 @@ export interface Window {
   endCol: number;
 }
 
+/** A structural change to the sheet. */
+export type AlterAction = 'insert_row' | 'remove_row' | 'insert_col' | 'remove_col';
+
 /** What the engine says about a sheet. */
 export interface SheetInfo {
   id: number;
@@ -258,6 +261,24 @@ export class DataSource {
     const request: Record<string, unknown> = { op: 'redo' };
     if (onlyBy !== undefined) {
       request.only_by = onlyBy;
+    }
+    return this.#applied(this.#engine.send(request));
+  }
+
+  /**
+   * Inserts or deletes rows or columns.
+   *
+   * One call, one commit: the cells move and every formula in the workbook is
+   * rewritten together, so there is never a moment where a formula points at
+   * the wrong cell.
+   */
+  alter(action: AlterAction, index: number, amount = 1, label?: string): number {
+    const request: Record<string, unknown> = { op: 'alter', action, index, amount };
+    if (this.#sheet) {
+      request.sheet = this.#sheet;
+    }
+    if (label !== undefined) {
+      request.label = label;
     }
     return this.#applied(this.#engine.send(request));
   }

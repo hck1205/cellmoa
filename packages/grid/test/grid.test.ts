@@ -247,3 +247,104 @@ describe('the grid', () => {
     grid.destroy();
   });
 });
+
+describe('inserting and deleting rows and columns', () => {
+  it('moves the cells below an inserted row down', async () => {
+    const { grid } = await makeGrid({ startRows: 4, startCols: 2 });
+    grid.setDataAtCells([
+      [0, 0, 'top'],
+      [1, 0, 'middle'],
+    ]);
+    grid.alter('insert_row', 1);
+    expect(grid.getDataAtCell(0, 0)).toBe('top');
+    expect(grid.getDataAtCell(1, 0)).toBe('');
+    expect(grid.getDataAtCell(2, 0)).toBe('middle');
+    expect(grid.countRows()).toBe(5);
+  });
+
+  it('keeps a formula pointing at what it pointed at', async () => {
+    const { grid } = await makeGrid({ startRows: 4, startCols: 3 });
+    grid.setDataAtCells([
+      [0, 0, '1'],
+      [1, 0, '2'],
+      [0, 2, '=SUM(A1:A2)'],
+    ]);
+    grid.alter('insert_row', 1);
+    // The new row is inside the block being summed, so the sum covers it.
+    expect(grid.getSourceDataAtCell(0, 2)).toBe('=SUM(A1:A3)');
+    grid.setDataAtCell(1, 0, '10');
+    expect(grid.getDataAtCell(0, 2)).toBe('13');
+  });
+
+  it('removes a row and pulls the rest up', async () => {
+    const { grid } = await makeGrid({ startRows: 4, startCols: 2 });
+    grid.setDataAtCells([
+      [0, 0, 'one'],
+      [1, 0, 'two'],
+      [2, 0, 'three'],
+    ]);
+    grid.alter('remove_row', 1);
+    expect(grid.getDataAtCell(0, 0)).toBe('one');
+    expect(grid.getDataAtCell(1, 0)).toBe('three');
+    expect(grid.countRows()).toBe(3);
+  });
+
+  it('leaves a #REF! rather than a wrong number', async () => {
+    const { grid } = await makeGrid({ startRows: 4, startCols: 3 });
+    grid.setDataAtCells([
+      [1, 0, '5'],
+      [0, 2, '=A2'],
+    ]);
+    grid.alter('remove_row', 1);
+    expect(grid.getDataAtCell(0, 2)).toBe('#REF!');
+  });
+
+  it('inserts and removes columns too', async () => {
+    const { grid } = await makeGrid({ startRows: 2, startCols: 3 });
+    grid.setDataAtCells([
+      [0, 0, 'a'],
+      [0, 1, 'b'],
+    ]);
+    grid.alter('insert_col', 1);
+    expect(grid.getDataAtCell(0, 1)).toBe('');
+    expect(grid.getDataAtCell(0, 2)).toBe('b');
+    grid.alter('remove_col', 1);
+    expect(grid.getDataAtCell(0, 1)).toBe('b');
+  });
+
+  it('moves a cell comment along with the cell it describes', async () => {
+    const { grid } = await makeGrid({ startRows: 4, startCols: 2 });
+    grid.setCellMeta(1, 0, 'comment', { value: 'about the second row' });
+    grid.alter('insert_row', 0);
+    expect(grid.getCellMeta(1, 0)['comment']).toBeUndefined();
+    expect(grid.getCellMeta(2, 0)['comment']).toEqual({ value: 'about the second row' });
+  });
+
+  it('drops what was said about a row that was deleted', async () => {
+    const { grid } = await makeGrid({ startRows: 4, startCols: 2 });
+    grid.setCellMeta(1, 0, 'readOnly', true);
+    grid.alter('remove_row', 1);
+    expect(grid.getCellMeta(1, 0)['readOnly']).toBeFalsy();
+  });
+
+  it('lets a hook veto the change', async () => {
+    const { grid } = await makeGrid({ startRows: 3, startCols: 2 });
+    grid.setDataAtCell(1, 0, 'stays');
+    grid.addHook('beforeRemoveRow', () => false);
+    grid.alter('remove_row', 1);
+    expect(grid.getDataAtCell(1, 0)).toBe('stays');
+  });
+
+  it('undoes in one step', async () => {
+    const { grid } = await makeGrid({ startRows: 4, startCols: 2 });
+    grid.setDataAtCells([
+      [0, 0, 'one'],
+      [1, 0, 'two'],
+    ]);
+    grid.alter('remove_row', 0);
+    expect(grid.getDataAtCell(0, 0)).toBe('two');
+    grid.undo();
+    expect(grid.getDataAtCell(0, 0)).toBe('one');
+    expect(grid.getDataAtCell(1, 0)).toBe('two');
+  });
+});

@@ -16,6 +16,7 @@ import {
 } from './cellTypes/index.js';
 import type { EditorInstance, ValidationResult } from './cellTypes/index.js';
 import { DataSource, WriteConflict, cellRef, columnLetters } from './dataSource.js';
+import type { AlterAction } from './dataSource.js';
 import type { Edit } from './dataSource.js';
 import type { Engine } from './engine.js';
 import { Hooks } from './hooks.js';
@@ -116,7 +117,7 @@ export class Grid {
     );
 
     this.#registerSettingHooks(settings);
-    this.#syncDimensions();
+    this.#syncDimensions(true);
     this.#mount();
     this.#bindKeyboard();
     this.#bindPointer();
@@ -371,6 +372,58 @@ export class Grid {
       cells.map(({ row, col }) => [row, col, ''] as [number, number, string]),
       source,
     );
+  }
+
+  /**
+   * Inserts or deletes rows or columns.
+   *
+   * The name and the action strings are Handsontable's, so ported code works
+   * unchanged. What happens underneath is not: the engine rewrites every
+   * formula in the workbook in the same commit that moves the cells, so the
+   * change undoes in one step and no formula is ever briefly wrong.
+   *
+   * The index maps are moved to match, because a sort or a hidden column is a
+   * property of the visual space and has to survive rows being inserted under
+   * it.
+   */
+  alter(action: AlterAction, index?: number, amount = 1, source: ChangeSource = 'alter'): void {
+    const rows = action === 'insert_row' || action === 'remove_row';
+    const map = rows ? this.rowIndex : this.colIndex;
+    const at = index ?? (rows ? this.countRows() : this.countCols());
+    const removing = action === 'remove_row' || action === 'remove_col';
+
+    const hook = removing
+      ? (rows ? 'beforeRemoveRow' : 'beforeRemoveCol')
+      : (rows ? 'beforeCreateRow' : 'beforeCreateCol');
+    if (this.hooks.allows(hook, at, amount, source) === false) {
+      return;
+    }
+
+    const physical = map.toPhysical(at);
+    this.#data.alter(action, physical ?? at, amount, source);
+
+    if (removing) {
+      const removed: number[] = [];
+      for (let i = at; i < at + amount; i += 1) {
+        const target = map.toPhysical(i);
+        if (target !== null) {
+          removed.push(target);
+        }
+      }
+      map.removeIndexes(removed);
+    } else {
+      map.insertIndexes(physical ?? at, amount);
+    }
+    this.#meta.shift(rows ? 'row' : 'col', at, removing ? -amount : amount);
+    this.#syncDimensions();
+    this.hooks.run(
+      removing ? (rows ? 'afterRemoveRow' : 'afterRemoveCol') : rows ? 'afterCreateRow' : 'afterCreateCol',
+      undefined,
+      at,
+      amount,
+      source,
+    );
+    this.render();
   }
 
   /** Undoes the last change. */
@@ -774,21 +827,30 @@ export class Grid {
   }
 
   /** Brings the index maps and size maps in line with the sheet. */
-  #syncDimensions(): void {
+  /**
+   * Brings the index maps and size maps in step with the data.
+   *
+   * `startRows` counts only on the first pass. It says how big the table is
+   * when it opens, not how small it may ever get — that is `minRows`, and
+   * treating the two as the same thing would make deleting the last row of a
+   * new table do nothing.
+   */
+  #syncDimensions(initial = false): void {
     const settings = this.getSettings();
     const rows = Math.max(
       this.#data.rowCount,
-      (settings.startRows as number) ?? 0,
+      initial ? ((settings.startRows as number) ?? 0) : 0,
       (settings.minRows as number) ?? 0,
     );
     const cols = Math.max(
       this.#data.colCount,
-      (settings.startCols as number) ?? 0,
+      initial ? ((settings.startCols as number) ?? 0) : 0,
       (settings.minCols as number) ?? 0,
     );
     // Only ever grows here: shrinking would throw away a sort or a hidden
     // column, and the extent of a spreadsheet is what the user has reached,
-    // not what currently holds data.
+    // not what currently holds data. A structural edit shrinks the maps
+    // itself, so it does not go through this path.
     if (this.rowIndex.length < rows) {
       this.#extend(this.rowIndex, rows);
     }

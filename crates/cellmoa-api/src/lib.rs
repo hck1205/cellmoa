@@ -13,6 +13,7 @@ use cellmoa_core::fingerprint::fingerprint;
 use cellmoa_core::model::{CellAddr, SheetId};
 use cellmoa_core::reference::{col_to_letters, parse_sheet_qualified, CellRef, RangeRef};
 use cellmoa_core::value::Value;
+use cellmoa_engine::structure::{Alter, AlterError};
 use cellmoa_engine::verify::verify;
 use cellmoa_engine::{catalogue, Engine};
 use cellmoa_xlsx::Package;
@@ -110,6 +111,9 @@ impl Session {
             Request::Undo { who, only_by } => self.undo(&who, only_by.as_deref()),
             Request::Redo { who, only_by } => self.redo(&who, only_by.as_deref()),
             Request::AddSheet { name, who } => self.add_sheet(&name, &who),
+            Request::Alter { action, sheet, index, amount, who, revision, label } => {
+                self.alter(&action, sheet.as_deref(), index, amount, &who, revision, label)
+            }
             Request::Eval { formula, sheet } => self.eval(&formula, sheet.as_deref()),
             Request::Translate { formula, rows, cols } => self.translate(&formula, rows, cols),
             Request::History { cell, sheet } => self.history(&cell, sheet.as_deref()),
@@ -340,6 +344,51 @@ impl Session {
         }
         let id = self.engine.add_sheet(name);
         self.ok(json!({ "id": id, "name": name }))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn alter(
+        &mut self,
+        action: &str,
+        sheet: Option<&str>,
+        index: u32,
+        amount: u32,
+        who: &Who,
+        revision: Option<u64>,
+        label: Option<String>,
+    ) -> Response {
+        let id = match self.sheet_id(sheet) {
+            Ok(id) => id,
+            Err(response) => return response,
+        };
+        let change = match action {
+            "insert_row" => Alter::InsertRows { sheet: id, at: index, count: amount },
+            "remove_row" => Alter::RemoveRows { sheet: id, at: index, count: amount },
+            "insert_col" => Alter::InsertCols { sheet: id, at: index, count: amount },
+            "remove_col" => Alter::RemoveCols { sheet: id, at: index, count: amount },
+            other => {
+                return Response::error(
+                    "bad_action",
+                    format!(
+                        "{other:?} is not one of insert_row, remove_row, insert_col, remove_col"
+                    ),
+                )
+            }
+        };
+        match self.engine.alter(who.actor(), change, revision, label) {
+            Ok(()) => self.ok(json!({ "altered": true })),
+            Err(AlterError::Edit(EditError::RevisionConflict { expected, actual })) => {
+                Response::error_with(
+                    "revision_conflict",
+                    format!(
+                        "this edit was made against revision {expected}, \
+                         but the workbook is at {actual}"
+                    ),
+                    json!({ "expected": expected, "revision": actual }),
+                )
+            }
+            Err(e) => Response::error("cannot_alter", e.to_string()),
+        }
     }
 
     fn eval(&mut self, formula: &str, sheet: Option<&str>) -> Response {

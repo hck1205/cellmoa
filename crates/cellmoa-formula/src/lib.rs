@@ -4,6 +4,7 @@
 //! workbook can be imported, rewritten and exported without a formula being
 //! reworded along the way.
 
+pub mod adjust;
 pub mod ast;
 pub mod lexer;
 pub mod parser;

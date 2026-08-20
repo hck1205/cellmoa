@@ -5,6 +5,7 @@ use crate::eval::{eval_to_value, EvalCtx};
 use crate::functions;
 use crate::graph::{Dep, DepGraph};
 use crate::resolve::{resolve, Resolved};
+use crate::structure::{Alter, AlterError};
 use cellmoa_core::edit::{Actor, CommitKind, Document, EditError, Op};
 use cellmoa_core::model::{CellAddr, CellContent, SheetId, Workbook};
 use cellmoa_core::reference::CellRef;
@@ -229,6 +230,34 @@ impl Engine {
             self.refresh_cell(addr);
         }
         self.recalculate_from(touched);
+        Ok(())
+    }
+
+    /// Inserts or deletes rows or columns, as one commit.
+    ///
+    /// The whole workbook is rebuilt afterwards rather than recalculated from
+    /// the cells that changed. A structural edit can rewrite a formula on any
+    /// sheet, and a dependency graph built from the old shape has edges that no
+    /// longer mean anything — walking it would recalculate the wrong cells.
+    pub fn alter(
+        &mut self,
+        actor: Actor,
+        change: Alter,
+        expected_revision: Option<u64>,
+        label: Option<String>,
+    ) -> Result<(), AlterError> {
+        let ops = change.plan(&self.doc.workbook).map_err(AlterError::Structure)?;
+        if ops.is_empty() {
+            // Nothing to write. Recording an empty commit would put a change in
+            // the audit trail that changed nothing.
+            return Ok(());
+        }
+        match label {
+            Some(label) => self.doc.apply_labeled(actor, ops, expected_revision, label, None),
+            None => self.doc.apply(actor, ops, expected_revision),
+        }
+        .map_err(AlterError::Edit)?;
+        self.rebuild();
         Ok(())
     }
 

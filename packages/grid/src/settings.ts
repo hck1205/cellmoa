@@ -409,6 +409,32 @@ export class MetaManager {
     this.#cache.delete(key);
   }
 
+  /**
+   * Moves the per-cell overrides when rows or columns are inserted or deleted.
+   *
+   * Without this a comment or a `readOnly` would stay at row 5 while the cell
+   * it described moved to row 6 — the note would end up on someone else's
+   * number, which is worse than losing it.
+   */
+  shift(axis: 'row' | 'col', at: number, count: number): void {
+    const moved = new Map<string, GridSettings>();
+    for (const [key, settings] of this.#cells) {
+      const [row, col] = key.split(':').map(Number) as [number, number];
+      const index = axis === 'row' ? row : col;
+      let target = index;
+      if (index >= at) {
+        if (count < 0 && index < at - count) {
+          // The cell itself was deleted, and so is anything said about it.
+          continue;
+        }
+        target = index + count;
+      }
+      moved.set(axis === 'row' ? `${target}:${col}` : `${row}:${target}`, settings);
+    }
+    this.#cells = moved;
+    this.#cache.clear();
+  }
+
   /** Forgets every per-cell override. */
   clearCells(): void {
     this.#cells.clear();

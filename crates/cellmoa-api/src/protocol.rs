@@ -20,6 +20,10 @@ pub struct Who {
     pub id: String,
 }
 
+fn one() -> u32 {
+    1
+}
+
 fn default_kind() -> String {
     "human".to_string()
 }
@@ -113,6 +117,26 @@ pub enum Request {
         name: String,
         #[serde(default)]
         who: Who,
+    },
+    /// Insert or delete rows or columns.
+    ///
+    /// One commit, so it undoes in one step, and every formula in the workbook
+    /// is rewritten to keep pointing at what it pointed at.
+    Alter {
+        /// `insert_row`, `remove_row`, `insert_col` or `remove_col`.
+        action: String,
+        #[serde(default)]
+        sheet: Option<String>,
+        /// The first row or column affected, zero-based.
+        index: u32,
+        #[serde(default = "one")]
+        amount: u32,
+        #[serde(default)]
+        who: Who,
+        #[serde(default)]
+        revision: Option<u64>,
+        #[serde(default)]
+        label: Option<String>,
     },
     /// Evaluate a formula without storing it.
     Eval {

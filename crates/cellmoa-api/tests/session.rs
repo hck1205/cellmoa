@@ -165,6 +165,51 @@ fn evaluating_a_formula_does_not_change_the_workbook() {
 }
 
 #[test]
+fn inserting_a_row_moves_the_cells_and_the_formulas_that_point_at_them() {
+    let mut session = Session::new();
+    ok(
+        &mut session,
+        json!({ "op": "write", "cells": [
+            { "cell": "A1", "input": "1" },
+            { "cell": "A2", "input": "2" },
+            { "cell": "C1", "input": "=SUM(A1:A2)" }
+        ] }),
+    );
+    ok(&mut session, json!({ "op": "alter", "action": "insert_row", "index": 1 }));
+
+    let read = ok(&mut session, json!({ "op": "read", "range": "A1:C3" }));
+    let cells = read["cells"].as_array().unwrap();
+    let find = |a1: &str| cells.iter().find(|c| c["cell"] == a1).cloned().unwrap_or_default();
+    assert_eq!(find("A3")["text"], json!("2"));
+    // The sum grew to cover the row inserted inside it.
+    assert_eq!(find("C1")["formula"], json!("=SUM(A1:A3)"));
+    assert_eq!(find("C1")["text"], json!("3"));
+}
+
+#[test]
+fn deleting_a_row_leaves_ref_errors_behind_rather_than_wrong_numbers() {
+    let mut session = Session::new();
+    ok(
+        &mut session,
+        json!({ "op": "write", "cells": [
+            { "cell": "A2", "input": "5" },
+            { "cell": "C1", "input": "=A2" }
+        ] }),
+    );
+    ok(&mut session, json!({ "op": "alter", "action": "remove_row", "index": 1 }));
+    let read = ok(&mut session, json!({ "op": "read", "range": "C1" }));
+    assert_eq!(read["cells"][0]["error"], json!("#REF!"));
+}
+
+#[test]
+fn an_unknown_alteration_is_refused_by_name() {
+    let mut session = Session::new();
+    let response = session
+        .dispatch_json(&json!({ "op": "alter", "action": "sideways", "index": 0 }).to_string());
+    assert!(response.contains("bad_action"), "{response}");
+}
+
+#[test]
 fn undo_state_counts_what_each_actor_can_take_back() {
     let mut session = Session::new();
     ok(

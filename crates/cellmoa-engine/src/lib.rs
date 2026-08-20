@@ -9,6 +9,7 @@ pub mod graph;
 pub mod operand;
 pub mod resolve;
 pub mod special;
+pub mod structure;
 pub mod verify;
 
 pub use engine::Engine;
