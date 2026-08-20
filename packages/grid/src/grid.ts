@@ -71,6 +71,52 @@ function pad(line: string[], length: number): string[] {
   return line.slice(0, length);
 }
 
+/**
+ * Turns whatever `data` was given into rows of cell values.
+ *
+ * Handsontable accepts an array of arrays or an array of objects, and the
+ * second is the common one because it is the shape an API answers with. An
+ * object has no column order of its own, so the order comes from the columns
+ * when they are configured and from the first object's keys when they are not —
+ * which is the same rule the reference uses, and the only one that does not
+ * silently reorder somebody's table.
+ */
+export function normalizeData(
+  data: unknown,
+  propOf: (col: number) => string | number,
+): string[][] {
+  if (!Array.isArray(data)) {
+    return [];
+  }
+  const asText = (value: unknown): string =>
+    value === null || value === undefined ? '' : String(value);
+
+  if (data.every((row) => Array.isArray(row))) {
+    return (data as unknown[][]).map((row) => row.map(asText));
+  }
+
+  const objects = data.filter(
+    (row): row is Record<string, unknown> => typeof row === 'object' && row !== null,
+  );
+  if (objects.length === 0) {
+    return [];
+  }
+  // The configured columns decide the order when they name themselves; a table
+  // with no such columns falls back to the keys of the first object.
+  const keys: Array<string | number> = [];
+  for (let col = 0; ; col += 1) {
+    const prop = propOf(col);
+    if (typeof prop !== 'string' || !(prop in objects[0]!)) {
+      break;
+    }
+    keys.push(prop);
+  }
+  if (keys.length === 0) {
+    keys.push(...Object.keys(objects[0]!));
+  }
+  return objects.map((row) => keys.map((key) => asText(row[String(key)])));
+}
+
 const CORE_CSS_ID = 'cm-core-css';
 
 /**
@@ -181,6 +227,7 @@ export class Grid {
     this.#checkLicense();
     this.#checkFormulasSetting();
     this.#checkDataBinding();
+    this.#loadInitialData();
     this.hooks.run('afterInit', undefined);
   }
 
@@ -264,6 +311,22 @@ export class Grid {
     }
   }
 
+  /**
+   * Puts the `data` setting into the workbook.
+   *
+   * This is how nearly every Handsontable table starts, so a grid that declared
+   * the setting and ignored it would be broken for the ordinary case. It runs
+   * once, at construction: `data` is a starting point, and a caller changing it
+   * later goes through `loadData` or `updateData`, which say which of the two
+   * they mean.
+   */
+  #loadInitialData(): void {
+    const rows = normalizeData(this.getSettings().data, (col) => this.colToProp(col));
+    if (rows.length > 0) {
+      this.loadData(rows);
+    }
+  }
+
   #checkFormulasSetting(): void {
     const setting = this.getSettings().formulas;
     if (setting === false) {
@@ -296,7 +359,14 @@ export class Grid {
     if (!this.hooks.allows('beforeUpdateSettings', settings)) {
       return;
     }
-    this.#meta.update(settings);
+if ('data' in settings) {
+      // The reference treats `data` in an update as a reload, and the guide is
+      // explicit that other keys alone must not wipe the rows.
+      this.#meta.update(settings);
+      this.loadData(normalizeData(settings.data, (col) => this.colToProp(col)));
+    } else {
+      this.#meta.update(settings);
+    }
     this.#registerSettingHooks(settings);
     if (settings.selectionMode) {
       this.#selection.setMode(settings.selectionMode as SelectionMode);
@@ -1464,6 +1534,13 @@ export class Grid {
    * than a missing method, and is stable as long as the header is.
    */
   colToProp(col: number): string | number {
+    // A column configured with `data` names itself, and that name is what an
+    // array-of-objects source is keyed by — it has to win over the header,
+    // which is a label a person reads rather than a key anything is stored at.
+    const own = this.#meta.forColumn(col)['data'];
+    if (typeof own === 'string' || typeof own === 'number') {
+      return own;
+    }
     return this.hasColHeaders() ? this.getColHeader(col) : col;
   }
 

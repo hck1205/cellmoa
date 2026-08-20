@@ -81,8 +81,10 @@ function isRead(name) {
     // Read off a resolved meta object, which is how a per-column setting is
     // consulted: `forColumn(col).title`.
     new RegExp(`for(?:Column|Cell)\\([^)]*\\)\\.${name}\\b`),
-    // Destructured out of the settings object.
-    new RegExp(`\\{[^}]*\\b${name}\\b[^}]*\\}\\s*=\\s*(?:this\\.)?(?:settings|options|getSettings\\(\\))`),
+    // Destructured out of the settings object. Bounded to one line and to a
+    // list of plain names: an unbounded `[^}]*` will happily swallow a whole
+    // class body and report every field in it as a setting that is read.
+    new RegExp(`\\{[\\w\\s,:]*\\b${name}\\b[\\w\\s,:]*\\}\\s*=\\s*(?:this\\.)?(?:settings|options|getSettings\\(\\))`),
   ];
   for (const [path, text] of sources) {
     if (path === 'settings.ts') {
