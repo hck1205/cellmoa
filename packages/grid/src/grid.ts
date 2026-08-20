@@ -708,7 +708,10 @@ export class Grid {
     } else {
       label = columnLetters(col);
     }
-    return this.hooks.run('afterGetColHeader', label, col);
+    // `modifyColHeader` changes the text; `afterGetColHeader` gets the element
+    // once it exists. Running one hook for both would mean a handler could not
+    // tell which it had been handed.
+    return this.hooks.run('modifyColHeader', label, col);
   }
 
   /** What a row header says. */
@@ -722,7 +725,7 @@ export class Grid {
     } else {
       label = String(row + 1);
     }
-    return this.hooks.run('afterGetRowHeader', label, row);
+    return this.hooks.run('modifyRowHeader', label, row);
   }
 
   getColWidth(col: number): number {
@@ -1555,6 +1558,9 @@ export class Grid {
         this.hasColHeaders() ? DEFAULT_ROW_HEIGHT * this.countColHeaderLevels() : 0,
       renderColHeader: (th, cell) => {
         this.hooks.run('afterGetColHeader', undefined, cell.col, th, cell.level);
+      },
+      renderRowHeader: (th, row) => {
+        this.hooks.run('afterGetRowHeader', undefined, row, th);
       },
       prepare: (startRow, endRow, startCol, endCol) =>
         this.#ensureVisible(startRow, endRow, startCol, endCol),

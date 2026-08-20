@@ -20,6 +20,8 @@
   --cm-comment-bg: #fffbe6;
   --cm-comment-marker: #c08a00;
   --cm-search-bg: rgba(255, 210, 0, 0.35);
+  --cm-notification-accent: #3478f6;
+  --cm-loading-bg: rgba(255, 255, 255, 0.72);
 
   position: relative;
   overflow: hidden;
@@ -244,6 +246,183 @@
   cursor: pointer;
 }
 
+
+/* The modal dialog. */
+.cm-dialog-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cm-dialog-overlay[data-background='dark'] {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.cm-dialog-overlay[data-background='light'] {
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.cm-dialog {
+  max-width: 80%;
+  max-height: 80%;
+  overflow: auto;
+  padding: 16px 20px;
+  border: 1px solid var(--cm-border);
+  border-radius: 6px;
+  background: var(--cm-cell-bg);
+  color: var(--cm-cell-fg);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
+}
+
+.cm-dialog:focus {
+  outline: none;
+}
+
+.cm-dialog-buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+/* Transient messages, stacked in a corner. */
+.cm-notifications {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 150;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.cm-notification {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  max-width: 320px;
+  padding: 8px 12px;
+  border: 1px solid var(--cm-border);
+  border-left: 3px solid var(--cm-notification-accent);
+  border-radius: 4px;
+  background: var(--cm-cell-bg);
+  color: var(--cm-cell-fg);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.cm-notification--success {
+  --cm-notification-accent: #2e9e4f;
+}
+
+.cm-notification--warning {
+  --cm-notification-accent: #d08700;
+}
+
+.cm-notification--error {
+  --cm-notification-accent: var(--cm-error-fg);
+}
+
+.cm-notification-close {
+  padding: 0;
+  border: none;
+  font: inherit;
+  font-size: 16px;
+  line-height: 1;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* The "working…" cover. */
+.cm-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 180;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  background: var(--cm-loading-bg);
+  color: var(--cm-cell-fg);
+}
+
+.cm-loading-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid var(--cm-border);
+  border-top-color: var(--cm-current-border);
+  border-radius: 50%;
+  animation: cm-spin 0.8s linear infinite;
+}
+
+@keyframes cm-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cm-loading-spinner {
+    animation: none;
+  }
+}
+
+/* What is shown when there is nothing to show. */
+.cm-empty-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  color: var(--cm-readonly-fg);
+  pointer-events: none;
+}
+
+.cm-empty-state * {
+  pointer-events: auto;
+}
+
+/* The handles at the corners of a selection. */
+.cm-fill-handle,
+.cm-selection-handle {
+  z-index: 20;
+  width: 7px;
+  height: 7px;
+  margin: -4px 0 0 -4px;
+  background: var(--cm-current-border);
+  cursor: crosshair;
+}
+
+.cm-selection-handle {
+  width: 11px;
+  height: 11px;
+  margin: -6px 0 0 -6px;
+  border-radius: 50%;
+}
+
+/* The fold control on a nested row's header. */
+.cm-grid .cm-nested-toggle {
+  width: 12px;
+  height: 12px;
+  margin-right: 4px;
+  padding: 0;
+  border: 1px solid var(--cm-border);
+  border-radius: 2px;
+  font: inherit;
+  font-size: 9px;
+  line-height: 1;
+  background: var(--cm-cell-bg);
+  color: var(--cm-header-fg);
+  cursor: pointer;
+}
+
 @media (prefers-color-scheme: dark) {
   .cm-grid {
     --cm-border: #3a3a3a;
@@ -256,5 +435,7 @@
     --cm-comment-bg: #2b2b1f;
     --cm-comment-marker: #d0a000;
     --cm-search-bg: rgba(255, 210, 0, 0.22);
+    --cm-notification-accent: #5a96ff;
+    --cm-loading-bg: rgba(26, 26, 26, 0.72);
   }
 }

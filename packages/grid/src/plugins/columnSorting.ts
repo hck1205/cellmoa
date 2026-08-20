@@ -104,7 +104,7 @@ export class ColumnSorting extends BasePlugin {
       }
       void coords;
     });
-    this.addHook('afterGetColHeader', (label: string, col: number) => {
+    this.addHook('modifyColHeader', (label: string, col: number) => {
       const config = this.sortState.find((entry) => entry.column === col);
       if (!config) {
         return label;

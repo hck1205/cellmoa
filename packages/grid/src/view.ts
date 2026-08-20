@@ -64,6 +64,8 @@ export interface ViewModel {
   colHeaderHeight(): number;
   /** Called after a header cell is built, so a plugin can decorate it. */
   renderColHeader?(th: HTMLTableCellElement, cell: ColHeaderCell): void;
+  /** The same for a row header. */
+  renderRowHeader?(th: HTMLTableCellElement, row: number): void;
   /** Called before drawing, so the data for the window can be fetched. */
   prepare(startRow: number, endRow: number, startCol: number, endCol: number): void;
   /** Fills in one cell. */
@@ -406,6 +408,7 @@ export class View {
         th.style.width = `${headerWidth}px`;
         th.dataset.row = String(row);
         th.textContent = this.#model.rowHeader(row) ?? String(row + 1);
+        this.#model.renderRowHeader?.(th, row);
         tr.appendChild(th);
       }
       for (let col = firstCol; col <= lastCol; col += 1) {

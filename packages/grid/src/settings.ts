@@ -225,6 +225,11 @@ export interface GridSettings {
   /** Turns both `manualRowResize` and `manualColumnResize` on. */
   manualResize?: boolean;
   dialog?: unknown;
+  moveCells?: unknown;
+  touchScroll?: unknown;
+  selectionHandles?: unknown;
+  multipleSelectionHandles?: unknown;
+  dataProvider?: unknown;
   notification?: unknown;
   loading?: unknown;
   emptyDataState?: unknown;

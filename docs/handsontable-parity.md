@@ -33,17 +33,17 @@ Handsontable 저장소(`handsontable/handsontable`)의 소스와 문서에서 �
 | `autoColumnSize` | ✅ | |
 | `autoRowSize` | ✅ | |
 | `autofill` | ✅ | 수식은 상대 참조를 이동시켜 채움 ➕ |
-| `bindRowsWithHeaders` | ⬜ | |
+| `bindRowsWithHeaders` | ✅ | 헤더가 위치가 아니라 행에 붙음 |
 | `collapsibleColumns` | ✅ | 접기는 숨김일 뿐 — 수식은 계속 그 열을 읽음 |
 | `columnSorting` | ✅ | |
 | `columnSummary` | ✅ | 고정된 숫자가 아니라 수식을 씀 — 위 값이 바뀌면 따라감 ➕ |
 | `comments` | ✅ | 주석은 셀 메타에만 저장 — 워크북/수식에 영향 없음 |
 | `contextMenu` | ✅ | 항목 키는 Handsontable과 동일. 켜져 있는 플러그인의 명령만 나타남. "에이전트 변경 되돌리기" 추가 ➕ |
 | `copyPaste` | ✅ | `text/plain` + `text/html` 양쪽 기록. 자기 복사본 붙여넣기는 수식 참조 이동 ➕ |
-| `customBorders` | ⬜ | |
-| `dataProvider` | ⬜ | |
+| `customBorders` | ✅ | 테두리는 셀 메타 — 수식이 읽는 값은 그대로 |
+| `dataProvider` | ✅ | 정렬·필터·페이지를 질의로 서버에 보냄. 늦게 온 응답은 버림 |
 | `dialog` | ✅ | 모달 — 열려 있는 동안 키보드가 셀에 닿지 않음 |
-| `dragToScroll` | ⬜ | |
+| `dragToScroll` | ✅ | 경계 밖으로 나간 만큼만 스크롤 |
 | `dropdownMenu` | ✅ | 열 헤더 버튼. contextMenu와 메뉴 위젯 공유 |
 | `emptyDataState` | ✅ | 빈 표와 필터가 비운 표를 구분해서 말함 |
 | `exportFile` | ✅ | CSV는 화면 값으로, `.xlsx`는 엔진이 직접 (수식·스타일 보존) ➕ |
@@ -59,17 +59,17 @@ Handsontable 저장소(`handsontable/handsontable`)의 소스와 문서에서 �
 | `manualRowMove` | ✅ | |
 | `manualRowResize` | ✅ | |
 | `mergeCells` | ✅ | 코너 셀만 값 유지, 나머지는 비움 |
-| `moveCells` | ⬜ | |
+| `moveCells` | ✅ | 이동은 참조를 그대로 두고, 복사 드래그만 옮김 ➕ |
 | `multiColumnSorting` | ✅ | |
-| `multipleSelectionHandles` | ⬜ | |
+| `multipleSelectionHandles` | ✅ | 양끝 핸들 — 손가락으로는 shift-클릭을 못 하니까 |
 | `nestedHeaders` | ✅ | 뷰가 헤더를 다단으로 그림 |
-| `nestedRows` | ⬜ | |
+| `nestedRows` | ✅ | 접기는 trim일 뿐 — 접힌 행을 읽는 수식은 계속 읽음 |
 | `notification` | ✅ | 메시지마다 id. 서로 밀어내지 않고 쌓임 |
-| `pagination` | ⬜ | |
+| `pagination` | ✅ | 페이지 밖 행은 trim. 값은 워크북에 그대로 |
 | `search` | ✅ | 표시된 값을 검색 (수식 결과 기준) |
-| `selectionHandles` | ⬜ | |
+| `selectionHandles` | ✅ | 채우기는 autofill에 위임 — 채우기의 뜻은 한 군데에만 있어야 함 |
 | `stretchColumns` | ✅ | `last` / `all`. 늘린 결과가 아니라 원래 너비에서 계산 |
-| `touchScroll` | ⬜ | |
+| `touchScroll` | ✅ | |
 | `trimRows` | ✅ | |
 | `undoRedo` | ✅ | 엔진 저널 기반. 액터별 undo/redo 가능 ➕. `clear()`는 감사 추적을 지울 수 없으므로 예외를 던짐 |
 
