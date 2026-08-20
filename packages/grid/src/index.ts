@@ -31,6 +31,39 @@ export {
 } from './settings.js';
 export type { CellData, CellType, Coords, GridSettings } from './settings.js';
 
+export {
+  cellTypeNames,
+  editors,
+  getCellType,
+  getEditor,
+  getRenderer,
+  getValidator,
+  registerCellType,
+  registerEditor,
+  registerRenderer,
+  registerValidator,
+  renderers,
+  validators,
+} from './cellTypes/index.js';
+export type {
+  CellEditor,
+  CellRenderer,
+  CellTypeDefinition,
+  CellValidator,
+  EditorContext,
+  EditorInstance,
+  RenderContext,
+  ValidationResult,
+} from './cellTypes/index.js';
+
+export {
+  ShortcutContext,
+  ShortcutManager,
+  combinationOf,
+  normalizeCombination,
+} from './shortcuts.js';
+export type { KeyCombination, ShortcutCallback, ShortcutOptions } from './shortcuts.js';
+
 export { SizeMap } from './sizes.js';
 export { View } from './view.js';
 export type { CellRenderContext, ViewModel, Viewport } from './view.js';

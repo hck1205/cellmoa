@@ -8,6 +8,13 @@
  * recorded with who made it.
  */
 
+import {
+  getEditor,
+  getRenderer,
+  getValidator,
+  renderers as builtinRenderers,
+} from './cellTypes/index.js';
+import type { EditorInstance, ValidationResult } from './cellTypes/index.js';
 import { DataSource, WriteConflict, cellRef, columnLetters } from './dataSource.js';
 import type { Edit } from './dataSource.js';
 import type { Engine } from './engine.js';
@@ -24,6 +31,7 @@ import {
   MetaManager,
 } from './settings.js';
 import type { CellData, Coords, GridSettings } from './settings.js';
+import { ShortcutManager } from './shortcuts.js';
 import { SizeMap } from './sizes.js';
 import { View } from './view.js';
 import type { CellRenderContext } from './view.js';
@@ -60,6 +68,7 @@ export class Grid {
   readonly hooks = new Hooks();
   readonly rowIndex = new IndexMapper();
   readonly colIndex = new IndexMapper();
+  readonly shortcuts = new ShortcutManager();
 
   #container: HTMLElement;
   #engine: Engine;
@@ -72,6 +81,10 @@ export class Grid {
   #destroyed = false;
   #renderSuspended = 0;
   #renderQueued = false;
+  #editor: EditorInstance | null = null;
+  #editing: Coords | null = null;
+  #invalid = new Set<string>();
+  #listening = true;
 
   constructor(container: HTMLElement, options: GridOptions) {
     this.#container = container;
@@ -90,6 +103,8 @@ export class Grid {
     this.#registerSettingHooks(settings);
     this.#syncDimensions();
     this.#mount();
+    this.#bindKeyboard();
+    this.#bindPointer();
     this.hooks.run('afterInit', undefined);
   }
 
@@ -781,6 +796,460 @@ export class Grid {
     this.render();
   }
 
+
+  // --- editing ------------------------------------------------------------
+
+  /** The cell being edited, or `null`. */
+  getActiveEditorCoords(): Coords | null {
+    return this.#editing ? { ...this.#editing } : null;
+  }
+
+  /** Whether an editor is open. */
+  isEditing(): boolean {
+    return this.#editor !== null;
+  }
+
+  /**
+   * Opens the editor over a cell.
+   *
+   * `initial` is what a printable keystroke should put into it, which is how
+   * typing over a selected cell replaces its contents rather than appending.
+   */
+  beginEditing(row?: number, col?: number, initial?: string): void {
+    const target = row === undefined || col === undefined ? this.#selection.highlight : { row, col };
+    if (!target || this.#destroyed) {
+      return;
+    }
+    const meta = this.getCellMeta(target.row, target.col);
+    if (meta.readOnly || meta.editor === false) {
+      return;
+    }
+    if (!this.hooks.allows('beforeBeginEditing', target.row, target.col)) {
+      return;
+    }
+    this.closeEditor(false);
+
+    const editorName = typeof meta.editor === 'string' ? meta.editor : (meta.type as string) ?? 'text';
+    const editor = getEditor(editorName) ?? getEditor('text');
+    if (!editor || !this.#view) {
+      return;
+    }
+    const element = this.#view.elementAt(target.row, target.col);
+    if (!element) {
+      // The cell is not on screen; bring it into view and try again.
+      this.scrollViewportTo(target.row, target.col);
+      if (!this.#view.elementAt(target.row, target.col)) {
+        return;
+      }
+    }
+    const rect = this.#editorRect(target.row, target.col);
+    const value = initial ?? this.getSourceDataAtCell(target.row, target.col);
+
+    this.#editing = target;
+    this.#editor = editor({
+      row: target.row,
+      col: target.col,
+      rect,
+      value,
+      meta,
+      parent: this.#view.root,
+      commit: (committed, moveBy) => this.#commitEditor(committed, moveBy),
+      cancel: () => this.closeEditor(false),
+    });
+    this.shortcuts.setActiveContextName('editor');
+    this.#editor.focus();
+    this.hooks.run('afterBeginEditing', undefined, target.row, target.col);
+  }
+
+  /** Closes the editor, writing its value when asked to. */
+  closeEditor(commit = true, moveBy?: Coords): void {
+    const editor = this.#editor;
+    const editing = this.#editing;
+    this.#editor = null;
+    this.#editing = null;
+    if (!editor || !editing) {
+      return;
+    }
+    const value = editor.getValue();
+    editor.close();
+    this.shortcuts.setActiveContextName('grid');
+
+    if (commit) {
+      this.#writeValidated(editing.row, editing.col, value);
+    }
+    if (moveBy) {
+      this.#selection.moveBy(moveBy.row, moveBy.col, this.#wraps(moveBy));
+      this.#afterSelection();
+    } else {
+      this.render();
+    }
+  }
+
+  /** Whether a cell failed validation and has not been corrected. */
+  isCellInvalid(row: number, col: number): boolean {
+    return this.#invalid.has(`${row}:${col}`);
+  }
+
+  /** Runs a cell's validator without writing anything. */
+  async validateCell(row: number, col: number, value: string): Promise<ValidationResult> {
+    const meta = this.getCellMeta(row, col);
+    const validator = this.#validatorFor(meta);
+    if (!validator) {
+      return { valid: true };
+    }
+    return validator(value, meta);
+  }
+
+  /** Whether the grid is taking keystrokes. */
+  isListening(): boolean {
+    return this.#listening;
+  }
+
+  listen(): void {
+    this.#listening = true;
+  }
+
+  unlisten(): void {
+    this.#listening = false;
+  }
+
+  // --- editing internals ---------------------------------------------------
+
+  #validatorFor(meta: GridSettings) {
+    if (typeof meta.validator === 'function') {
+      return meta.validator as (value: string, meta: GridSettings) => ValidationResult;
+    }
+    if (typeof meta.validator === 'string') {
+      return getValidator(meta.validator);
+    }
+    return getValidator((meta.type as string) ?? 'text');
+  }
+
+  /**
+   * Writes a value after validating it.
+   *
+   * A value that fails is written anyway when `allowInvalid` is on — which is
+   * the default, and is what lets someone type a half-finished value and fix it
+   * — but the cell is marked so the mistake is visible.
+   */
+  #writeValidated(row: number, col: number, value: string): void {
+    const key = `${row}:${col}`;
+    const meta = this.getCellMeta(row, col);
+    const validator = this.#validatorFor(meta);
+    const finish = (result: ValidationResult): void => {
+      if (result.valid) {
+        this.#invalid.delete(key);
+      } else {
+        this.#invalid.add(key);
+      }
+      this.hooks.run('afterValidate', result.valid, value, row, col);
+      if (result.valid || meta.allowInvalid !== false) {
+        this.setDataAtCell(row, col, value);
+      } else {
+        this.render();
+      }
+    };
+
+    if (!validator) {
+      this.#invalid.delete(key);
+      this.setDataAtCell(row, col, value);
+      return;
+    }
+    const result = validator(value, meta);
+    if (result instanceof Promise) {
+      // An asynchronous validator is allowed; the write lands when it answers.
+      void result.then(finish);
+    } else {
+      finish(result);
+    }
+  }
+
+  #commitEditor(value: string, moveBy?: Coords): void {
+    this.closeEditor(true, moveBy ?? { row: 1, col: 0 });
+  }
+
+  /** Where to put the editor, in the view's coordinates. */
+  #editorRect(row: number, col: number): { left: number; top: number; width: number; height: number } {
+    const headerWidth = this.hasRowHeaders() ? DEFAULT_ROW_HEADER_WIDTH : 0;
+    const headerHeight = this.hasColHeaders() ? DEFAULT_ROW_HEIGHT : 0;
+    const scrollTop = this.#view?.scrollTop ?? 0;
+    const scrollLeft = this.#view?.scrollLeft ?? 0;
+    return {
+      left: this.#colSizes.offsetOf(col) + headerWidth - scrollLeft,
+      top: this.#rowSizes.offsetOf(row) + headerHeight - scrollTop,
+      width: this.getColWidth(col),
+      height: this.getRowHeight(row),
+    };
+  }
+
+  /** Whether a move should wrap at the edge, per the settings. */
+  #wraps(moveBy: Coords): boolean {
+    const settings = this.getSettings();
+    return moveBy.col !== 0
+      ? settings.autoWrapRow === true
+      : settings.autoWrapCol === true;
+  }
+
+  // --- keyboard and pointer ------------------------------------------------
+
+  #bindKeyboard(): void {
+    const view = this.#view;
+    if (!view) {
+      return;
+    }
+    const grid = this.shortcuts.getContext('grid')!;
+    const editor = this.shortcuts.getContext('editor')!;
+    const move = (row: number, col: number) => () => {
+      const wrapped = this.#selection.moveBy(row, col, this.#wraps({ row, col }));
+      if (wrapped) {
+        this.#afterSelection();
+        const highlight = this.#selection.highlight;
+        if (highlight) {
+          this.scrollViewportTo(highlight.row, highlight.col);
+        }
+      }
+    };
+    const extend = (rowDelta: number, colDelta: number) => () => {
+      const last = this.#selection.last;
+      const highlight = this.#selection.highlight;
+      if (!last || !highlight) {
+        return;
+      }
+      // Shift+arrow moves the far edge, which is whichever corner is not the
+      // anchor.
+      this.#selection.extendTo({ row: last.to.row + rowDelta, col: last.to.col + colDelta });
+      this.#afterSelection();
+    };
+    const edge = (rowDelta: number, colDelta: number, extending: boolean) => () => {
+      const highlight = this.#selection.highlight;
+      if (!highlight) {
+        return;
+      }
+      const target = {
+        row: rowDelta === 0 ? highlight.row : rowDelta > 0 ? this.countRows() - 1 : 0,
+        col: colDelta === 0 ? highlight.col : colDelta > 0 ? this.countCols() - 1 : 0,
+      };
+      if (extending) {
+        this.#selection.extendTo(target);
+      } else {
+        this.#selection.setCell(target);
+      }
+      this.#afterSelection();
+      this.scrollViewportTo(target.row, target.col);
+    };
+
+    grid.addShortcuts(
+      [
+        { keys: [['arrowup']], callback: move(-1, 0) },
+        { keys: [['arrowdown']], callback: move(1, 0) },
+        { keys: [['arrowleft']], callback: move(0, -1) },
+        { keys: [['arrowright']], callback: move(0, 1) },
+        { keys: [['shift', 'arrowup']], callback: extend(-1, 0) },
+        { keys: [['shift', 'arrowdown']], callback: extend(1, 0) },
+        { keys: [['shift', 'arrowleft']], callback: extend(0, -1) },
+        { keys: [['shift', 'arrowright']], callback: extend(0, 1) },
+        { keys: [['mod', 'arrowup']], callback: edge(-1, 0, false) },
+        { keys: [['mod', 'arrowdown']], callback: edge(1, 0, false) },
+        { keys: [['mod', 'arrowleft']], callback: edge(0, -1, false) },
+        { keys: [['mod', 'arrowright']], callback: edge(0, 1, false) },
+        { keys: [['mod', 'shift', 'arrowup']], callback: edge(-1, 0, true) },
+        { keys: [['mod', 'shift', 'arrowdown']], callback: edge(1, 0, true) },
+        { keys: [['mod', 'shift', 'arrowleft']], callback: edge(0, -1, true) },
+        { keys: [['mod', 'shift', 'arrowright']], callback: edge(0, 1, true) },
+        { keys: [['home']], callback: edge(0, -1, false) },
+        { keys: [['end']], callback: edge(0, 1, false) },
+        { keys: [['mod', 'home']], callback: () => this.selectCell(0, 0) },
+        {
+          keys: [['mod', 'end']],
+          callback: () => this.selectCell(this.countRows() - 1, this.countCols() - 1),
+        },
+        { keys: [['pageup']], callback: move(-this.#pageSize(), 0) },
+        { keys: [['pagedown']], callback: move(this.#pageSize(), 0) },
+        { keys: [['mod', 'a']], callback: () => this.selectAll() },
+        {
+          keys: [['shift', 'space']],
+          callback: () => {
+            const highlight = this.#selection.highlight;
+            if (highlight) {
+              this.selectRows(highlight.row);
+            }
+          },
+        },
+        {
+          keys: [['mod', 'space']],
+          callback: () => {
+            const highlight = this.#selection.highlight;
+            if (highlight) {
+              this.selectColumns(highlight.col);
+            }
+          },
+        },
+        { keys: [['enter']], callback: () => this.#onEnter(false) },
+        { keys: [['shift', 'enter']], callback: () => this.#onEnter(true) },
+        { keys: [['f2']], callback: () => this.beginEditing() },
+        { keys: [['tab']], callback: () => this.#onTab(false) },
+        { keys: [['shift', 'tab']], callback: () => this.#onTab(true) },
+        { keys: [['delete']], callback: () => this.emptySelectedCells() },
+        { keys: [['backspace']], callback: () => this.emptySelectedCells() },
+        { keys: [['escape']], callback: () => this.deselectCell() },
+        { keys: [['mod', 'z']], callback: () => this.undo() },
+        { keys: [['mod', 'y']], callback: () => this.redo() },
+        { keys: [['mod', 'shift', 'z']], callback: () => this.redo() },
+      ],
+      { group: 'core' },
+    );
+
+    // The editor context lets the open editor answer first, and only handles
+    // what it declines.
+    editor.addShortcut({
+      keys: [
+        ['enter'], ['shift', 'enter'], ['tab'], ['shift', 'tab'], ['escape'],
+        ['alt', 'enter'],
+      ],
+      group: 'core',
+      callback: (event) => this.#editor?.handleKey?.(event) ?? false,
+    });
+
+    view.root.tabIndex = 0;
+    view.root.addEventListener('keydown', this.#onKeyDown);
+  }
+
+  #onKeyDown = (event: KeyboardEvent): void => {
+    if (!this.#listening || this.#destroyed) {
+      return;
+    }
+    if (this.hooks.allows('beforeKeyDown', event) === false) {
+      return;
+    }
+    // An open editor gets first refusal on every key, not only the bound ones,
+    // so that typing into it is not intercepted by a grid shortcut.
+    if (this.#editor && this.#editor.handleKey?.(event)) {
+      event.preventDefault();
+      return;
+    }
+    if (this.shortcuts.handle(event)) {
+      return;
+    }
+    // A printable character with no modifier starts an edit and becomes its
+    // first keystroke, as it does in every spreadsheet.
+    if (
+      !this.#editor &&
+      event.key.length === 1 &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey
+    ) {
+      const highlight = this.#selection.highlight;
+      if (highlight) {
+        const meta = this.getCellMeta(highlight.row, highlight.col);
+        if (meta.type === 'checkbox') {
+          if (event.key === ' ') {
+            this.#toggleCheckbox(highlight.row, highlight.col);
+            event.preventDefault();
+          }
+          return;
+        }
+        this.beginEditing(highlight.row, highlight.col, event.key);
+        event.preventDefault();
+      }
+    }
+  };
+
+  #onEnter(shift: boolean): void {
+    const highlight = this.#selection.highlight;
+    if (!highlight) {
+      return;
+    }
+    const meta = this.getCellMeta(highlight.row, highlight.col);
+    if (meta.type === 'checkbox') {
+      this.#toggleCheckbox(highlight.row, highlight.col);
+      return;
+    }
+    if (this.getSettings().enterBeginsEditing === false) {
+      this.#selection.moveBy(shift ? -1 : 1, 0);
+      this.#afterSelection();
+      return;
+    }
+    this.beginEditing(highlight.row, highlight.col);
+  }
+
+  #onTab(shift: boolean): void {
+    const moves = this.getSettings().tabMoves;
+    const step = typeof moves === 'function' ? { row: 0, col: 1 } : (moves as Coords) ?? { row: 0, col: 1 };
+    const direction = shift ? -1 : 1;
+    this.#selection.moveBy(
+      step.row * direction,
+      step.col * direction,
+      this.getSettings().autoWrapRow === true,
+    );
+    this.#afterSelection();
+  }
+
+  /**
+   * Flips a checkbox cell between its two templates.
+   *
+   * The comparison is against the cell's *value*, not its displayed text: the
+   * engine stores `true` and shows `TRUE`, and comparing the two would leave
+   * the box stuck.
+   */
+  #toggleCheckbox(row: number, col: number): void {
+    const meta = this.getCellMeta(row, col);
+    const checked = meta.checkedTemplate ?? true;
+    const unchecked = meta.uncheckedTemplate ?? false;
+    const value = this.getCell(row, col)?.value ?? null;
+    const isChecked =
+      value === checked ||
+      String(value ?? '').toLowerCase() === String(checked).toLowerCase();
+    this.setDataAtCell(row, col, String(isChecked ? unchecked : checked));
+  }
+
+  /** How many rows a page key moves. */
+  #pageSize(): number {
+    const height = this.#view?.root.clientHeight ?? 0;
+    const rows = Math.floor(height / Math.max(this.#rowSizes.defaultSize, 1));
+    return Math.max(rows - 1, 1);
+  }
+
+  #bindPointer(): void {
+    const view = this.#view;
+    if (!view) {
+      return;
+    }
+    view.root.addEventListener('mousedown', (event) => {
+      if (!this.#listening) {
+        return;
+      }
+      const coords = view.cellAt(event.target);
+      if (!coords) {
+        return;
+      }
+      if (this.#editor) {
+        this.closeEditor(true);
+      }
+      if (this.hooks.allows('beforeOnCellMouseDown', event, coords) === false) {
+        return;
+      }
+      const mouseEvent = event as MouseEvent;
+      if (mouseEvent.shiftKey) {
+        this.#selection.extendTo(coords);
+      } else if (mouseEvent.ctrlKey || mouseEvent.metaKey) {
+        this.#selection.addRange(coords);
+      } else {
+        this.#selection.setCell(coords);
+      }
+      this.#afterSelection();
+      view.root.focus();
+      this.hooks.run('afterOnCellMouseDown', undefined, event, coords);
+    });
+
+    view.root.addEventListener('dblclick', (event) => {
+      const coords = view.cellAt(event.target);
+      if (coords && this.#listening) {
+        this.beginEditing(coords.row, coords.col);
+      }
+    });
+  }
+
   #mount(): void {
     if (typeof document === 'undefined') {
       return;
@@ -813,23 +1282,27 @@ export class Grid {
     const meta = this.getCellMeta(row, col);
     const cell = this.getCell(row, col);
 
-    td.textContent = cell?.text ?? '';
-    td.className = 'cm-cell';
-    if (meta.className) {
-      td.className += ` ${meta.className}`;
-    }
-    if (meta.readOnly) {
-      td.classList.add(String(meta.readOnlyCellClassName ?? 'htDimmed'));
-    }
-    if (cell?.error) {
-      td.classList.add('cm-error');
-      td.title = cell.error;
-    }
+    // The cell's type decides how it is drawn; a `renderer` setting overrides
+    // the type, which is how one column can look different without becoming a
+    // type of its own.
+    const rendererName =
+      typeof meta.renderer === 'string' ? meta.renderer : ((meta.type as string) ?? 'text');
+    const renderer =
+      (typeof meta.renderer === 'function'
+        ? (meta.renderer as typeof builtinRenderers.textRenderer)
+        : getRenderer(rendererName)) ?? builtinRenderers.textRenderer;
+    renderer({ row, col, td, cell, meta });
+
     if (cell?.formula) {
       td.dataset.formula = cell.formula;
     }
+    // A numeric *value* aligns right whatever the column's type says, because
+    // that is what makes a computed column line up with a typed one.
     if (typeof cell?.value === 'number') {
       td.classList.add('cm-numeric');
+    }
+    if (this.#invalid.has(`${row}:${col}`)) {
+      td.classList.add(String(meta.invalidCellClassName ?? 'htInvalid'));
     }
     if (this.#selection.includes({ row, col })) {
       td.classList.add('cm-selected');

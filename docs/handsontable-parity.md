@@ -77,19 +77,42 @@ Handsontable 저장소(`handsontable/handsontable`)의 소스와 문서에서 �
 
 | 타입 | 상태 |
 |---|:--:|
-| `autocomplete` | ⬜ |
-| `checkbox` | ⬜ |
-| `date` | ⬜ |
-| `dropdown` | ⬜ |
-| `handsontable` | ⬜ |
-| `intlDate` | ⬜ |
-| `intlTime` | ⬜ |
-| `multiSelect` | ⬜ |
-| `numeric` | ⬜ |
-| `password` | ⬜ |
-| `select` | ⬜ |
-| `text` | ⬜ |
-| `time` | ⬜ |
+| `autocomplete` | ✅ |
+| `checkbox` | ✅ |
+| `date` | ✅ |
+| `dropdown` | ✅ |
+| `handsontable` | ✅ |
+| `intlDate` | ✅ |
+| `intlTime` | ✅ |
+| `multiSelect` | ✅ |
+| `numeric` | ✅ |
+| `password` | ✅ |
+| `select` | ✅ |
+| `text` | ✅ |
+| `time` | ✅ |
+
+### 셀 타입 상태
+
+13종 모두 렌더러 구현. 에디터는 checkbox를 뺀 12종(체크박스는 타이핑이 아니라
+토글이라 에디터가 없는 것이 정상). 검증기는 text/numeric/date/time/dropdown/
+autocomplete/select/multiSelect 8종.
+
+## 코어 (Handsontable 코어 메서드 134개 중)
+
+| 영역 | 상태 | 비고 |
+|---|:--:|---|
+| 설정 계층 (global→table→column→cell) | ✅ | `MetaManager`, `cells` 함수 포함 |
+| 훅 253개 | ✅ | 이름 전량 등록, `before*` veto 지원 |
+| 인덱스 맵 (물리/시각/렌더) | ✅ | trim·hide·move·insert·remove |
+| 데이터 읽기/쓰기 | ✅ | 창 단위 캐시, revision 가드 |
+| 선택 (단일·범위·다중) | ✅ | |
+| 가상 스크롤 + 4-pane 고정 | ✅ | |
+| 키보드 (Handsontable 단축키표 전량) | ✅ | 이동·확장·엣지·Tab·Enter·Delete·undo |
+| 편집 (열기·커밋·취소·검증) | ✅ | allowInvalid, 비동기 검증기 |
+| 마우스 선택 (클릭·shift·ctrl) | ✅ | |
+| 행/열 크기 (기본값 + 오버라이드) | ✅ | |
+| 헤더 (배열·함수·기본 A1 표기) | ✅ | |
+| batch / suspendRender | ✅ | |
 
 ## cellmoa 고유 기능 ➕
 
