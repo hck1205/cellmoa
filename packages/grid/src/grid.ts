@@ -1325,6 +1325,11 @@ export class Grid {
    */
   #writeValidated(row: number, col: number, value: string): void {
     const meta = this.getCellMeta(row, col);
+    // Whitespace round the edges of a typed value is almost never meant, and a
+    // cell that holds `" 5 "` compares equal to nothing and sums as nothing.
+    if (meta.trimWhitespace !== false) {
+      value = value.trim();
+    }
     const validator = this.#validatorFor(meta);
     const finish = (result: ValidationResult): void => {
       if (result.valid) {

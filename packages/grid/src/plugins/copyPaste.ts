@@ -108,6 +108,38 @@ interface Clipping {
   text: string;
 }
 
+/**
+ * Reads a pasted string as the value it looks like.
+ *
+ * Only when `parsePastedValue` asks for it. The default is to write what was
+ * pasted, because guessing is how a part number becomes a date.
+ */
+export function parsePastedValue(text: string, locale = 'en-US'): string {
+  const trimmed = text.trim();
+  if (trimmed === '' || trimmed.startsWith('=')) {
+    return text;
+  }
+  // The separators this locale actually uses, rather than an assumption about
+  // commas: `1.234,5` is twelve hundred in German and malformed in English.
+  const parts = new Intl.NumberFormat(locale).formatToParts(12345.6);
+  const group = parts.find((part) => part.type === 'group')?.value ?? ',';
+  const decimal = parts.find((part) => part.type === 'decimal')?.value ?? '.';
+
+  const escape = (character: string): string => character.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Groups of three, then at most one decimal part — checked before anything is
+  // stripped. Stripping first would read `1,234.5` as a German number and turn
+  // it into `1.2345`, which is not what was pasted and not what it means.
+  const shape = new RegExp(
+    `^[+-]?\\d{1,3}(?:${escape(group)}\\d{3})*(?:${escape(decimal)}\\d+)?$` +
+      `|^[+-]?\\d+(?:${escape(decimal)}\\d+)?(?:e[+-]?\\d+)?$`,
+    'i',
+  );
+  if (!shape.test(trimmed)) {
+    return text;
+  }
+  return trimmed.split(group).join('').replace(decimal, '.');
+}
+
 export class CopyPaste extends BasePlugin {
   static override readonly pluginName: string = 'copyPaste';
 
@@ -157,11 +189,22 @@ export class CopyPaste extends BasePlugin {
     for (let row = range.topRow; row <= lastRow; row += 1) {
       const values: string[] = [];
       for (let col = range.startCol; col <= lastCol; col += 1) {
-        values.push(this.grid.getDataAtCell(row, col));
+        values.push(this.isCopyable(row, col) ? this.grid.getDataAtCell(row, col) : '');
       }
       rows.push(values);
     }
     return rows;
+  }
+
+  /**
+   * Whether a cell's value may leave the grid.
+   *
+   * `copyable: false` is how a column of secrets stays out of the clipboard.
+   * The cell is still there and still readable on screen — this is about what
+   * crosses into another application, not about hiding anything.
+   */
+  isCopyable(row: number, col: number): boolean {
+    return this.grid.getCellMeta(row, col)['copyable'] !== false;
   }
 
   /** The same rectangle, as the formulas behind it rather than their results. */
@@ -174,7 +217,7 @@ export class CopyPaste extends BasePlugin {
     for (let row = range.topRow; row <= range.bottomRow; row += 1) {
       const values: string[] = [];
       for (let col = range.startCol; col <= range.endCol; col += 1) {
-        values.push(this.grid.getSourceDataAtCell(row, col));
+        values.push(this.isCopyable(row, col) ? this.grid.getSourceDataAtCell(row, col) : '');
       }
       rows.push(values);
     }
@@ -239,17 +282,54 @@ export class CopyPaste extends BasePlugin {
     const shifted = this.#shiftClipping(text, range.topRow, range.startCol) ?? values;
     // A selection larger than the pasted block repeats it, which is how
     // pasting one value over a column fills the column.
-    const height = Math.max(range.rowCount, shifted.length);
-    const width = Math.max(range.colCount, Math.max(...shifted.map((row) => row.length)));
+    const prepared = this.#prepare(shifted, range.topRow, range.startCol);
+    const height = Math.max(range.rowCount, prepared.length);
+    const width = Math.max(range.colCount, Math.max(...prepared.map((row) => row.length), 0));
     this.grid.populateFromArray(
       range.topRow,
       range.startCol,
-      shifted,
+      prepared,
       range.topRow + height - 1,
       range.startCol + width - 1,
       'paste',
     );
     this.grid.hooks.run('afterPaste', undefined, values, range.toArray());
+  }
+
+  /**
+   * Applies the settings that decide what a paste may write.
+   *
+   * A row or column marked `skipRowOnPaste` / `skipColumnOnPaste` keeps what it
+   * has — the incoming value is dropped rather than shifted into the next cell,
+   * because shifting would silently misalign every column after it.
+   */
+  #prepare(values: string[][], top: number, left: number): string[][] {
+    const settings = this.grid.getSettings();
+    const trim = settings.trimWhitespace !== false;
+    const parse = settings.parsePastedValue === true;
+
+    return values.map((line, r) => {
+      const row = top + r;
+      if (this.grid.getCellMeta(row, left)['skipRowOnPaste'] === true) {
+        // Keep the row's own values, so the block below it stays in place.
+        return line.map((_, c) => this.grid.getSourceDataAtCell(row, left + c));
+      }
+      return line.map((value, c) => {
+        const col = left + c;
+        const meta = this.grid.getCellMeta(row, col);
+        if (meta['skipColumnOnPaste'] === true) {
+          return this.grid.getSourceDataAtCell(row, col);
+        }
+        let text = trim ? value.trim() : value;
+        if (parse) {
+          // A pasted `1,234` is a number to the reader; without this it is the
+          // text `1,234`, which sorts and sums as nothing.
+          const parsed = parsePastedValue(text, this.grid.getLocale());
+          text = parsed;
+        }
+        return text;
+      });
+    });
   }
 
   /**

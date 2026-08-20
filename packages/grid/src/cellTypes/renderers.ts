@@ -91,6 +91,12 @@ export function formatNumeric(
   value: unknown,
   meta: RenderContext['meta'],
 ): string {
+  // `preserveNumericLiteral` keeps what was typed when reading it as a number
+  // would lose something — `9.0` staying `9.0`, and a value past the
+  // safe-integer limit staying exact rather than rounding.
+  if (meta.preserveNumericLiteral === true && text !== '') {
+    return text;
+  }
   const format = meta.numericFormat as Intl.NumberFormatOptions | undefined;
   if (!format || typeof value !== 'number' || !Number.isFinite(value)) {
     return text;
@@ -175,15 +181,73 @@ export const passwordRenderer: CellRenderer = (context) => {
   td.textContent = text === '' ? '' : symbol.repeat(Math.max(length, 0));
 };
 
-/** Dates and times render as text; the engine has already formatted them. */
+/**
+ * The cache behind `dateFormat` and `timeFormat`.
+ *
+ * Building an `Intl.DateTimeFormat` costs enough to show while scrolling, and
+ * a grid uses very few distinct ones.
+ */
+const dateFormatters = new Map<string, Intl.DateTimeFormat>();
+
+/**
+ * Formats an ISO value for display, when a format was configured.
+ *
+ * The source has to be ISO — `YYYY-MM-DD` for a date, `HH:mm[:ss]` for a time —
+ * because that is what sorts and compares correctly. Anything else is shown as
+ * it is rather than guessed at: a value that is not a date should not become
+ * one because a column said `type: 'date'`.
+ */
+export function formatTemporal(
+  text: string,
+  options: Intl.DateTimeFormatOptions | undefined,
+  locale: string | undefined,
+  kind: 'date' | 'time',
+): string {
+  if (!options || text === '') {
+    return text;
+  }
+  const iso = kind === 'date' ? text : `1970-01-01T${text}`;
+  const at = new Date(kind === 'date' ? `${text}T00:00:00` : iso);
+  if (Number.isNaN(at.getTime())) {
+    return text;
+  }
+  const key = `${locale ?? ''}:${kind}:${JSON.stringify(options)}`;
+  let formatter = dateFormatters.get(key);
+  if (!formatter) {
+    try {
+      formatter = new Intl.DateTimeFormat(locale, options);
+    } catch {
+      return text;
+    }
+    dateFormatters.set(key, formatter);
+  }
+  return formatter.format(at);
+}
+
 export const dateRenderer: CellRenderer = (context) => {
-  textRenderer(context);
-  context.td.classList.add('cm-date');
+  const { td, cell, meta } = context;
+  applyCommon(context);
+  const shown = formatTemporal(
+    cell?.text ?? '',
+    meta.dateFormat as Intl.DateTimeFormatOptions | undefined,
+    typeof meta.locale === 'string' ? meta.locale : undefined,
+    'date',
+  );
+  write(td, shown, meta);
+  td.classList.add('cm-date');
 };
 
 export const timeRenderer: CellRenderer = (context) => {
-  textRenderer(context);
-  context.td.classList.add('cm-time');
+  const { td, cell, meta } = context;
+  applyCommon(context);
+  const shown = formatTemporal(
+    cell?.text ?? '',
+    meta.timeFormat as Intl.DateTimeFormatOptions | undefined,
+    typeof meta.locale === 'string' ? meta.locale : undefined,
+    'time',
+  );
+  write(td, shown, meta);
+  td.classList.add('cm-time');
 };
 
 /** Several chosen values, shown as a comma-separated list. */

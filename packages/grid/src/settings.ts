@@ -253,6 +253,13 @@ export interface GridSettings {
   // --- appearance -------------------------------------------------------
   themeName?: string;
   theme?: string;
+  parsePastedValue?: boolean;
+  filterSelectedItems?: boolean;
+  searchInput?: boolean;
+  maxSelections?: number;
+  preserveNumericLiteral?: boolean;
+  sourceSortFunction?: (a: string, b: string) => number;
+  enterCommits?: boolean;
   tableClassName?: string | string[];
   /** Caps the grid at its parent's size in one direction. */
   preventOverflow?: 'horizontal' | 'vertical' | false;
