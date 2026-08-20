@@ -43,6 +43,8 @@ export * from './exportFile.js';
 export * from './nestedHeaders.js';
 export * from './collapsibleColumns.js';
 export * from './menuItems.js';
+export * from './menuPlugin.js';
+export * from './buildMenu.js';
 export * from './contextMenu.js';
 export * from './dropdownMenu.js';
 export * from './dialog.js';

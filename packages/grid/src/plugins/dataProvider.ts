@@ -286,7 +286,7 @@ export class DataProvider extends BasePlugin {
     for (const [row, prop, , newValue] of changes) {
       let entry = byRow.get(row);
       if (!entry) {
-        entry = { id: this.getRowId(row), changes: {}, rowData: this.#valuesOf(row) };
+        entry = { id: this.getRowId(row), changes: {}, rowData: this.grid.getDataAtRow(row) };
         byRow.set(row, entry);
       }
       entry.changes[String(prop)] = String(newValue ?? '');
@@ -301,22 +301,16 @@ export class DataProvider extends BasePlugin {
       if (col < 0) {
         continue;
       }
-      const validator = this.grid.getCellValidator(row, col) as
-        | ((value: string, meta: unknown) => unknown)
-        | undefined;
-      if (typeof validator !== 'function') {
-        continue;
-      }
-      const result = await validator(
+      const { valid, reason } = await this.grid.validateCell(
+        row,
+        col,
         this.grid.getSourceDataAtCell(row, col),
-        this.grid.getCellMeta(row, col),
       );
-      const valid =
-        typeof result === 'object' && result !== null && 'valid' in result
-          ? (result as { valid: boolean }).valid
-          : result !== false;
       if (!valid) {
-        return new Error(`[cellmoa] dataProvider: row ${row}, column ${String(prop)} is not valid.`);
+        return new Error(
+          `[cellmoa] dataProvider: row ${row}, column ${String(prop)} is not valid` +
+            `${reason ? ` (${reason})` : ''}.`,
+        );
       }
     }
     return null;
@@ -365,19 +359,13 @@ export class DataProvider extends BasePlugin {
     const settings = this.settings<DataProviderSettings>();
     const rowId = settings?.rowId;
     if (typeof rowId === 'function') {
-      return rowId(row, this.#valuesOf(row));
+      return rowId(row, this.grid.getDataAtRow(row));
     }
     if (typeof rowId === 'string') {
       const col = this.grid.propToCol(rowId);
       return col < 0 ? undefined : this.grid.getDataAtCell(row, col);
     }
     return undefined;
-  }
-
-  #valuesOf(row: number): string[] {
-    return Array.from({ length: this.grid.countCols() }, (_, col) =>
-      this.grid.getDataAtCell(row, col),
-    );
   }
 
   // --- fetching -----------------------------------------------------------
@@ -425,7 +413,7 @@ export class DataProvider extends BasePlugin {
       }
       this.#lastError = null;
       this.#totalRows = result.totalRows;
-      this.#load(result.rows);
+      this.grid.replaceRows(result.rows, 'dataProvider');
       this.grid.hooks.run(
         'afterDataProviderFetch',
         undefined,
@@ -644,16 +632,6 @@ export class DataProvider extends BasePlugin {
     } | null;
   }
 
-  #load(rows: string[][]): void {
-    const changes: Array<[number, number, string]> = [];
-    const width = Math.max(this.grid.countCols(), ...rows.map((row) => row.length), 1);
-    for (let row = 0; row < Math.max(rows.length, this.grid.countRows()); row += 1) {
-      for (let col = 0; col < width; col += 1) {
-        changes.push([row, col, rows[row]?.[col] ?? '']);
-      }
-    }
-    this.grid.setDataAtCells(changes, 'dataProvider');
-  }
 }
 
 /** Whether a rejection is a request being called off rather than failing. */

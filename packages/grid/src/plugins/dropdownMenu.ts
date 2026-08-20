@@ -1,43 +1,28 @@
 /**
  * The menu on the column header.
  *
- * The same menu machinery as the context menu, opened from a button on each
- * column header rather than by right-clicking, and defaulting to the commands
- * that are about a column. Opening it selects the column, because that is what
- * the commands in it act on.
+ * The same menu machinery as the context menu — literally the same, since both
+ * extend `MenuPlugin` — opened from a button on each column header rather than
+ * by right-clicking, and defaulting to the commands that are about a column.
+ * Opening it selects the column, because that is what the commands in it act
+ * on.
  */
 
-import { Menu, resolve } from '../menu.js';
-import type { MenuItem } from '../menu.js';
-import { BasePlugin, registerPlugin } from './base.js';
-import { buildMenu } from './contextMenu.js';
-import { DEFAULT_DROPDOWN_MENU, ITEM, predefinedItems } from './menuItems.js';
+import { registerPlugin } from './base.js';
+import { MenuPlugin } from './menuPlugin.js';
+import type { MenuSettings } from './menuPlugin.js';
+import { DEFAULT_DROPDOWN_MENU } from './menuItems.js';
 
-export interface DropdownMenuSettings {
-  items?: string[] | Record<string, Partial<MenuItem>>;
-  uiContainer?: HTMLElement;
-}
+export type DropdownMenuSettings = MenuSettings;
 
-export class DropdownMenu extends BasePlugin {
+export class DropdownMenu extends MenuPlugin {
   static override readonly pluginName: string = 'dropdownMenu';
 
-  #menu: Menu | null = null;
+  protected override readonly setting = 'dropdownMenu';
+  protected override readonly defaults = DEFAULT_DROPDOWN_MENU;
+  protected override readonly hookPrefix = 'DropdownMenu';
 
-  override isEnabled(): boolean {
-    const settings = this.grid.getSettings().dropdownMenu;
-    return settings !== undefined && settings !== false;
-  }
-
-  protected override onEnable(): void {
-    const root = this.grid.view?.root;
-    if (!root) {
-      return;
-    }
-    this.#menu = new Menu({
-      document: root.ownerDocument,
-      selection: () => this.grid.getMenuSelection(),
-      afterCommand: (key) => this.grid.hooks.run('afterDropdownMenuExecute', undefined, key),
-    });
+  protected override onMenuEnable(): void {
     this.addHook(
       'afterGetColHeader',
       (_value: unknown, col: number, th: HTMLTableCellElement, level: number) => {
@@ -61,19 +46,9 @@ export class DropdownMenu extends BasePlugin {
     this.grid.render();
   }
 
-  protected override onDisable(): void {
-    this.close();
-    this.#menu = null;
+  protected override onMenuDisable(): void {
+    // The buttons are drawn by the hook, so dropping them is a redraw.
     this.grid.render();
-  }
-
-  /** The items this menu would show right now. */
-  getItems(): MenuItem[] {
-    return buildMenu(
-      this.grid.getSettings().dropdownMenu,
-      predefinedItems(this.grid),
-      DEFAULT_DROPDOWN_MENU,
-    ).filter((item) => !resolve(item.hidden, false));
   }
 
   /** Opens the menu below a column's button, selecting that column first. */
@@ -81,36 +56,6 @@ export class DropdownMenu extends BasePlugin {
     this.grid.selectColumns(col);
     const box = anchor?.getBoundingClientRect();
     this.open(box?.left ?? 0, box?.bottom ?? 0);
-  }
-
-  /** Opens it at a point. */
-  open(x: number, y: number): void {
-    const items = this.getItems();
-    const shown = items.length > 0 ? items : [predefinedItems(this.grid)[ITEM.noItems]!];
-    if (this.grid.hooks.allows('beforeDropdownMenuShow', shown) === false) {
-      return;
-    }
-    this.#menu?.open(shown, x, y, this.options<DropdownMenuSettings>().uiContainer);
-    this.grid.hooks.run('afterDropdownMenuShow', undefined, shown);
-  }
-
-  close(): void {
-    if (this.#menu?.isOpen) {
-      this.#menu.close();
-      this.grid.hooks.run('afterDropdownMenuHide', undefined);
-    }
-  }
-
-  /** Runs a command by key. */
-  executeCommand(key: string, event: Event = new Event('command')): void {
-    const item = this.getItems().find((entry) => entry.key === key);
-    if (item) {
-      this.#menu?.execute(item, event);
-    }
-  }
-
-  get menu(): Menu | null {
-    return this.#menu;
   }
 }
 

@@ -81,6 +81,25 @@ export interface CellTypeDefinition {
 /** Shorthand for a value that passed. */
 export const VALID: ValidationResult = { valid: true };
 
+/**
+ * Reads whatever a validator returned as a verdict.
+ *
+ * The registered validators answer with a `ValidationResult`, and a validator
+ * somebody wrote themselves usually answers with a boolean — that is the shape
+ * Handsontable's own `callback(true)` teaches. Both have to mean the same
+ * thing, and they have to mean it at every entry point: a validator that
+ * rejects a value when a cell is edited but accepts it when `validateCells`
+ * runs is worse than one that never worked.
+ */
+export function asVerdict(result: unknown): ValidationResult {
+  if (typeof result === 'object' && result !== null && 'valid' in result) {
+    const verdict = result as ValidationResult;
+    return { valid: Boolean(verdict.valid), ...(verdict.reason ? { reason: verdict.reason } : {}) };
+  }
+  // `undefined` is a validator that returned nothing, which is not a refusal.
+  return { valid: result !== false };
+}
+
 /** Shorthand for a value that did not. */
 export function invalid(reason: string): ValidationResult {
   return { valid: false, reason };

@@ -5,134 +5,29 @@
  * defaults, an array of keys to pick from them, or an object with `items` to
  * add commands of your own. What a key resolves to depends on which plugins are
  * running, so a menu never offers a command that would do nothing.
- */
-
-import { Menu, SEPARATOR, resolve } from '../menu.js';
-import type { MenuItem, MenuSelection } from '../menu.js';
-import { BasePlugin, registerPlugin } from './base.js';
-import { DEFAULT_CONTEXT_MENU, ITEM, predefinedItems } from './menuItems.js';
-
-export interface ContextMenuSettings {
-  items?: string[] | Record<string, Partial<MenuItem>>;
-  callback?: (key: string, selection: MenuSelection[], event: Event) => void;
-  uiContainer?: HTMLElement;
-}
-
-/**
- * Turns whatever the settings said into a list of items.
  *
- * A key that names nothing is dropped rather than shown as a dead entry: which
- * commands exist depends on which plugins are on, and a menu listing `copy`
- * when the clipboard plugin is off would be a lie.
+ * Everything it shares with the column-header menu lives in `MenuPlugin`; what
+ * is left here is what makes it the *right-click* menu.
  */
-export function buildMenu(
-  settings: unknown,
-  available: Record<string, MenuItem>,
-  defaults: string[],
-): MenuItem[] {
-  const resolveKeys = (keys: string[]): MenuItem[] =>
-    keys
-      .map((key) => (key === SEPARATOR ? { key: SEPARATOR } : available[key]))
-      .filter((item): item is MenuItem => item !== undefined);
 
-  if (settings === true || settings === undefined) {
-    return resolveKeys(defaults);
-  }
-  if (Array.isArray(settings)) {
-    return resolveKeys(settings as string[]);
-  }
-  if (typeof settings === 'object' && settings !== null) {
-    const items = (settings as ContextMenuSettings).items;
-    if (Array.isArray(items)) {
-      return resolveKeys(items);
-    }
-    if (items && typeof items === 'object') {
-      // An object keeps its own order, and an entry may either name a built-in
-      // command or define a new one outright.
-      return Object.entries(items).map(([key, overrides]) => ({
-        ...(available[key] ?? { key }),
-        ...overrides,
-        key,
-      }));
-    }
-    return resolveKeys(defaults);
-  }
-  return [];
-}
+import { registerPlugin } from './base.js';
+import { MenuPlugin } from './menuPlugin.js';
+import type { MenuSettings } from './menuPlugin.js';
+import { DEFAULT_CONTEXT_MENU } from './menuItems.js';
 
-export class ContextMenu extends BasePlugin {
+export type ContextMenuSettings = MenuSettings;
+
+export { buildMenu } from './buildMenu.js';
+
+export class ContextMenu extends MenuPlugin {
   static override readonly pluginName: string = 'contextMenu';
 
-  #menu: Menu | null = null;
+  protected override readonly setting = 'contextMenu';
+  protected override readonly defaults = DEFAULT_CONTEXT_MENU;
+  protected override readonly hookPrefix = 'ContextMenu';
 
-  override isEnabled(): boolean {
-    const settings = this.grid.getSettings().contextMenu;
-    return settings !== undefined && settings !== false;
-  }
-
-  protected override onEnable(): void {
-    const root = this.grid.view?.root;
-    if (!root) {
-      return;
-    }
-    this.#menu = new Menu({
-      document: root.ownerDocument,
-      selection: () => this.grid.getMenuSelection(),
-      afterCommand: (key) => this.grid.hooks.run('afterContextMenuExecute', undefined, key),
-    });
+  protected override onMenuEnable(root: HTMLElement): void {
     this.listen(root, 'contextmenu', (event: MouseEvent) => this.#onContextMenu(event));
-  }
-
-  protected override onDisable(): void {
-    this.close();
-    this.#menu = null;
-  }
-
-  /**
-   * The items this menu would show right now.
-   *
-   * Hidden ones are left out here rather than only at draw time, so a command
-   * the settings forbid cannot be reached through `executeCommand` either.
-   */
-  getItems(): MenuItem[] {
-    return buildMenu(
-      this.grid.getSettings().contextMenu,
-      predefinedItems(this.grid),
-      DEFAULT_CONTEXT_MENU,
-    ).filter((item) => !resolve(item.hidden, false));
-  }
-
-  /** Opens the menu at a point. */
-  open(x: number, y: number): void {
-    const items = this.getItems();
-    const shown = items.length > 0 ? items : [predefinedItems(this.grid)[ITEM.noItems]!];
-    if (this.grid.hooks.allows('beforeContextMenuShow', shown) === false) {
-      return;
-    }
-    this.#menu?.open(shown, x, y, this.options<ContextMenuSettings>().uiContainer);
-    this.grid.hooks.run('afterContextMenuShow', undefined, shown);
-  }
-
-  /** Takes it down. */
-  close(): void {
-    if (this.#menu?.isOpen) {
-      this.#menu.close();
-      this.grid.hooks.run('afterContextMenuHide', undefined);
-    }
-  }
-
-  /** Runs a command by key, as choosing it would. */
-  executeCommand(key: string, event: Event = new Event('command')): void {
-    const item = this.getItems().find((entry) => entry.key === key);
-    if (item) {
-      this.#menu?.execute(item, event);
-      this.options<ContextMenuSettings>().callback?.(key, this.grid.getMenuSelection(), event);
-    }
-  }
-
-  /** The menu element, for a caller that wants to inspect it. */
-  get menu(): Menu | null {
-    return this.#menu;
   }
 
   #onContextMenu(event: MouseEvent): void {

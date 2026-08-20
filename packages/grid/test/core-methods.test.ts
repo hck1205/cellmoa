@@ -288,6 +288,24 @@ describe('cell meta', () => {
     expect(grid.getCellRenderer(1, 1)).toBe(own);
   });
 
+  it('reads a boolean validator the same way at every entry point', async () => {
+    // A validator written the way the reference teaches returns a boolean, not
+    // a `{ valid }`. It used to be read as a refusal on the edit path and as an
+    // acceptance on the batch path — the same rule giving two answers.
+    const grid = await makeGrid({ startRows: 2, startCols: 1, allowInvalid: false });
+    grid.setCellMeta(0, 0, 'validator', (value: string) => value !== 'no');
+
+    expect(await grid.validateCell(0, 0, 'yes')).toEqual({ valid: true });
+    expect(await grid.validateCell(0, 0, 'no')).toEqual({ valid: false });
+
+    // The edit path agrees: an accepted value lands.
+    grid.beginEditing(0, 0, 'yes');
+    grid.closeEditor(true);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(grid.getDataAtCell(0, 0)).toBe('yes');
+    expect(grid.isCellInvalid(0, 0)).toBe(false);
+  });
+
   it('validates every cell and reports the verdict once', async () => {
     const grid = await makeGrid({ startRows: 2, startCols: 1 });
     grid.setCellMeta(0, 0, 'type', 'numeric');
