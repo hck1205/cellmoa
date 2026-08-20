@@ -19,9 +19,9 @@ export * from './plugins/index.js';
 export type { CellChange, ChangeSource, GridOptions } from './grid.js';
 
 export { DataSource, WriteConflict, cellRef, columnLetters, lettersToColumn, rangeRef } from './dataSource.js';
-export type { Edit, SheetInfo, Window } from './dataSource.js';
+export type { Actor, AlterAction, Edit, SheetInfo, Window } from './dataSource.js';
 
-export { Hooks, HOOK_NAMES, isHookName } from './hooks.js';
+export { Hooks, EXTRA_HOOK_NAMES, HOOK_NAMES, isHookName } from './hooks.js';
 export type { HookHandler, HookName } from './hooks.js';
 
 export { IndexMapper } from './indexMapper.js';
@@ -76,4 +76,25 @@ export type { KeyCombination, ShortcutCallback, ShortcutOptions } from './shortc
 
 export { SizeMap } from './sizes.js';
 export { View } from './view.js';
-export type { CellRenderContext, ViewModel, Viewport } from './view.js';
+export type { CellRenderContext, ColHeaderCell, ViewModel, Viewport } from './view.js';
+
+export { Menu, SEPARATOR, resolve } from './menu.js';
+export type { MenuHost, MenuItem, MenuSelection } from './menu.js';
+
+export { LayoutManager, SLOT_ELEMENT_CLASS } from './layout.js';
+export type { LayoutSettings, SlotOptions, SlotSide } from './layout.js';
+
+export {
+  DEFAULT_LANGUAGE,
+  DICTIONARIES,
+  LANGUAGES,
+  dictionary,
+  hasLanguage,
+  languages,
+  phrase,
+  phraseKeys,
+  registerLanguage,
+} from './i18n/index.js';
+export type { Dictionary, Phrase } from './i18n/index.js';
+export { PHRASE } from './i18n/keys.js';
+export type { PhraseKey } from './i18n/keys.js';

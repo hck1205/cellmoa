@@ -19,6 +19,45 @@ cargo run -p cellmoa-cli -- diff before.xlsx after.xlsx
 | `cellmoa-xlsx` | ZIP·OOXML 자체 구현 XLSX import/export |
 | `cellmoa-diff` | 행 정렬 기반 워크북 diff |
 | `cellmoa-cli` | `cellmoa` 명령줄 |
+| `cellmoa-mcp` | MCP 서버 (stdio · HTTP) |
+| `cellmoa-wasm` | 브라우저용 C ABI 바인딩 |
+| `cellmoa-api` | 셋이 공유하는 JSON 명령 표면 |
+
+| 패키지 | 내용 |
+|---|---|
+| `packages/grid` | 웹 그리드 UI. Handsontable API 계약 전량 + provenance·diff·verify |
+
+## 그리드
+
+```
+cd packages/grid && npm install && npm run build:wasm && npm run build
+```
+
+```ts
+import { Engine, Grid } from '@cellmoa/grid';
+import '@cellmoa/grid/style.css';
+
+const engine = await Engine.load('/cellmoa_wasm.wasm');
+const grid = new Grid(document.querySelector('#grid'), {
+  engine,
+  actor: { kind: 'human', id: 'you' },
+  colHeaders: true,
+  rowHeaders: true,
+  contextMenu: true,
+  columnSorting: true,
+  filters: true,
+  // Handsontable에 대응물이 없는 것들
+  provenance: true,
+  statusBar: true,
+  diffView: true,
+});
+```
+
+Handsontable의 API 계약 — 설정 162개 · 훅 253개 · 코어 메서드 134개 ·
+플러그인 42개 · 셀 타입 13종 — 을 소스에서 추출해 전량 구현했다. 코드는 한 줄도
+가져오지 않았다. 항목별 상태는 [대조표](docs/handsontable-parity.md).
+
+브라우저에서 직접 만져 보려면 [`examples/grid/`](examples/grid/).
 
 ## 설계상 정한 것
 
@@ -45,4 +84,6 @@ verify도 의미를 잃는다.
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all --check
+
+cd packages/grid && npm test && npm run typecheck
 ```

@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>cellmoa grid</title>
+    <link rel="stylesheet" href="../../packages/grid/src/style.css" />
+    <style>
+      body {
+        margin: 0;
+        font: 14px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      }
+      header {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        padding: 8px 12px;
+        border-bottom: 1px solid #ddd;
+      }
+      header h1 {
+        margin: 0 12px 0 0;
+        font-size: 15px;
+      }
+      #grid {
+        height: calc(100vh - 46px);
+      }
+      .cm-slot-element#toolbar {
+        padding: 4px 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>cellmoa</h1>
+      <button id="agent">Let an agent edit B4</button>
+      <button id="snapshot">Snapshot</button>
+      <button id="diff">Diff against snapshot</button>
+      <button id="verify">Verify</button>
+      <label>
+        Language
+        <select id="language"></select>
+      </label>
+    </header>
+    <div id="grid"></div>
+
+    <script type="module">
+      import { Engine, Grid, languages } from '../../packages/grid/dist/index.js';
+
+      const engine = await Engine.load('../../packages/grid/src/wasm/cellmoa_wasm.wasm');
+
+      const grid = new Grid(document.querySelector('#grid'), {
+        engine,
+        actor: { kind: 'human', id: 'you' },
+        colHeaders: ['Item', 'Unit', 'Qty', 'Total'],
+        rowHeaders: true,
+        startRows: 12,
+        startCols: 4,
+        contextMenu: true,
+        dropdownMenu: true,
+        columnSorting: true,
+        filters: true,
+        mergeCells: true,
+        comments: true,
+        customBorders: true,
+        search: true,
+        manualResize: true,
+        autoColumnSize: true,
+        stretchH: 'last',
+        // The features with no Handsontable counterpart.
+        provenance: true,
+        conflicts: true,
+        statusBar: true,
+        verifyOverlay: true,
+        diffView: true,
+        columnSummary: [{ sourceColumn: 3, destinationRow: 11, type: 'sum' }],
+      });
+
+      grid.setDataAtCells([
+        [0, 0, 'Paper'], [0, 1, '3.20'], [0, 2, '40'], [0, 3, '=B1*C1'],
+        [1, 0, 'Ink'], [1, 1, '18.50'], [1, 2, '6'], [1, 3, '=B2*C2'],
+        [2, 0, 'Binding'], [2, 1, '95.00'], [2, 2, '1'], [2, 3, '=B3*C3'],
+        [3, 0, 'Postage'], [3, 1, '0.85'], [3, 2, '120'], [3, 3, '=B4*C4'],
+      ]);
+
+      // A second grid on the same workbook, writing as an agent. This is what
+      // makes the agent marker and the actor-scoped undo real rather than a
+      // demonstration of themselves.
+      const hidden = document.createElement('div');
+      hidden.style.display = 'none';
+      document.body.appendChild(hidden);
+      const agent = new Grid(hidden, {
+        engine,
+        actor: { kind: 'agent', id: 'assistant' },
+        startRows: 12,
+        startCols: 4,
+      });
+
+      document.querySelector('#agent').addEventListener('click', () => {
+        agent.setDataAtCell(3, 2, String(Math.floor(Math.random() * 200)));
+        grid.render();
+      });
+
+      const diffView = grid.getPlugin('diffView');
+      document.querySelector('#snapshot').addEventListener('click', () => {
+        diffView.snapshot('baseline');
+        grid.getPlugin('notification')?.showMessage({ message: 'Snapshot taken', type: 'success' });
+      });
+      document.querySelector('#diff').addEventListener('click', () => {
+        const result = diffView.compare('baseline');
+        grid.getPlugin('notification')?.showMessage({
+          message: `${result.summary.cells} cell(s) changed`,
+          type: result.summary.cells > 0 ? 'warning' : 'info',
+        });
+      });
+      document.querySelector('#verify').addEventListener('click', () => {
+        const report = grid.getPlugin('verifyOverlay').run({
+          expect: [
+            { cell: 'D1', equals: 128, label: 'paper total' },
+            { cell: 'D12', greaterThan: 0, label: 'the sum is positive' },
+          ],
+        });
+        grid.getPlugin('notification')?.showMessage({
+          message: report.passed ? 'All checks passed' : `${report.results.filter((r) => !r.passed).length} check(s) failed`,
+          type: report.passed ? 'success' : 'error',
+        });
+      });
+
+      const select = document.querySelector('#language');
+      for (const code of languages()) {
+        const option = document.createElement('option');
+        option.value = code;
+        option.textContent = code;
+        option.selected = code === 'en-US';
+        select.appendChild(option);
+      }
+      select.addEventListener('change', () => grid.updateSettings({ language: select.value }));
+
+      // Something of our own in the top slot, to show the slot works.
+      const toolbar = document.createElement('div');
+      toolbar.id = 'toolbar';
+      toolbar.textContent = 'Right-click a cell for the menu. "Where did this come from?" reads the journal.';
+      grid.getLayoutManager().register('toolbar', toolbar, { side: 'top' });
+    </script>
+  </body>
+</html>

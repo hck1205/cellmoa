@@ -212,10 +212,16 @@ fn an_unknown_alteration_is_refused_by_name() {
 #[test]
 fn a_cells_history_says_who_set_it_to_what() {
     let mut session = Session::new();
-    ok(&mut session, json!({ "op": "write", "cells": [{ "cell": "A1", "input": "1" }],
-                             "who": { "kind": "human", "id": "ada" } }));
-    ok(&mut session, json!({ "op": "write", "cells": [{ "cell": "A1", "input": "=2*2" }],
-                             "who": { "kind": "agent", "id": "bot" }, "label": "recalculated" }));
+    ok(
+        &mut session,
+        json!({ "op": "write", "cells": [{ "cell": "A1", "input": "1" }],
+                             "who": { "kind": "human", "id": "ada" } }),
+    );
+    ok(
+        &mut session,
+        json!({ "op": "write", "cells": [{ "cell": "A1", "input": "=2*2" }],
+                             "who": { "kind": "agent", "id": "bot" }, "label": "recalculated" }),
+    );
 
     let history = ok(&mut session, json!({ "op": "history", "cell": "A1" }));
     let entries = history["history"].as_array().unwrap();
