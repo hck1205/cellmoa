@@ -1,0 +1,135 @@
+/*
+ * The grid's own styles.
+ *
+ * Deliberately small: layout that the renderer depends on, and no more. Colours
+ * come from custom properties so a host can retheme the grid without
+ * overriding rules one at a time.
+ */
+
+.cm-grid {
+  --cm-border: #e0e0e0;
+  --cm-header-bg: #f6f6f6;
+  --cm-header-fg: #444;
+  --cm-cell-bg: #fff;
+  --cm-cell-fg: #111;
+  --cm-selected-bg: rgba(52, 120, 246, 0.1);
+  --cm-current-border: #3478f6;
+  --cm-error-fg: #c0392b;
+  --cm-readonly-fg: #999;
+  --cm-agent-marker: #7a5af8;
+
+  position: relative;
+  overflow: hidden;
+  font: 13px/1.4 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: var(--cm-cell-fg);
+  background: var(--cm-cell-bg);
+  user-select: none;
+}
+
+.cm-grid .cm-scroller {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+}
+
+/* The scroller is above the panes so it keeps the wheel and the scrollbars,
+   but it must let clicks through to the cells underneath. */
+.cm-grid .cm-scroller,
+.cm-grid .cm-spacer {
+  pointer-events: none;
+}
+
+.cm-grid .cm-pane {
+  position: absolute;
+  overflow: hidden;
+}
+
+.cm-grid .cm-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+}
+
+.cm-grid td,
+.cm-grid th {
+  box-sizing: border-box;
+  padding: 2px 4px;
+  border-right: 1px solid var(--cm-border);
+  border-bottom: 1px solid var(--cm-border);
+  background: var(--cm-cell-bg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+.cm-grid th {
+  background: var(--cm-header-bg);
+  color: var(--cm-header-fg);
+  font-weight: 500;
+  text-align: center;
+}
+
+.cm-grid .cm-row-header {
+  text-align: center;
+}
+
+/* Numbers right-align, as they do in every spreadsheet, because a column of
+   figures is read by its digits lining up. */
+.cm-grid .cm-numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.cm-grid .cm-error {
+  color: var(--cm-error-fg);
+}
+
+.cm-grid .htDimmed {
+  color: var(--cm-readonly-fg);
+}
+
+.cm-grid .cm-selected {
+  background: var(--cm-selected-bg);
+}
+
+.cm-grid .cm-current {
+  outline: 2px solid var(--cm-current-border);
+  outline-offset: -2px;
+}
+
+/* A cell last touched by an agent is marked, so a person can see at a glance
+   what they did not write themselves. */
+.cm-grid .cm-by-agent::after {
+  content: '';
+  position: absolute;
+  width: 0;
+  height: 0;
+  margin-left: -6px;
+  border-top: 5px solid var(--cm-agent-marker);
+  border-left: 5px solid transparent;
+}
+
+.cm-grid .cm-editor {
+  position: absolute;
+  z-index: 10;
+  box-sizing: border-box;
+  padding: 1px 3px;
+  border: 2px solid var(--cm-current-border);
+  outline: none;
+  font: inherit;
+  background: var(--cm-cell-bg);
+  color: var(--cm-cell-fg);
+}
+
+@media (prefers-color-scheme: dark) {
+  .cm-grid {
+    --cm-border: #3a3a3a;
+    --cm-header-bg: #262626;
+    --cm-header-fg: #bbb;
+    --cm-cell-bg: #1a1a1a;
+    --cm-cell-fg: #eee;
+    --cm-selected-bg: rgba(90, 150, 255, 0.18);
+    --cm-readonly-fg: #777;
+  }
+}
