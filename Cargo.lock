@@ -77,6 +77,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "cellmoa-wasm"
+version = "0.1.0"
+dependencies = [
+ "cellmoa-api",
+]
+
+[[package]]
 name = "cellmoa-xlsx"
 version = "0.1.0"
 dependencies = [

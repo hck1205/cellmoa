@@ -48,6 +48,35 @@ impl Session {
         self.engine.revision()
     }
 
+    /// Loads a workbook from the bytes of an `.xlsx` file.
+    ///
+    /// The browser has no filesystem to open a path against, so this is the
+    /// entry point the web grid uses; the bytes come from a file input or a
+    /// fetch.
+    pub fn open_bytes(&mut self, bytes: &[u8]) -> Result<(), String> {
+        let package = Package::from_bytes(bytes).map_err(|e| e.to_string())?;
+        let mut engine = Engine::from_workbook(package.workbook.clone());
+        engine.rebuild();
+        self.engine = engine;
+        self.source = Some(package);
+        self.path = None;
+        Ok(())
+    }
+
+    /// Serialises the workbook as an `.xlsx` file.
+    pub fn to_bytes(&mut self) -> Vec<u8> {
+        let package = match self.source.take() {
+            Some(mut package) => {
+                package.workbook = self.engine.workbook().clone();
+                package
+            }
+            None => Package::new(self.engine.workbook().clone()),
+        };
+        let bytes = package.to_bytes();
+        self.source = Some(package);
+        bytes
+    }
+
     /// Handles a request given as JSON and returns the response as JSON.
     ///
     /// Malformed input is answered, not panicked on: this is the boundary the

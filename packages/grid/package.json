@@ -1,0 +1,27 @@
+{
+  "name": "@cellmoa/grid",
+  "version": "0.1.0",
+  "description": "A spreadsheet grid for the web, on the cellmoa engine",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+    "./style.css": "./src/style.css"
+  },
+  "files": ["dist", "src/style.css"],
+  "scripts": {
+    "build:wasm": "cargo build -p cellmoa-wasm --target wasm32-unknown-unknown --release && mkdir -p src/wasm && cp ../../target/wasm32-unknown-unknown/release/cellmoa_wasm.wasm src/wasm/",
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^3",
+    "jsdom": "^26",
+    "typescript": "^5",
+    "vitest": "^3"
+  }
+}
