@@ -1,0 +1,12 @@
+{
+  "sheet": "Budget",
+  "expect": [
+    { "cell": "B7", "equals": 105600, "label": "Q1 total" },
+    { "cell": "C7", "equals": 111900, "label": "Q2 total" },
+    { "cell": "B8", "approx": 0.0597, "tolerance": 0.0001, "label": "quarter-on-quarter growth" },
+    { "cell": "B9", "equals": "Salaries", "label": "largest line of Q2" },
+    { "cell": "B7", "formula": "=SUM(B2:B5)", "label": "the total is still a sum, not a typed-in number" },
+    { "range": "B2:C9", "no_error": true, "label": "no cell is in error" },
+    { "range": "B2:B5", "count": 4, "label": "every Q1 line has a figure" }
+  ]
+}

@@ -1,0 +1,13 @@
+[package]
+name = "cellmoa-core"
+description = "Document model, values, references, revisions and provenance for cellmoa"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

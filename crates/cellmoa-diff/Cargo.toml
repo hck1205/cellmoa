@@ -1,0 +1,11 @@
+[package]
+name = "cellmoa-diff"
+description = "Structural diff between two cellmoa workbooks"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+cellmoa-core.workspace = true
+serde.workspace = true

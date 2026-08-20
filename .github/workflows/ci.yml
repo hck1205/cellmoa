@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: Build, test and lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+
+  spreadsheet:
+    name: Check the spreadsheets themselves
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build the CLI
+        run: cargo build --release -p cellmoa-cli
+      # This is the point of the CLI: a spreadsheet's results become something
+      # a build can fail on, the same way a test suite does.
+      - name: Verify the example workbook
+        run: |
+          ./target/release/cellmoa calc examples/budget.xlsx
+          ./target/release/cellmoa verify examples/budget.xlsx --expect examples/budget.expect.json
+      - name: Fail if the workbook drifted from its recorded fingerprint
+        run: |
+          expected=$(cat examples/budget.fingerprint)
+          actual=$(./target/release/cellmoa fingerprint examples/budget.xlsx --json | sed -n 's/.*"workbook":"\([a-f0-9]*\)".*/\1/p')
+          if [ "$expected" != "$actual" ]; then
+            echo "the workbook changed: expected $expected, got $actual"
+            exit 1
+          fi

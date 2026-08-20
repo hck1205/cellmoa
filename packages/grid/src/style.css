@@ -1,0 +1,645 @@
+/*
+ * The grid's own styles.
+ *
+ * Deliberately small: layout that the renderer depends on, and no more. Colours
+ * come from custom properties so a host can retheme the grid without
+ * overriding rules one at a time.
+ */
+
+.cm-grid {
+  --cm-border: #e0e0e0;
+  --cm-header-bg: #f6f6f6;
+  --cm-header-fg: #444;
+  --cm-cell-bg: #fff;
+  --cm-cell-fg: #111;
+  --cm-selected-bg: rgba(52, 120, 246, 0.1);
+  --cm-current-border: #3478f6;
+  --cm-error-fg: #c0392b;
+  --cm-readonly-fg: #999;
+  --cm-agent-marker: #7a5af8;
+  --cm-comment-bg: #fffbe6;
+  --cm-comment-marker: #c08a00;
+  --cm-search-bg: rgba(255, 210, 0, 0.35);
+  --cm-notification-accent: #3478f6;
+  --cm-loading-bg: rgba(255, 255, 255, 0.72);
+  --cm-diff-changed-bg: rgba(255, 196, 0, 0.18);
+  --cm-diff-added-bg: rgba(46, 158, 79, 0.18);
+  --cm-diff-removed-bg: rgba(192, 57, 43, 0.15);
+
+  position: relative;
+  overflow: hidden;
+  font: 13px/1.4 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: var(--cm-cell-fg);
+  background: var(--cm-cell-bg);
+  user-select: none;
+}
+
+.cm-grid .cm-scroller {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+}
+
+/* The scroller is above the panes so it keeps the wheel and the scrollbars,
+   but it must let clicks through to the cells underneath. */
+.cm-grid .cm-scroller,
+.cm-grid .cm-spacer {
+  pointer-events: none;
+}
+
+.cm-grid .cm-pane {
+  position: absolute;
+  overflow: hidden;
+}
+
+.cm-grid .cm-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+}
+
+.cm-grid td,
+.cm-grid th {
+  box-sizing: border-box;
+  padding: 2px 4px;
+  border-right: 1px solid var(--cm-border);
+  border-bottom: 1px solid var(--cm-border);
+  background: var(--cm-cell-bg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+.cm-grid th {
+  background: var(--cm-header-bg);
+  color: var(--cm-header-fg);
+  font-weight: 500;
+  text-align: center;
+}
+
+.cm-grid .cm-row-header {
+  text-align: center;
+}
+
+/* Numbers right-align, as they do in every spreadsheet, because a column of
+   figures is read by its digits lining up. */
+.cm-grid .cm-numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.cm-grid .cm-error {
+  color: var(--cm-error-fg);
+}
+
+.cm-grid .htDimmed {
+  color: var(--cm-readonly-fg);
+}
+
+.cm-grid .cm-selected {
+  background: var(--cm-selected-bg);
+}
+
+.cm-grid .cm-current {
+  outline: 2px solid var(--cm-current-border);
+  outline-offset: -2px;
+}
+
+/* A cell last touched by an agent is marked, so a person can see at a glance
+   what they did not write themselves. */
+.cm-grid .cm-by-agent::after {
+  content: '';
+  position: absolute;
+  width: 0;
+  height: 0;
+  margin-left: -6px;
+  border-top: 5px solid var(--cm-agent-marker);
+  border-left: 5px solid transparent;
+}
+
+.cm-grid .cm-editor {
+  position: absolute;
+  z-index: 10;
+  box-sizing: border-box;
+  padding: 1px 3px;
+  border: 2px solid var(--cm-current-border);
+  outline: none;
+  font: inherit;
+  background: var(--cm-cell-bg);
+  color: var(--cm-cell-fg);
+}
+
+
+/* A merged cell: the corner spans, the covered ones are not drawn. */
+.cm-grid .cm-merged {
+  text-align: left;
+  vertical-align: top;
+}
+
+/* A cell carrying a comment, marked by a corner triangle. */
+.cm-grid .htCommentCell {
+  position: relative;
+}
+
+.cm-grid .htCommentCell::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  border-top: 6px solid var(--cm-comment-marker);
+  border-left: 6px solid transparent;
+}
+
+.cm-grid .cm-comment {
+  position: absolute;
+  z-index: 20;
+  box-sizing: border-box;
+  min-width: 180px;
+  min-height: 60px;
+  padding: 4px;
+  border: 1px solid var(--cm-border);
+  font: inherit;
+  background: var(--cm-comment-bg);
+  color: var(--cm-cell-fg);
+  resize: both;
+}
+
+/* A search hit. Marked, never edited: a search is not a change. */
+.cm-grid .htSearchResult {
+  background: var(--cm-search-bg);
+}
+
+/* The fold control on a collapsible nested header. */
+.cm-grid .cm-collapse {
+  float: right;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1px solid var(--cm-border);
+  border-radius: 2px;
+  font: inherit;
+  font-size: 10px;
+  line-height: 1;
+  background: var(--cm-cell-bg);
+  color: var(--cm-header-fg);
+  cursor: pointer;
+}
+
+/* The pop-up menu, shared by the context menu and the dropdown menu. */
+.cm-menu {
+  z-index: 100;
+  min-width: 180px;
+  padding: 4px 0;
+  border: 1px solid var(--cm-border);
+  border-radius: 4px;
+  font: 13px/1.4 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background: var(--cm-cell-bg);
+  color: var(--cm-cell-fg);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+  user-select: none;
+}
+
+.cm-menu-item {
+  padding: 4px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.cm-menu-item:hover {
+  background: var(--cm-selected-bg);
+}
+
+.cm-menu-item--disabled {
+  color: var(--cm-readonly-fg);
+  cursor: default;
+}
+
+.cm-menu-item--disabled:hover {
+  background: none;
+}
+
+.cm-menu-item--checked::before {
+  content: '\2713\a0';
+}
+
+.cm-menu-item--submenu::after {
+  content: '\25b8';
+  float: right;
+  margin-left: 12px;
+}
+
+.cm-menu-separator {
+  margin: 4px 0;
+  border-top: 1px solid var(--cm-border);
+}
+
+/* The button that opens a column's dropdown menu. */
+.cm-grid .cm-dropdown {
+  float: right;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: none;
+  font: inherit;
+  font-size: 9px;
+  line-height: 1;
+  background: none;
+  color: var(--cm-header-fg);
+  cursor: pointer;
+}
+
+
+/* The modal dialog. */
+.cm-dialog-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cm-dialog-overlay[data-background='dark'] {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.cm-dialog-overlay[data-background='light'] {
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.cm-dialog {
+  max-width: 80%;
+  max-height: 80%;
+  overflow: auto;
+  padding: 16px 20px;
+  border: 1px solid var(--cm-border);
+  border-radius: 6px;
+  background: var(--cm-cell-bg);
+  color: var(--cm-cell-fg);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
+}
+
+.cm-dialog:focus {
+  outline: none;
+}
+
+.cm-dialog-buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+/* Transient messages, stacked in a corner. */
+.cm-notifications {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 150;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.cm-notification {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  max-width: 320px;
+  padding: 8px 12px;
+  border: 1px solid var(--cm-border);
+  border-left: 3px solid var(--cm-notification-accent);
+  border-radius: 4px;
+  background: var(--cm-cell-bg);
+  color: var(--cm-cell-fg);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.cm-notification--success {
+  --cm-notification-accent: #2e9e4f;
+}
+
+.cm-notification--warning {
+  --cm-notification-accent: #d08700;
+}
+
+.cm-notification--error {
+  --cm-notification-accent: var(--cm-error-fg);
+}
+
+.cm-notification-close {
+  padding: 0;
+  border: none;
+  font: inherit;
+  font-size: 16px;
+  line-height: 1;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* The "working…" cover. */
+.cm-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 180;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  background: var(--cm-loading-bg);
+  color: var(--cm-cell-fg);
+}
+
+.cm-loading-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid var(--cm-border);
+  border-top-color: var(--cm-current-border);
+  border-radius: 50%;
+  animation: cm-spin 0.8s linear infinite;
+}
+
+@keyframes cm-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cm-loading-spinner {
+    animation: none;
+  }
+}
+
+/* What is shown when there is nothing to show. */
+.cm-empty-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  color: var(--cm-readonly-fg);
+  pointer-events: none;
+}
+
+.cm-empty-state * {
+  pointer-events: auto;
+}
+
+/* The handles at the corners of a selection. */
+.cm-fill-handle,
+.cm-selection-handle {
+  z-index: 20;
+  width: 7px;
+  height: 7px;
+  margin: -4px 0 0 -4px;
+  background: var(--cm-current-border);
+  cursor: crosshair;
+}
+
+.cm-selection-handle {
+  width: 11px;
+  height: 11px;
+  margin: -6px 0 0 -6px;
+  border-radius: 50%;
+}
+
+/* The fold control on a nested row's header. */
+.cm-grid .cm-nested-toggle {
+  width: 12px;
+  height: 12px;
+  margin-right: 4px;
+  padding: 0;
+  border: 1px solid var(--cm-border);
+  border-radius: 2px;
+  font: inherit;
+  font-size: 9px;
+  line-height: 1;
+  background: var(--cm-cell-bg);
+  color: var(--cm-header-fg);
+  cursor: pointer;
+}
+
+
+/* The areas around the grid. */
+.cm-wrapper {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  height: 100%;
+}
+
+.cm-wrapper > .cm-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.cm-slot {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: stretch;
+}
+
+.cm-slot[hidden] {
+  display: none;
+}
+
+.cm-slot-element {
+  border: 1px solid var(--cm-border);
+  font: 13px/1.4 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background: var(--cm-header-bg);
+  color: var(--cm-header-fg);
+}
+
+/* Adjacent items share one divider rather than drawing two. */
+.cm-slot-element + .cm-slot-element {
+  border-left: none;
+}
+
+.cm-grid--rtl .cm-slot-element + .cm-slot-element {
+  border-right: none;
+  border-left: 1px solid var(--cm-border);
+}
+
+/* The grid's own edge divides it from the slot, so the facing border goes. */
+.cm-slot--top > .cm-slot-element:last-child {
+  border-bottom: none;
+}
+
+.cm-slot--bottom > .cm-slot-element:first-child {
+  border-top: none;
+}
+
+/* The layer floating UI is drawn in. It does not frame its contents. */
+.cm-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.cm-overlay > * {
+  pointer-events: auto;
+}
+
+/* The pager. */
+.cm-pagination {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+.cm-pagination-button {
+  min-width: 20px;
+  padding: 0 4px;
+  border: 1px solid var(--cm-border);
+  border-radius: 3px;
+  font: inherit;
+  background: var(--cm-cell-bg);
+  color: inherit;
+  cursor: pointer;
+}
+
+.cm-pagination-button:disabled {
+  color: var(--cm-readonly-fg);
+  cursor: default;
+}
+
+.cm-pagination-counter {
+  margin-right: 8px;
+}
+
+/* Right-to-left layout. The panes mirror; the cells themselves inherit. */
+.cm-grid--rtl .cm-menu,
+.cm-grid--rtl .cm-provenance {
+  text-align: right;
+}
+
+.cm-grid--rtl .cm-menu-item--submenu::after {
+  content: '\25c2';
+  float: left;
+  margin-right: 12px;
+  margin-left: 0;
+}
+
+.cm-grid--rtl .cm-collapse,
+.cm-grid--rtl .cm-dropdown {
+  float: left;
+}
+
+/* --- Features with no Handsontable counterpart ------------------------- */
+
+/* A cell an agent last touched. */
+.cm-grid .cm-by-agent {
+  position: relative;
+}
+
+/* The cell's history, shown beside it. */
+.cm-provenance {
+  z-index: 90;
+  max-width: 320px;
+  max-height: 240px;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid var(--cm-border);
+  border-radius: 4px;
+  font-size: 12px;
+  background: var(--cm-cell-bg);
+  color: var(--cm-cell-fg);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+}
+
+.cm-provenance-title {
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.cm-provenance-empty {
+  color: var(--cm-readonly-fg);
+}
+
+.cm-provenance-entry {
+  display: grid;
+  gap: 2px 8px;
+  grid-template-columns: auto 1fr;
+  padding: 4px 0;
+  border-top: 1px solid var(--cm-border);
+}
+
+.cm-provenance-entry--agent .cm-provenance-who {
+  color: var(--cm-agent-marker);
+}
+
+.cm-provenance-who {
+  font-weight: 600;
+}
+
+.cm-provenance-why,
+.cm-provenance-when {
+  grid-column: 1 / -1;
+  color: var(--cm-readonly-fg);
+}
+
+/* The bar along the bottom. */
+.cm-status-bar {
+  flex: 1 1 auto;
+  display: flex;
+  gap: 16px;
+  padding: 2px 8px;
+  border-top: 1px solid var(--cm-border);
+  font-size: 11px;
+  background: var(--cm-header-bg);
+  color: var(--cm-header-fg);
+}
+
+.cm-status-field--fingerprint {
+  margin-left: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  cursor: help;
+}
+
+/* A cell a failed verification points at. */
+.cm-grid .cm-verify-failed {
+  box-shadow: inset 0 0 0 2px var(--cm-error-fg);
+}
+
+/* A cell that differs from the snapshot being compared against. */
+.cm-grid .cm-diff-changed {
+  background: var(--cm-diff-changed-bg);
+}
+
+.cm-grid .cm-diff-added {
+  background: var(--cm-diff-added-bg);
+}
+
+.cm-grid .cm-diff-removed {
+  background: var(--cm-diff-removed-bg);
+  text-decoration: line-through;
+}
+
+@media (prefers-color-scheme: dark) {
+  .cm-grid {
+    --cm-border: #3a3a3a;
+    --cm-header-bg: #262626;
+    --cm-header-fg: #bbb;
+    --cm-cell-bg: #1a1a1a;
+    --cm-cell-fg: #eee;
+    --cm-selected-bg: rgba(90, 150, 255, 0.18);
+    --cm-readonly-fg: #777;
+    --cm-comment-bg: #2b2b1f;
+    --cm-comment-marker: #d0a000;
+    --cm-search-bg: rgba(255, 210, 0, 0.22);
+    --cm-notification-accent: #5a96ff;
+    --cm-loading-bg: rgba(26, 26, 26, 0.72);
+    --cm-diff-changed-bg: rgba(255, 196, 0, 0.14);
+    --cm-diff-added-bg: rgba(46, 158, 79, 0.2);
+    --cm-diff-removed-bg: rgba(192, 57, 43, 0.2);
+  }
+}

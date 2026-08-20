@@ -1,0 +1,24 @@
+[package]
+name = "cellmoa-mcp"
+description = "Model Context Protocol server for cellmoa, over stdio and HTTP"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "cellmoa_mcp"
+path = "src/lib.rs"
+
+[[bin]]
+name = "cellmoa-mcp"
+path = "src/main.rs"
+
+[dependencies]
+cellmoa-api.workspace = true
+cellmoa-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+cellmoa-xlsx.workspace = true
