@@ -129,6 +129,22 @@ methods   146/146 present  (0 named by the reference and missing)
 | 헤더 (배열·함수·기본 A1 표기) | ✅ | |
 | batch / suspendRender | ✅ | |
 
+## 배치 (`optimization/batch-operations`)
+
+문서는 "렌더링"과 "실행"을 구분한다. 실행은 **그리기가 아닌 모든 것** —
+여기서는 인덱스 맵과 그리드 범위를 데이터에 맞추는 일이다.
+
+| 메서드 | 그리기 | 실행 |
+|---|:--:|:--:|
+| `batchRender` / `suspendRender` · `resumeRender` | 보류 | 그때그때 |
+| `batchExecution` / `suspendExecution` · `resumeExecution` | 그때그때 | 보류 |
+| `batch` | 보류 | 보류 |
+
+`suspendRender`를 5번 부르면 `resumeRender`도 5번 불러야 한다. 두 카운터는
+서로 독립이다 — 예전에는 `suspendExecution`이 `suspendRender`를 부르는
+별칭이어서 `batchExecution`이 그리기까지 막았고, `isExecutionSuspended()`가
+그리기만 멈춘 상태에서도 참을 답했다.
+
 ## 플러그인 생명주기 (`tools-and-building/custom-plugins`)
 
 `isEnabled` → `enablePlugin` → (`updatePlugin`)* → `disablePlugin` → `destroy`.

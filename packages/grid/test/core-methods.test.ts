@@ -350,20 +350,6 @@ describe('selection, batching and the rest', () => {
     expect(renders).toBe(1);
   });
 
-  it('draws once for a batch, not once per change', async () => {
-    const grid = await makeGrid({ startRows: 5, startCols: 5 });
-    let renders = 0;
-    grid.addHook('afterRender', () => {
-      renders += 1;
-    });
-    grid.batchExecution(() => {
-      grid.setDataAtCell(0, 0, 'a');
-      grid.setDataAtCell(1, 0, 'b');
-      grid.setDataAtCell(2, 0, 'c');
-    });
-    expect(renders).toBe(1);
-  });
-
   it('says while it is suspended, and stops saying so afterwards', async () => {
     const grid = await makeGrid({ startRows: 2, startCols: 2 });
     expect(grid.isExecutionSuspended()).toBe(false);
@@ -436,5 +422,92 @@ describe('bootstrap', () => {
     grid.view!.root.dispatchEvent(event);
     // Doubled shortcuts would move two rows rather than one.
     expect(grid.getSelectedLast()?.[0]).toBe(1);
+  });
+});
+
+describe('batching rendering and execution apart', () => {
+  /** How many times the grid drew. */
+  function countRenders(grid: Awaited<ReturnType<typeof makeGrid>>): () => number {
+    let renders = 0;
+    grid.addHook('afterRender', () => {
+      renders += 1;
+    });
+    return () => renders;
+  }
+
+  it('draws once for a render batch, and keeps the bookkeeping current inside it', async () => {
+    const grid = await makeGrid({ startRows: 2, startCols: 2 });
+    const renders = countRenders(grid);
+    let seenInside = 0;
+    grid.batchRender(() => {
+      grid.setDataAtCell(5, 0, 'past the end');
+      // The extent is kept in step as it goes, so this is the new count.
+      seenInside = grid.countRows();
+    });
+    expect(renders()).toBe(1);
+    expect(seenInside).toBe(6);
+    expect(grid.isRenderSuspended()).toBe(false);
+  });
+
+  it('holds off the bookkeeping without holding off the drawing', async () => {
+    // `minSpareRows` is bookkeeping that shows: the grid keeps an empty row
+    // below the data, and settling that is what `#syncDimensions` does.
+    const grid = await makeGrid({ startRows: 2, startCols: 2, minSpareRows: 1 });
+    grid.setDataAtCell(1, 0, 'seed');
+    expect(grid.countRows()).toBe(3);
+
+    const renders = countRenders(grid);
+    let inside = 0;
+    grid.batchExecution(() => {
+      expect(grid.isExecutionSuspended()).toBe(true);
+      // Rendering is not what was suspended.
+      expect(grid.isRenderSuspended()).toBe(false);
+      grid.setDataAtCell(2, 0, 'more');
+      inside = grid.countRows();
+    });
+    // The drawing happened; the spare row waited until the batch was over.
+    expect(renders()).toBeGreaterThan(0);
+    expect(inside).toBe(3);
+    expect(grid.countRows()).toBe(4);
+  });
+
+  it('suspends both when asked for both', async () => {
+    const grid = await makeGrid({ startRows: 2, startCols: 2 });
+    const renders = countRenders(grid);
+    grid.batch(() => {
+      expect(grid.isRenderSuspended()).toBe(true);
+      expect(grid.isExecutionSuspended()).toBe(true);
+      grid.setDataAtCell(5, 0, 'a');
+      grid.setDataAtCell(6, 0, 'b');
+    });
+    expect(renders()).toBe(1);
+    expect(grid.countRows()).toBe(7);
+    expect(grid.isRenderSuspended()).toBe(false);
+    expect(grid.isExecutionSuspended()).toBe(false);
+  });
+
+  it('needs one resume for every suspend, on each counter', async () => {
+    const grid = await makeGrid({ startRows: 2, startCols: 2 });
+    grid.suspendRender();
+    grid.suspendRender();
+    grid.resumeRender();
+    expect(grid.isRenderSuspended()).toBe(true);
+    grid.resumeRender();
+    expect(grid.isRenderSuspended()).toBe(false);
+
+    grid.suspendExecution();
+    grid.suspendExecution();
+    grid.resumeExecution();
+    expect(grid.isExecutionSuspended()).toBe(true);
+    grid.resumeExecution();
+    expect(grid.isExecutionSuspended()).toBe(false);
+  });
+
+  it('does the bookkeeping on resume even when nothing asked, if told to', async () => {
+    const grid = await makeGrid({ startRows: 2, startCols: 2 });
+    grid.suspendExecution();
+    grid.resumeExecution(true);
+    expect(grid.isExecutionSuspended()).toBe(false);
+    expect(grid.countRows()).toBe(2);
   });
 });

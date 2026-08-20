@@ -181,6 +181,16 @@ export class Grid {
   #destroyed = false;
   #renderSuspended = 0;
   #renderQueued = false;
+  /**
+   * Execution, which is everything that is not drawing.
+   *
+   * Kept apart from `#renderSuspended` because the two mean different things:
+   * `batchExecution` postpones the index and extent bookkeeping and still
+   * draws, `batchRender` draws once and does the bookkeeping as it goes. One
+   * counter for both makes each of them quietly do the other's job.
+   */
+  #executionSuspended = 0;
+  #executionQueued = false;
   #editor: EditorInstance | null = null;
   #editing: Coords | null = null;
   #invalid = new CellSet();
@@ -1823,22 +1833,35 @@ if ('data' in settings) {
   }
 
   /**
-   * Runs a function with drawing held off.
+   * Runs a function with drawing held off, drawing once at the end.
    *
-   * `batchRender` is the reference's name for exactly this; `batch` is what the
-   * rest of this codebase calls it. Both are kept because a Handsontable
-   * configuration reaches for the first and everything here reaches for the
-   * second, and having one call the other means there is still only one of it.
+   * The bookkeeping still happens as it goes, so anything read inside the
+   * callback is current — which is the difference between this and `batch`.
    */
   batchRender<T>(action: () => T): T {
-    return this.batch(action);
-  }
-
-  batch<T>(action: () => T): T {
     this.suspendRender();
     try {
       return action();
     } finally {
+      this.resumeRender();
+    }
+  }
+
+  /**
+   * Runs a function with both drawing and bookkeeping held off.
+   *
+   * The universal one: `batchRender` holds off the drawing, `batchExecution`
+   * holds off the bookkeeping, and this holds off both. It is what a caller
+   * reaches for when they are making a run of API calls and only care about
+   * the state at the end.
+   */
+  batch<T>(action: () => T): T {
+    this.suspendRender();
+    this.suspendExecution();
+    try {
+      return action();
+    } finally {
+      this.resumeExecution();
       this.resumeRender();
     }
   }
@@ -1863,10 +1886,16 @@ if ('data' in settings) {
     return this.#plugins.get(name)?.isPluginEnabled() ?? false;
   }
 
-  /** Releases the grid. */
-
   // --- batching ------------------------------------------------------------
 
+  /**
+   * Runs work with the bookkeeping held off, drawing as usual.
+   *
+   * "Execution" is the reference's word for everything that is not drawing —
+   * here, keeping the index maps and the grid's extent in step with the data.
+   * Every structural call pays for that, and paying once at the end is what
+   * this is for.
+   */
   batchExecution<T>(work: () => T, forceFlush = false): T {
     this.suspendExecution();
     try {
@@ -1877,18 +1906,20 @@ if ('data' in settings) {
   }
 
   suspendExecution(): void {
-    this.suspendRender();
+    this.#executionSuspended += 1;
   }
 
+  /** `forceFlush` does the bookkeeping even when nothing asked for it. */
   resumeExecution(forceFlush = false): void {
-    this.resumeRender();
-    if (forceFlush) {
-      this.render();
+    this.#executionSuspended = Math.max(this.#executionSuspended - 1, 0);
+    if (this.#executionSuspended === 0 && (this.#executionQueued || forceFlush)) {
+      this.#executionQueued = false;
+      this.#syncDimensions();
     }
   }
 
   isExecutionSuspended(): boolean {
-    return this.isRenderSuspended();
+    return this.#executionSuspended > 0;
   }
 
   // --- bootstrap and the instance ------------------------------------------
@@ -2029,6 +2060,7 @@ if ('data' in settings) {
     return table;
   }
 
+  /** Releases the grid. */
   destroy(): void {
     if (this.#destroyed) {
       return;
@@ -2196,6 +2228,12 @@ if ('data' in settings) {
    * new table do nothing.
    */
   #syncDimensions(initial = false): void {
+    if (this.#executionSuspended > 0 && !initial) {
+      // Noted rather than done: `resumeExecution` runs it once for the whole
+      // batch. `initial` is construction, which nothing has suspended.
+      this.#executionQueued = true;
+      return;
+    }
     const settings = this.getSettings();
     // Spare rows are empty rows kept below the data so there is always
     // somewhere to type. They are counted from the data, not from the current
@@ -2841,14 +2879,14 @@ if ('data' in settings) {
     this.#listeners.push(() => target.removeEventListener(type, handler));
   }
 
+  // --- mounting and drawing ------------------------------------------------
+
   /**
    * Builds one of every registered plugin.
    *
    * All of them, not only the ones the settings ask for: a plugin that does not
    * exist cannot be switched on later, and `updateSettings` has to be able to.
    */
-  // --- mounting and drawing ------------------------------------------------
-
   #createPlugins(): void {
     for (const constructor of registeredPlugins()) {
       const plugin = new constructor(this);
