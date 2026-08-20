@@ -8,6 +8,7 @@ pub mod functions;
 pub mod graph;
 pub mod operand;
 pub mod resolve;
+pub mod special;
 
 pub use engine::Engine;
 pub use eval::{eval, eval_to_value, EvalCtx};

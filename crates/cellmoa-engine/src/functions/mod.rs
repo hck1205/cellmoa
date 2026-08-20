@@ -12,14 +12,32 @@ use cellmoa_formula::ast::Expr;
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
+/// Declares the function categories in one place.
+///
+/// The module list and the registry list used to be written separately, and a
+/// category that was added to one but not the other compiled cleanly while
+/// every function in it reported `#NAME?`. Deriving both from the same list
+/// makes that mistake unrepresentable.
+macro_rules! categories {
+    ($($name:ident),+ $(,)?) => {
+        $(pub mod $name;)+
+
+        /// Every category's catalogue, in registration order.
+        fn catalogues() -> &'static [&'static [Function]] {
+            &[$($name::FUNCTIONS),+]
+        }
+
+        /// The category module names, for the coverage test.
+        #[cfg(test)]
+        const CATEGORY_NAMES: &[&str] = &[$(stringify!($name)),+];
+    };
+}
+
+categories!(math, logical, text, info, stats, lookup, date, distributions);
+
+/// Criteria matching is shared by several categories but exports no functions
+/// of its own.
 pub mod criteria;
-pub mod date;
-pub mod info;
-pub mod logical;
-pub mod lookup;
-pub mod math;
-pub mod stats;
-pub mod text;
 
 /// How a function receives its arguments.
 #[derive(Clone, Copy)]
@@ -114,18 +132,6 @@ pub const fn lazy(
 }
 
 /// Every category's catalogue, in registration order.
-fn catalogues() -> &'static [&'static [Function]] {
-    &[
-        math::FUNCTIONS,
-        logical::FUNCTIONS,
-        text::FUNCTIONS,
-        info::FUNCTIONS,
-        stats::FUNCTIONS,
-        lookup::FUNCTIONS,
-        date::FUNCTIONS,
-    ]
-}
-
 fn registry() -> &'static HashMap<String, &'static Function> {
     static REGISTRY: OnceLock<HashMap<String, &'static Function>> = OnceLock::new();
     REGISTRY.get_or_init(|| {
@@ -318,6 +324,18 @@ pub fn array_like(source: &Operand, values: Vec<Value>) -> Operand {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_category_reaches_the_registry() {
+        // A category whose functions are all missing would otherwise show up
+        // only as #NAME? at run time.
+        assert_eq!(catalogues().len(), CATEGORY_NAMES.len());
+        for (name, catalogue) in CATEGORY_NAMES.iter().zip(catalogues()) {
+            assert!(!catalogue.is_empty(), "category `{name}` is empty");
+            let first = catalogue[0].name;
+            assert!(lookup(first).is_some(), "`{first}` from `{name}` is not registered");
+        }
+    }
 
     #[test]
     fn lookup_is_case_insensitive_and_strips_the_xlfn_prefix() {

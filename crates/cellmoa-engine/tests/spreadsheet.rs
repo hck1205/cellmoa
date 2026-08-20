@@ -1031,3 +1031,106 @@ fn the_clock_is_an_input_rather_than_something_the_engine_reads() {
     assert_eq!(number(&engine, "A1"), 45292.0);
     assert_eq!(number(&engine, "A2"), 45292.5);
 }
+
+// ---------------------------------------------------------------------------
+// Distributions
+// ---------------------------------------------------------------------------
+
+/// Compares against a reference value to the precision a spreadsheet shows.
+fn about(formula: &str, expected: f64) {
+    let got = calc_num(formula);
+    assert!(
+        (got - expected).abs() <= 1e-9 * expected.abs().max(1.0),
+        "`{formula}` gave {got}, expected {expected}"
+    );
+}
+
+#[test]
+fn the_normal_distribution() {
+    about("=NORM.DIST(0,0,1,TRUE)", 0.5);
+    about("=NORM.S.DIST(1.96,TRUE)", 0.9750021048517795);
+    about("=NORM.S.INV(0.975)", 1.9599639845400545);
+    about("=NORM.INV(0.5,100,15)", 100.0);
+    about("=NORM.DIST(0,0,1,FALSE)", 0.3989422804014327);
+    // The legacy spellings are the same functions.
+    about("=NORMSDIST(1.96)", 0.9750021048517795);
+    about("=NORMSINV(0.975)", 1.9599639845400545);
+}
+
+#[test]
+fn distributions_and_their_inverses_round_trip() {
+    for (dist, inv) in [
+        ("=CHISQ.DIST(CHISQ.INV(0.3,5),5,TRUE)", 0.3),
+        ("=F.DIST(F.INV(0.8,3,7),3,7,TRUE)", 0.8),
+        ("=T.DIST(T.INV(0.7,9),9,TRUE)", 0.7),
+        ("=GAMMA.DIST(GAMMA.INV(0.45,2,3),2,3,TRUE)", 0.45),
+        ("=BETA.DIST(BETA.INV(0.65,2,5),2,5,TRUE)", 0.65),
+        ("=LOGNORM.DIST(LOGNORM.INV(0.4,0,1),0,1,TRUE)", 0.4),
+    ] {
+        let got = calc_num(dist);
+        assert!((got - inv).abs() < 1e-7, "`{dist}` gave {got}, expected {inv}");
+    }
+}
+
+#[test]
+fn discrete_distributions() {
+    // Ten coin flips, exactly five heads.
+    about("=BINOM.DIST(5,10,0.5,FALSE)", 0.24609375);
+    about("=BINOM.DIST(5,10,0.5,TRUE)", 0.623046875);
+    about("=POISSON.DIST(2,3,FALSE)", 0.22404180765538775);
+    about("=POISSON.DIST(2,3,TRUE)", 0.42319008112684353);
+    // Exactly C(8,1)*C(12,3)/C(20,4) = 352/969.
+    about("=HYPGEOM.DIST(1,4,8,20,FALSE)", 352.0 / 969.0);
+    // The smallest count whose cumulative probability reaches 60%.
+    about("=BINOM.INV(10,0.5,0.6)", 5.0);
+}
+
+#[test]
+fn continuous_distributions() {
+    about("=EXPON.DIST(1,1,TRUE)", 1.0 - std::f64::consts::E.recip());
+    about("=WEIBULL.DIST(1,1,1,TRUE)", 1.0 - std::f64::consts::E.recip());
+    about("=CHISQ.DIST.RT(3.84,1)", 0.05004352124870519);
+    // 2.262 is just under the two-tailed 5% critical value for 9 degrees of
+    // freedom, so the tail is a shade over 0.05. Checked against a
+    // high-resolution numerical integration of the t density.
+    about("=T.DIST.2T(2.262,9)", 0.05001284550209006);
+    about("=GAMMALN(5)", 24.0f64.ln());
+    about("=GAMMA(5)", 24.0);
+}
+
+#[test]
+fn a_two_sample_t_test() {
+    let mut engine = sheet();
+    for (row, (a, b)) in (1..=5).zip([(1, 2), (2, 4), (3, 5), (4, 4), (5, 7)]) {
+        type_in(&mut engine, &format!("A{row}"), &a.to_string());
+        type_in(&mut engine, &format!("B{row}"), &b.to_string());
+    }
+    type_in(&mut engine, "D1", "=T.TEST(A1:A5,B1:B5,2,2)");
+    type_in(&mut engine, "D2", "=F.TEST(A1:A5,B1:B5)");
+    let p = number(&engine, "D1");
+    // Two clearly different samples, but only five points each.
+    assert!((0.0..1.0).contains(&p), "p was {p}");
+    assert!((0.0..=1.0).contains(&number(&engine, "D2")));
+}
+
+#[test]
+fn a_chi_square_goodness_of_fit_test() {
+    let mut engine = sheet();
+    for (row, (o, e)) in (1..=4).zip([(20, 25), (30, 25), (25, 25), (25, 25)]) {
+        type_in(&mut engine, &format!("A{row}"), &o.to_string());
+        type_in(&mut engine, &format!("B{row}"), &e.to_string());
+    }
+    type_in(&mut engine, "D1", "=CHISQ.TEST(A1:A4,B1:B4)");
+    let p = number(&engine, "D1");
+    // The observed counts are close to expectation, so nothing is significant.
+    assert!(p > 0.5, "p was {p}");
+}
+
+#[test]
+fn distributions_reject_impossible_parameters() {
+    assert_eq!(calc("=NORM.DIST(1,0,0,TRUE)"), Value::Error(CellError::Num));
+    assert_eq!(calc("=NORM.S.INV(1)"), Value::Error(CellError::Num));
+    assert_eq!(calc("=BINOM.DIST(11,10,0.5,TRUE)"), Value::Error(CellError::Num));
+    assert_eq!(calc("=GAMMALN(0)"), Value::Error(CellError::Num));
+    assert_eq!(calc("=CHISQ.DIST(-1,1,TRUE)"), Value::Error(CellError::Num));
+}
