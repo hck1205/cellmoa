@@ -17,7 +17,7 @@
 
 ## 현재 진척 (2026-08-20)
 
-**11/20 항목 🟢 달성.** 테스트 314개 통과, 코드 약 15,000줄.
+**13/20 항목 🟢 달성.** 테스트 407개 통과.
 
 | 축 | 상태 |
 |---|---|
@@ -25,7 +25,7 @@
 | C. 파일 I/O | ✅ ZIP·OOXML 자체 구현, openpyxl 상호운용 검증 |
 | D. 무결성 | ✅ diff·fingerprint·verify·replay·provenance 전부 |
 | E. 자동화 | ✅ CLI 9개 명령 + GitHub Actions 파이프라인 / ❌ 스크립팅 |
-| F. AI 연동 | ✅ 에이전트 undo/redo·revision 동시성 / ❌ MCP·실시간 조작 |
+| F. AI 연동 | ✅ Local·Remote MCP, 에이전트 undo/redo, revision 동시성 / ❌ 실시간 UI 조작 |
 | A. 그리드 UI | ❌ 미착수 |
 | G. 제품 형태 | ❌ 미착수 |
 
@@ -83,8 +83,8 @@
 
 | # | 기능 | HoT+HF | VisiGrid | cellmoa | 수용 기준 |
 |:--:|---|:--:|:--:|:--:|---|
-| F1 | Local MCP | 🟡 HyperFormula는 예정 | 🟢 현재 제공 | 🔴 미착수 | MCP 서버로 시트 조회·편집·계산 툴 노출, stdio 전송 |
-| F2 | Remote MCP | 🔴 | 🟢 | 🔴 미착수 | 원격 전송 + 인증, 세션별 문서 격리 |
+| F1 | Local MCP | 🟡 HyperFormula는 예정 | 🟢 현재 제공 | 🟢 stdio | MCP 서버로 시트 조회·편집·계산 툴 노출, stdio 전송 |
+| F2 | Remote MCP | 🔴 | 🟢 | 🟢 HTTP + 세션 격리 + 토큰 | 원격 전송 + 인증, 세션별 문서 격리 |
 | F3 | AI가 열린 스프레드시트 직접 조작 | 🔴 | 🟢 | 🔴 미착수 | 사용자가 UI에서 열어둔 문서에 에이전트 편집이 실시간 반영, 양방향 |
 | F4 | 에이전트 변경 Undo/Redo | 🔴 | 🟢 | 🟢 | 에이전트가 만든 변경을 하나의 단위로 되돌리기 — 사람 편집 이력과 섞이지 않음 |
 | F5 | 에이전트 동시 수정 보호 | 🔴 | 🟢 revision 기반 | 🟢 | revision 기반 낙관적 동시성 — stale revision 쓰기는 거부, 충돌을 호출자에게 반환 |
@@ -139,7 +139,11 @@ packages/
 
 문서 모델에 revision과 provenance를 **1일차부터** 넣은 이유는 F4·F5·D5가 나중에 붙일 수 없는 항목이기 때문이다. 결과적으로 F4·F5·D5는 코어를 세우는 것만으로 함께 달성됐다.
 
-구현된 크레이트: `cellmoa-core`, `cellmoa-formula`, `cellmoa-engine`, `cellmoa-xlsx`, `cellmoa-diff`, `cellmoa-cli`.
+구현된 크레이트: `cellmoa-core`, `cellmoa-formula`, `cellmoa-engine`, `cellmoa-xlsx`, `cellmoa-diff`, `cellmoa-api`, `cellmoa-cli`, `cellmoa-mcp`.
+
+`cellmoa-api`의 JSON 명령 API를 웹 그리드·MCP·데스크톱이 공유한다. 이걸 나눠 쓰는 것이
+동시성 가드가 실제로 작동하는 조건이다 — 사람과 에이전트가 서로 다른 문으로 들어오면
+한쪽만 보호된다.
 
 ## 남은 작업
 
@@ -147,6 +151,5 @@ packages/
 |---|---|---|
 | A1 웹 그리드 UI | 최대 | WASM 바인딩 + TypeScript 렌더러. 전체 공수의 절반 |
 | E3 스크립팅 | 중 | JS 샌드박스 (무한루프·파일접근 차단) |
-| F1·F2 MCP | 중 | 코어 API는 이미 서 있으므로 서버 계층만 |
-| F3 실시간 조작 | 중 | A1과 문서 모델·revision 공유가 전제 |
+| F3 실시간 조작 | 중 | 명령 API는 완성. A1 그리드가 붙으면 성립 |
 | G1 데스크톱 | 중 | Tauri 셸. A1 완료 후 |

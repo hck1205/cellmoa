@@ -66,6 +66,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "cellmoa-mcp"
+version = "0.1.0"
+dependencies = [
+ "cellmoa-api",
+ "cellmoa-core",
+ "cellmoa-xlsx",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "cellmoa-xlsx"
 version = "0.1.0"
 dependencies = [
