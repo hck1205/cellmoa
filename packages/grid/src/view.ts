@@ -84,8 +84,13 @@ export interface ViewModel {
   fixedRowsBottom?(): number;
   /** Swallow the wheel, for a page that scrolls the grid itself. */
   preventWheel?(): boolean;
-  /** A theme name, applied as a class on the root. */
-  themeName?(): string | null;
+  /**
+   * The theme, as the classes it wants and the properties it sets.
+   *
+   * Properties as well as classes, so a theme registered at run time works
+   * without the page having loaded a stylesheet for it.
+   */
+  theme?(): { classNames: string[]; properties: Record<string, string> } | null;
   /** Extra class names for the grid's own elements. */
   tableClassName?(): string[];
   /**
@@ -158,6 +163,8 @@ export class View {
   #panes: Record<PaneName, Pane>;
   #viewport: Viewport = { firstRow: 0, lastRow: -1, firstCol: 0, lastCol: -1 };
   #frame: number | null = null;
+  /** The custom properties the current theme set, so the next one can clear them. */
+  #themeProperties: string[] = [];
   #document: Document;
 
   constructor(container: HTMLElement, model: ViewModel) {
@@ -624,14 +631,28 @@ export class View {
     this.root.dir = direction;
     this.root.classList.toggle(`${CLASS.root}--rtl`, direction === 'rtl');
 
+    // Off with the last theme's classes and properties before the next one's
+    // go on: a theme that set a colour the new one does not would otherwise
+    // leave that colour behind.
     for (const existing of [...this.root.classList]) {
-      if (existing.startsWith('cm-theme-')) {
+      if (existing.startsWith('cm-theme-') || existing.startsWith('ht-theme-') ||
+          existing.startsWith('cm-density-')) {
         this.root.classList.remove(existing);
       }
     }
-    const theme = this.#model.themeName?.();
+    for (const property of [...this.#themeProperties]) {
+      this.root.style.removeProperty(property);
+    }
+    this.#themeProperties = [];
+
+    const theme = this.#model.theme?.();
     if (theme) {
-      this.root.classList.add(`cm-theme-${theme}`);
+      this.root.classList.add(...theme.classNames);
+      for (const [name, value] of Object.entries(theme.properties)) {
+        const property = `--ht-${name}`;
+        this.root.style.setProperty(property, value);
+        this.#themeProperties.push(property);
+      }
     }
     // A marker class records which classes came from the settings, so changing
     // the setting takes exactly those off again and leaves the grid's own —

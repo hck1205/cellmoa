@@ -1,0 +1,159 @@
+/**
+ * The built-in themes.
+ *
+ * Each is a set of custom properties, so the rules that lay the grid out never
+ * change with the theme — only the values do. A caller overriding one colour
+ * writes one line rather than taking on the whole appearance.
+ *
+ * Three class forms per theme, matching Handsontable's:
+ *
+ *   .ht-theme-main            light
+ *   .ht-theme-main-dark       dark
+ *   .ht-theme-main-dark-auto  dark when the system asks for it
+ */
+
+/* --- shared --------------------------------------------------------------- */
+
+.cm-grid[class*='ht-theme-'] {
+  font-size: var(--ht-font-size, 13px);
+  background: var(--ht-background-color);
+  color: var(--ht-foreground-color);
+}
+
+.cm-grid[class*='ht-theme-'] td {
+  padding: var(--ht-cell-vertical-padding, 2px) var(--ht-cell-horizontal-padding, 4px);
+  border-right: 1px solid var(--ht-cell-vertical-border-color, var(--ht-border-color));
+  border-bottom: 1px solid var(--ht-cell-horizontal-border-color, var(--ht-border-color));
+  background: var(--ht-background-color);
+  color: var(--ht-foreground-color);
+}
+
+.cm-grid[class*='ht-theme-'] th {
+  padding: var(--ht-cell-vertical-padding, 2px) var(--ht-cell-horizontal-padding, 4px);
+  border-right: 1px solid var(--ht-border-color);
+  border-bottom: 1px solid var(--ht-border-color);
+  background: var(--ht-background-secondary-color);
+  color: var(--ht-foreground-color);
+}
+
+.cm-grid[class*='ht-theme-'] .cm-current {
+  outline: 2px solid var(--ht-accent-color);
+  outline-offset: -2px;
+}
+
+.cm-grid[class*='ht-theme-'] .cm-selected {
+  background: color-mix(in srgb, var(--ht-accent-color) 12%, transparent);
+}
+
+/* --- main: lines everywhere, because the thing being edited is a grid ------ */
+
+.ht-theme-main {
+  --ht-background-color: #fff;
+  --ht-background-secondary-color: #f5f5f5;
+  --ht-foreground-color: #111;
+  --ht-border-color: #d9d9d9;
+  --ht-accent-color: #3478f6;
+  --ht-cell-horizontal-padding: 4px;
+  --ht-cell-vertical-padding: 2px;
+  --ht-border-radius: 0;
+}
+
+.ht-theme-main-dark,
+.ht-theme-main-dark-auto:where([data-theme='dark']) {
+  --ht-background-color: #1a1a1a;
+  --ht-background-secondary-color: #262626;
+  --ht-foreground-color: #eee;
+  --ht-border-color: #3a3a3a;
+  --ht-accent-color: #5a96ff;
+}
+
+@media (prefers-color-scheme: dark) {
+  .ht-theme-main-dark-auto:not([data-theme='light']) {
+    --ht-background-color: #1a1a1a;
+    --ht-background-secondary-color: #262626;
+    --ht-foreground-color: #eee;
+    --ht-border-color: #3a3a3a;
+    --ht-accent-color: #5a96ff;
+  }
+}
+
+/* --- horizon: no vertical lines, for a table being read rather than edited - */
+
+.ht-theme-horizon {
+  --ht-background-color: #fff;
+  --ht-background-secondary-color: #fafafa;
+  --ht-foreground-color: #1c1c1c;
+  --ht-border-color: #ececec;
+  --ht-accent-color: #0f62fe;
+  --ht-cell-horizontal-padding: 10px;
+  --ht-cell-vertical-padding: 6px;
+  --ht-border-radius: 4px;
+  --ht-cell-vertical-border-color: transparent;
+}
+
+.ht-theme-horizon-dark,
+.ht-theme-horizon-dark-auto:where([data-theme='dark']) {
+  --ht-background-color: #161616;
+  --ht-background-secondary-color: #1f1f1f;
+  --ht-foreground-color: #f4f4f4;
+  --ht-border-color: #2f2f2f;
+  --ht-accent-color: #78a9ff;
+}
+
+@media (prefers-color-scheme: dark) {
+  .ht-theme-horizon-dark-auto:not([data-theme='light']) {
+    --ht-background-color: #161616;
+    --ht-background-secondary-color: #1f1f1f;
+    --ht-foreground-color: #f4f4f4;
+    --ht-border-color: #2f2f2f;
+    --ht-accent-color: #78a9ff;
+  }
+}
+
+/* --- classic: the old look, so an existing page does not change ------------ */
+
+.ht-theme-classic {
+  --ht-background-color: #fff;
+  --ht-background-secondary-color: #f3f3f3;
+  --ht-foreground-color: #000;
+  --ht-border-color: #ccc;
+  --ht-accent-color: #5292f7;
+  --ht-cell-horizontal-padding: 3px;
+  --ht-cell-vertical-padding: 1px;
+  --ht-font-size: 12px;
+  --ht-border-radius: 0;
+}
+
+.ht-theme-classic-dark,
+.ht-theme-classic-dark-auto:where([data-theme='dark']) {
+  --ht-background-color: #0f0f0f;
+  --ht-background-secondary-color: #1c1c1c;
+  --ht-foreground-color: #f0f0f0;
+  --ht-border-color: #444;
+  --ht-accent-color: #4d84e2;
+}
+
+@media (prefers-color-scheme: dark) {
+  .ht-theme-classic-dark-auto:not([data-theme='light']) {
+    --ht-background-color: #0f0f0f;
+    --ht-background-secondary-color: #1c1c1c;
+    --ht-foreground-color: #f0f0f0;
+    --ht-border-color: #444;
+    --ht-accent-color: #4d84e2;
+  }
+}
+
+/* --- density --------------------------------------------------------------
+   Padding only. The row *height* is scaled by the grid, because it decides
+   where every row starts and CSS changing it underneath would desynchronise
+   the virtual scroll from what is drawn. */
+
+.cm-density-compact {
+  --ht-cell-vertical-padding: 0px;
+  --ht-cell-horizontal-padding: 3px;
+}
+
+.cm-density-comfortable {
+  --ht-cell-vertical-padding: 6px;
+  --ht-cell-horizontal-padding: 8px;
+}

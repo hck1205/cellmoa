@@ -90,6 +90,24 @@ export { Menu, SEPARATOR, resolve } from './menu.js';
 export type { MenuHost, MenuItem, MenuSelection } from './menu.js';
 
 export { CellMap, CellSet } from './cellMap.js';
+export {
+  BUILT_IN_THEMES,
+  DENSITY_SCALE,
+  classicTheme,
+  getTheme,
+  horizonTheme,
+  mainTheme,
+  registerTheme,
+  themeNames,
+  unregisterTheme,
+} from './themes/index.js';
+export type {
+  ColorScheme,
+  DensityType,
+  RegisteredTheme,
+  ThemeDefinition,
+  ThemeTokens,
+} from './themes/index.js';
 export { LayoutManager, SLOT_ELEMENT_CLASS } from './layout.js';
 export type { LayoutSettings, SlotOptions, SlotSide } from './layout.js';
 

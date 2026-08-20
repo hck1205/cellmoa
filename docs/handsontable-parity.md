@@ -143,7 +143,9 @@ settings  162/162 read  (0 declared but never consulted)
 | 국제화 — 언어 (`language`) | ✅ | Handsontable 언어 파일 21종 · 구문 108개를 소스에서 추출. 빠진 키는 en-US로 메움 |
 | 국제화 — 로케일 (`locale`) | ✅ | 언어와 분리. 영어 UI + 독일식 숫자 서식이 가능해야 함 |
 | 국제화 — 레이아웃 방향 (`layoutDirection`) | ✅ | `dir` + 화살표 키 좌우 반전 (화살표는 데이터가 아니라 화면 기준) |
-| 스타일링 — 테마 (`themeName`) | ✅ | 루트에 `cm-theme-*` 클래스 |
+| 스타일링 — 테마 (`themes`) | ✅ | `main`·`horizon`·`classic` 3종, 각각 light/dark. Theme API(`registerTheme().setColorScheme().setDensityType()`)와 CSS 클래스 양쪽 |
+| 스타일링 — 테마 커스터마이즈 | ✅ | `--ht-*` CSS 변수. 테마는 스타일시트가 아니라 변수 묶음이라 색 하나만 덮어쓸 수 있음 |
+| 스타일링 — 밀도 | ✅ | `compact`/`default`/`comfortable`. 행 높이는 *배율*이라 caller가 정한 높이를 버리지 않음 |
 | 행 — 여분 행 (`minSpareRows`/`Cols`) | ✅ | 데이터 기준으로 계산 — 아니면 렌더마다 한 줄씩 늘어남 |
 | 보안 (`allowHtml`, `sanitizer`) | ✅ | 기본은 텍스트. HTML 허용 시 sanitizer를 통과 |
 | 최적화 — batch / suspendRender | ✅ | |

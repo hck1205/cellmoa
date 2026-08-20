@@ -38,6 +38,8 @@ import type { BasePlugin } from './plugins/base.js';
 // and a grid built without them would silently have no features.
 import './plugins/index.js';
 import { CellSet } from './cellMap.js';
+import { DENSITY_SCALE, getTheme, registerTheme } from './themes/index.js';
+import type { RegisteredTheme } from './themes/index.js';
 import { DEFAULT_LANGUAGE, phrase } from './i18n/index.js';
 import type { LayoutManager, LayoutSettings } from './layout.js';
 import { ShortcutManager } from './shortcuts.js';
@@ -777,6 +779,35 @@ export class Grid {
   }
 
   /**
+   * The theme in force.
+   *
+   * `theme` may be given as a registered theme object or as a name; `themeName`
+   * is the name-only spelling. A name that no theme was registered under is
+   * `null` rather than an error — a page that ships its own stylesheet under
+   * that name is doing something reasonable, and the class still goes on.
+   */
+  getTheme(): RegisteredTheme | null {
+    const setting = this.getSettings().theme ?? this.getSettings().themeName;
+    if (setting && typeof setting === 'object' && 'classNames' in setting) {
+      return setting as RegisteredTheme;
+    }
+    if (typeof setting === 'string') {
+      return getTheme(setting) ?? registerTheme({ name: setting, light: {}, dark: {} });
+    }
+    return null;
+  }
+
+  /**
+   * How much taller or shorter the theme's density makes a row.
+   *
+   * A multiplier over whatever the settings asked for, so a caller who set a
+   * height keeps their proportions rather than losing them to the density.
+   */
+  densityScale(): number {
+    return DENSITY_SCALE[this.getTheme()?.density ?? 'default'];
+  }
+
+  /**
    * How deep the column header is.
    *
    * One row unless a plugin says otherwise, which is what `nestedHeaders`
@@ -824,10 +855,12 @@ export class Grid {
   /** How tall one level of the column header is. */
   getColHeaderHeight(level = 0): number {
     const setting = this.getSettings().columnHeaderHeight;
-    if (Array.isArray(setting)) {
-      return setting[level] ?? DEFAULT_ROW_HEIGHT;
-    }
-    return typeof setting === 'number' ? setting : DEFAULT_ROW_HEIGHT;
+    const base = Array.isArray(setting)
+      ? (setting[level] ?? DEFAULT_ROW_HEIGHT)
+      : typeof setting === 'number'
+        ? setting
+        : DEFAULT_ROW_HEIGHT;
+    return Math.round(base * this.densityScale());
   }
 
   /**
@@ -1230,8 +1263,9 @@ export class Grid {
         Array.from({ length: this.#colSizes.count }, (_, index) => [index, colWidths(index)]),
       );
     }
+    this.#rowSizes.defaultSize = Math.round(DEFAULT_ROW_HEIGHT * this.densityScale());
     if (typeof rowHeights === 'number') {
-      this.#rowSizes.defaultSize = rowHeights;
+      this.#rowSizes.defaultSize = Math.round(rowHeights * this.densityScale());
     } else if (Array.isArray(rowHeights)) {
       this.#rowSizes.setSizes(rowHeights.map((height, index) => [index, height]));
     } else if (typeof rowHeights === 'function') {
@@ -1997,10 +2031,21 @@ export class Grid {
       fixedRowsBottom: () => (this.getSettings().fixedRowsBottom as number) ?? 0,
       preventWheel: () => this.getSettings().preventWheel === true,
       direction: () => (this.isRtl() ? 'rtl' : 'ltr'),
-      themeName: () =>
-        (this.getSettings().themeName as string | undefined) ??
-        (this.getSettings().theme as string | undefined) ??
-        null,
+      theme: () => {
+        const theme = this.getTheme();
+        if (!theme) {
+          return null;
+        }
+        // `auto` leaves the choice to the page, so no properties are written:
+        // the stylesheet's own media query decides, and inline values would
+        // beat it.
+        const scheme =
+          theme.colorScheme === 'auto' ? null : (theme.colorScheme as 'light' | 'dark');
+        return {
+          classNames: theme.classNames(),
+          properties: scheme ? theme.properties(scheme) : {},
+        };
+      },
       tableClassName: () => {
         const setting = this.getSettings().tableClassName;
         if (Array.isArray(setting)) {

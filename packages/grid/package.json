@@ -7,10 +7,22 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
-    "./style.css": "./src/style.css"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./style.css": "./src/style.css",
+    "./themes.css": "./src/themes/themes.css",
+    "./themes": {
+      "types": "./dist/themes/index.d.ts",
+      "default": "./dist/themes/index.js"
+    }
   },
-  "files": ["dist", "src/style.css"],
+  "files": [
+    "dist",
+    "src/style.css",
+    "src/themes/themes.css"
+  ],
   "scripts": {
     "build:wasm": "cargo build -p cellmoa-wasm --target wasm32-unknown-unknown --release && mkdir -p src/wasm && cp ../../target/wasm32-unknown-unknown/release/cellmoa_wasm.wasm src/wasm/",
     "build": "tsc -p tsconfig.json",
