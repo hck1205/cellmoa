@@ -511,3 +511,25 @@ describe('batching rendering and execution apart', () => {
     expect(grid.countRows()).toBe(2);
   });
 });
+
+describe('a paste too big to spread', () => {
+  it('measures a very tall block without overflowing the stack', async () => {
+    // `Math.max(...rows.map(r => r.length))` puts one argument on the stack per
+    // row and throws `RangeError` at about 130,000 of them — which is to say it
+    // fails on exactly the pastes worth optimising for. One column is enough to
+    // reach it, so this stays cheap.
+    const grid = await makeGrid({ startRows: 1, startCols: 1, maxRows: 3 });
+    const tall = Array.from({ length: 200_000 }, (_, row) => [String(row)]);
+    // `maxRows` keeps the engine out of it: the measurement happens first, and
+    // it is the measurement that used to throw.
+    expect(() => grid.populateFromArray(0, 0, tall, 2, 0)).not.toThrow();
+    expect(grid.getDataAtCell(0, 0)).toBe('0');
+    expect(grid.getDataAtCell(2, 0)).toBe('2');
+  });
+
+  it('takes the width from the widest row when they are ragged', async () => {
+    const grid = await makeGrid({ startRows: 2, startCols: 3 });
+    grid.populateFromArray(0, 0, [['a'], ['b', 'c', 'd']]);
+    expect(grid.getDataAtCell(1, 2)).toBe('d');
+  });
+});

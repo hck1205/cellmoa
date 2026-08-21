@@ -29,6 +29,11 @@ export function parseClipboardText(text: string): string[][] {
   let row: string[] = [];
   let field = '';
   let quoted = false;
+  // An empty field and a field that is not there are the same string, so
+  // without this a last row whose one cell is `""` cannot be told from the
+  // trailing line break spreadsheets end their clipboard text with, and one of
+  // the two is a row that has to survive.
+  let wasQuoted = false;
   let index = 0;
 
   while (index < text.length) {
@@ -50,12 +55,14 @@ export function parseClipboardText(text: string): string[][] {
     }
     if (character === '"' && field === '') {
       quoted = true;
+      wasQuoted = true;
       index += 1;
       continue;
     }
     if (character === '\t') {
       row.push(field);
       field = '';
+      wasQuoted = false;
       index += 1;
       continue;
     }
@@ -64,6 +71,7 @@ export function parseClipboardText(text: string): string[][] {
       rows.push(row);
       row = [];
       field = '';
+      wasQuoted = false;
       // A CRLF is one line break, not two.
       index += character === '\r' && text[index + 1] === '\n' ? 2 : 1;
       continue;
@@ -71,7 +79,7 @@ export function parseClipboardText(text: string): string[][] {
     field += character;
     index += 1;
   }
-  if (field !== '' || row.length > 0) {
+  if (field !== '' || wasQuoted || row.length > 0) {
     row.push(field);
     rows.push(row);
   }
@@ -96,6 +104,37 @@ export function toClipboardHtml(rows: string[][]): string {
     .map((row) => `<tr>${row.map((cell) => `<td>${escape(cell)}</td>`).join('')}</tr>`)
     .join('');
   return `<table><tbody>${body}</tbody></table>`;
+}
+
+/**
+ * How far a paste reaches.
+ *
+ * A selection larger than the pasted block repeats it, which is how pasting one
+ * value down a column fills the column, so the extent is whichever of the two
+ * is larger. Folded rather than spread into `Math.max`: pasting a CSV of a few
+ * hundred thousand rows is an ordinary thing to do, and that many arguments
+ * overflows the call stack.
+ */
+export function pasteExtent(
+  values: string[][],
+  rowCount: number,
+  colCount: number,
+): { rows: number; cols: number } {
+  let cols = colCount;
+  for (const line of values) {
+    if (line.length > cols) {
+      cols = line.length;
+    }
+  }
+  return { rows: Math.max(rowCount, values.length), cols };
+}
+
+/** The rectangle a copy covers, after the limits the settings put on it. */
+interface CopyBounds {
+  top: number;
+  left: number;
+  bottom: number;
+  right: number;
 }
 
 /** What a copy took out of the grid, kept so a paste can shift its formulas. */
@@ -173,30 +212,60 @@ export class CopyPaste extends BasePlugin {
     this.listen(root, 'paste', (event: ClipboardEvent) => this.onPaste(event));
   }
 
-  /** The selected cells as a rectangle of values. */
-  getRangeData(): string[][] {
+  /**
+   * The rectangle a copy covers.
+   *
+   * The limits are part of what leaves the grid, so they are settled once here
+   * rather than at each caller: the values and the formulas behind them have to
+   * describe the same rectangle, or a paste of this grid's own copy writes rows
+   * that were never on the clipboard.
+   */
+  #copyBounds(): CopyBounds | null {
     const range = this.grid.getSelectedRangeLast();
     if (!range) {
-      return [];
+      return null;
     }
-    const limits = this.settings<CopyPasteSettings>() ?? {};
-    const lastRow = Math.min(range.bottomRow, range.topRow + (limits.rowsLimit ?? 1000) - 1);
-    const lastCol = Math.min(range.endCol, range.startCol + (limits.columnsLimit ?? 1000) - 1);
+    const limits = this.options<CopyPasteSettings>();
+    return {
+      top: range.topRow,
+      left: range.startCol,
+      bottom: Math.min(range.bottomRow, range.topRow + (limits.rowsLimit ?? 1000) - 1),
+      right: Math.min(range.endCol, range.startCol + (limits.columnsLimit ?? 1000) - 1),
+    };
+  }
 
+  /** Whether a copy puts a row of column headers in front of the values. */
+  #copiesHeaders(): boolean {
+    const asked = this.options<CopyPasteSettings>().copyColumnHeaders === true;
+    return asked && this.grid.hasColHeaders();
+  }
+
+  /** A rectangle read one cell at a time, blanking what may not be copied. */
+  #collect(bounds: CopyBounds, read: (row: number, col: number) => string): string[][] {
     const rows: string[][] = [];
-    if (limits.copyColumnHeaders && this.grid.hasColHeaders()) {
-      const header: string[] = [];
-      for (let col = range.startCol; col <= lastCol; col += 1) {
-        header.push(this.grid.getColHeader(col));
-      }
-      rows.push(header);
-    }
-    for (let row = range.topRow; row <= lastRow; row += 1) {
+    for (let row = bounds.top; row <= bounds.bottom; row += 1) {
       const values: string[] = [];
-      for (let col = range.startCol; col <= lastCol; col += 1) {
-        values.push(this.isCopyable(row, col) ? this.grid.getDataAtCell(row, col) : '');
+      for (let col = bounds.left; col <= bounds.right; col += 1) {
+        values.push(this.isCopyable(row, col) ? read(row, col) : '');
       }
       rows.push(values);
+    }
+    return rows;
+  }
+
+  /** The selected cells as a rectangle of values. */
+  getRangeData(): string[][] {
+    const bounds = this.#copyBounds();
+    if (!bounds) {
+      return [];
+    }
+    const rows = this.#collect(bounds, (row, col) => this.grid.getDataAtCell(row, col));
+    if (this.#copiesHeaders()) {
+      const header: string[] = [];
+      for (let col = bounds.left; col <= bounds.right; col += 1) {
+        header.push(this.grid.getColHeader(col));
+      }
+      rows.unshift(header);
     }
     return rows;
   }
@@ -214,19 +283,11 @@ export class CopyPaste extends BasePlugin {
 
   /** The same rectangle, as the formulas behind it rather than their results. */
   getRangeSource(): string[][] {
-    const range = this.grid.getSelectedRangeLast();
-    if (!range) {
+    const bounds = this.#copyBounds();
+    if (!bounds) {
       return [];
     }
-    const rows: string[][] = [];
-    for (let row = range.topRow; row <= range.bottomRow; row += 1) {
-      const values: string[] = [];
-      for (let col = range.startCol; col <= range.endCol; col += 1) {
-        values.push(this.isCopyable(row, col) ? this.grid.getSourceDataAtCell(row, col) : '');
-      }
-      rows.push(values);
-    }
-    return rows;
+    return this.#collect(bounds, (row, col) => this.grid.getSourceDataAtCell(row, col));
   }
 
   /** The selected cells as clipboard text, for a caller doing its own copy. */
@@ -251,9 +312,14 @@ export class CopyPaste extends BasePlugin {
     event.preventDefault();
 
     const range = this.grid.getSelectedRangeLast();
-    this.#clipping = range
-      ? { row: range.topRow, col: range.startCol, source: this.getRangeSource(), text }
-      : null;
+    // With a header row in front of them the source rows no longer sit where
+    // they were copied from, and every formula would be shifted by one. Keeping
+    // no clipping costs this grid the formulas on a paste back into itself and
+    // gains it the same block every other application is handed.
+    this.#clipping =
+      range && !this.#copiesHeaders()
+        ? { row: range.topRow, col: range.startCol, source: this.getRangeSource(), text }
+        : null;
 
     if (isCut) {
       this.grid.emptySelectedCells('cut');
@@ -285,17 +351,14 @@ export class CopyPaste extends BasePlugin {
       return;
     }
     const shifted = this.#shiftClipping(text, range.topRow, range.startCol) ?? values;
-    // A selection larger than the pasted block repeats it, which is how
-    // pasting one value over a column fills the column.
     const prepared = this.#prepare(shifted, range.topRow, range.startCol);
-    const height = Math.max(range.rowCount, prepared.length);
-    const width = Math.max(range.colCount, Math.max(...prepared.map((row) => row.length), 0));
+    const extent = pasteExtent(prepared, range.rowCount, range.colCount);
     this.grid.populateFromArray(
       range.topRow,
       range.startCol,
       prepared,
-      range.topRow + height - 1,
-      range.startCol + width - 1,
+      range.topRow + extent.rows - 1,
+      range.startCol + extent.cols - 1,
       'paste',
     );
     this.grid.hooks.run('afterPaste', undefined, values, range.toArray());

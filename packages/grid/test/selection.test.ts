@@ -161,6 +161,31 @@ describe('the selection', () => {
     expect(selection.highlight).toEqual({ row: 0, col: 0 });
   });
 
+  it('comes back inside the grid when the grid shrinks under it', () => {
+    let rows = 10;
+    const shrinking = new Selection(() => rows, () => 6);
+    shrinking.setCell({ row: 9, col: 0 });
+    rows = 5;
+    // Every delta from row 9 is outside a five-row grid too, so a move that only
+    // checked its target would refuse every arrow key and strand the highlight.
+    expect(shrinking.moveBy(-1, 0)).toBe(true);
+    expect(shrinking.highlight).toEqual({ row: 4, col: 0 });
+    expect(shrinking.last!.toArray()).toEqual([4, 0, 4, 0]);
+  });
+
+  it('reaches the headers only when they are navigable', () => {
+    selection.setCell({ row: 0, col: 0 });
+    expect(selection.moveBy(-1, 0)).toBe(false);
+
+    selection.setNavigableHeaders(true);
+    expect(selection.moveBy(-1, 0)).toBe(true);
+    expect(selection.highlight).toEqual({ row: -1, col: 0 });
+    // A header is as far inside the grid as the selection is concerned, so it
+    // is not somewhere a later move has to be recovered from.
+    expect(selection.moveBy(0, 1)).toBe(true);
+    expect(selection.highlight).toEqual({ row: -1, col: 1 });
+  });
+
   it('clears', () => {
     selection.setCell({ row: 1, col: 1 });
     selection.clear();

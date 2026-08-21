@@ -144,6 +144,17 @@ export class DataSource {
    */
   static readonly BLOCK_ROWS = 64;
   static readonly BLOCK_COLS = 32;
+  /**
+   * How many blocks are kept.
+   *
+   * Nothing evicts a block on its own: the cache is dropped whole when the
+   * revision moves, and a session that only reads never moves it. Scrolling
+   * down a long sheet would then hold every row it had passed, so a reader
+   * doing nothing worse than looking costs memory in proportion to how far it
+   * looked. This many blocks is a few dozen screenfuls — far more scrollback
+   * than anyone revisits, and a ceiling rather than none at all.
+   */
+  static readonly MAX_BLOCKS = 64;
 
   /** How many blocks the cache is holding. */
   get loadedBlocks(): number {
@@ -198,31 +209,20 @@ export class DataSource {
   /** The sheets in the workbook. */
   sheets(): SheetInfo[] {
     const response = this.#engine.call({ op: 'sheets' });
-    this.#revision = response.revision ?? this.#revision;
-    return (response.sheets ?? []) as SheetInfo[];
+    const sheets = (response.sheets ?? []) as SheetInfo[];
+    this.#observed(response.revision, sheets);
+    return sheets;
   }
 
   /** Switches to another sheet. */
   selectSheet(name: string): void {
     this.#sheet = name;
-    this.#invalidate();
     this.refresh();
   }
 
   /** Re-reads the sheet's size and drops the cache. */
   refresh(): void {
-    const sheets = this.sheets();
-    const sheet = this.#sheet
-      ? sheets.find((s) => s.name.toLowerCase() === this.#sheet!.toLowerCase())
-      : sheets[0];
-    if (sheet) {
-      this.#sheet = sheet.name;
-      this.#rows = sheet.rows;
-      this.#cols = sheet.cols;
-    } else {
-      this.#rows = 0;
-      this.#cols = 0;
-    }
+    this.#adopt(this.sheets());
     this.#invalidate();
   }
 
@@ -244,6 +244,11 @@ export class DataSource {
   /** Reads one block, unless it is already in the cache. */
   #read(block: number): void {
     if (this.#loaded.has(block)) {
+      // Putting it back moves it to the end of the set's order, which is what
+      // makes that order least-recently-used: scrolling down a page and back
+      // up again must not find the page it came from evicted.
+      this.#loaded.delete(block);
+      this.#loaded.add(block);
       return;
     }
     const window = this.#windowOf(block);
@@ -255,10 +260,12 @@ export class DataSource {
     if (!response.ok) {
       // A block past the end of the sheet is not an error worth throwing over;
       // it simply holds nothing, and asking again would not change that.
-      this.#loaded.add(block);
+      this.#remember(block);
       return;
     }
-    this.#revision = response.revision ?? this.#revision;
+    // Before the cells are stored, because this may drop everything read so far
+    // and these cells are the ones read at the new revision.
+    this.#observed(response.revision);
     for (const cell of (response.cells ?? []) as Array<CellData & Coords>) {
       this.#cells.set(this.#key(cell.row, cell.col), {
         text: cell.text,
@@ -268,7 +275,7 @@ export class DataSource {
         ...(cell.style === undefined ? {} : { style: cell.style }),
       });
     }
-    this.#loaded.add(block);
+    this.#remember(block);
   }
 
   /**
@@ -412,6 +419,9 @@ export class DataSource {
   #applied(response: EngineResponse, expected?: number): number {
     if (!response.ok) {
       if (response.code === 'revision_conflict') {
+        // The refusal is itself the news that someone else got there first, so
+        // the cache it invalidates goes now rather than at some later read.
+        this.#observed(response.revision);
         throw new WriteConflict(expected ?? -1, (response.revision as number) ?? -1);
       }
       // Nothing to undo is a condition, not a failure; the caller sees the
@@ -421,25 +431,69 @@ export class DataSource {
       }
       throw new Error(response.message ?? 'the edit was refused');
     }
-    const revision = (response.revision as number) ?? this.#revision;
-    if (revision !== this.#revision) {
-      this.#revision = revision;
-      // Any edit can move any cell that reads it, so the whole cache goes.
-      this.#invalidate();
-      this.#resize();
-    }
-    return revision;
+    this.#observed(response.revision);
+    return this.#revision;
   }
 
-  /** Re-reads the sheet's extent after a change that may have grown it. */
-  #resize(): void {
-    const sheets = this.sheets();
+  /**
+   * Takes note of the revision a response came back at.
+   *
+   * The cache is only ever right for one revision, and this grid's own edits
+   * are not the only thing that moves it: two grids on one workbook, or an
+   * agent writing through the same engine, both leave this one holding cells
+   * that were true a revision ago. Nothing announces that. Every response
+   * carries the revision, though, so every response is a chance to notice —
+   * and noticing is the whole of the invalidation policy.
+   */
+  #observed(revision: number | undefined, sheets?: SheetInfo[]): void {
+    if (revision === undefined || revision === this.#revision) {
+      return;
+    }
+    // Set first: the listing below comes back at this same revision, and would
+    // otherwise arrive here again and recurse.
+    this.#revision = revision;
+    // Any edit can move any cell that reads it, so the whole cache goes.
+    this.#invalidate();
+    // A change made elsewhere grows the sheet as readily as one made here, so
+    // the extent is re-read rather than assumed to have stayed put.
+    this.#adopt(sheets ?? this.sheets());
+  }
+
+  /** Takes the sheet's name and extent from a listing. */
+  #adopt(sheets: SheetInfo[]): void {
     const sheet = this.#sheet
       ? sheets.find((s) => s.name.toLowerCase() === this.#sheet!.toLowerCase())
       : sheets[0];
     if (sheet) {
+      this.#sheet = sheet.name;
       this.#rows = sheet.rows;
       this.#cols = sheet.cols;
+    } else {
+      this.#rows = 0;
+      this.#cols = 0;
+    }
+  }
+
+  /** Records a block as read, making room for it first. */
+  #remember(block: number): void {
+    while (this.#loaded.size >= DataSource.MAX_BLOCKS) {
+      this.#evict();
+    }
+    this.#loaded.add(block);
+  }
+
+  /** Drops the block read longest ago, and with it the cells it brought in. */
+  #evict(): void {
+    const oldest = this.#loaded.values().next();
+    if (oldest.done) {
+      return;
+    }
+    this.#loaded.delete(oldest.value);
+    const window = this.#windowOf(oldest.value);
+    for (let row = window.startRow; row <= window.endRow; row += 1) {
+      for (let col = window.startCol; col <= window.endCol; col += 1) {
+        this.#cells.delete(this.#key(row, col));
+      }
     }
   }
 

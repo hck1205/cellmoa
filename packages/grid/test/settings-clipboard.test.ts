@@ -1,10 +1,93 @@
 import { describe, expect, it } from 'vitest';
 import type { CopyPaste } from '../src/plugins/index.js';
 import { parsePastedValue } from '../src/plugins/index.js';
+import { pasteExtent, parseClipboardText } from '../src/plugins/copyPaste.js';
 import { mountGrid } from './helpers.js';
 
 const clipboardOf = (grid: Awaited<ReturnType<typeof mountGrid>>['grid']) =>
   grid.getPlugin('copyPaste') as unknown as CopyPaste;
+
+/** A `ClipboardEvent` jsdom will accept, with a data transfer we can inspect. */
+function clipboardEvent(type: string, text = ''): ClipboardEvent {
+  const store = new Map<string, string>();
+  if (text !== '') {
+    store.set('text/plain', text);
+  }
+  const event = new Event(type, { bubbles: true, cancelable: true }) as ClipboardEvent;
+  Object.defineProperty(event, 'clipboardData', {
+    value: {
+      getData: (format: string) => store.get(format) ?? '',
+      setData: (format: string, value: string) => store.set(format, value),
+    },
+    configurable: true,
+  });
+  return event;
+}
+
+describe('reading the clipboard text', () => {
+  it('keeps a field that was quoted down to nothing', () => {
+    // `""` is how a producer says "this cell is deliberately empty"; dropping
+    // it loses a row that the clipboard plainly described.
+    expect(parseClipboardText('""')).toEqual([['']]);
+    expect(parseClipboardText('a\n""')).toEqual([['a'], ['']]);
+  });
+});
+
+describe('how far a paste reaches', () => {
+  it('measures a block far too wide to spread as arguments', () => {
+    // A pasted CSV of a few hundred thousand rows is an ordinary thing to do,
+    // and `Math.max(...rows)` overflows the call stack well before that.
+    const huge = Array.from({ length: 200_000 }, () => ['x']);
+    expect(pasteExtent(huge, 1, 1)).toEqual({ rows: 200_000, cols: 1 });
+  });
+
+  it('takes whichever of the block and the selection is larger', () => {
+    expect(pasteExtent([['a', 'b']], 3, 1)).toEqual({ rows: 3, cols: 2 });
+    expect(pasteExtent([['a'], ['b']], 1, 4)).toEqual({ rows: 2, cols: 4 });
+  });
+});
+
+describe('what a copy carries back to its own grid', () => {
+  it('pastes back exactly the rows the clipboard was given', async () => {
+    const { grid } = await mountGrid({
+      startRows: 6,
+      startCols: 1,
+      copyPaste: { rowsLimit: 2 },
+    });
+    grid.setDataAtCells([
+      [0, 0, 'a'],
+      [1, 0, 'b'],
+      [2, 0, 'c'],
+    ]);
+    grid.selectCell(0, 0, 2, 0);
+    const copied = clipboardEvent('copy');
+    clipboardOf(grid).onCopy(copied, false);
+    expect(copied.clipboardData?.getData('text/plain')).toBe('a\nb');
+
+    grid.selectCell(3, 0);
+    clipboardOf(grid).paste(copied.clipboardData?.getData('text/plain') ?? '');
+    // The limit is what left the grid, so it is also what comes back: the third
+    // row was never on the clipboard and must not appear.
+    expect([3, 4, 5].map((row) => grid.getDataAtCell(row, 0))).toEqual(['a', 'b', '']);
+  });
+
+  it('pastes back the header row it put on the clipboard', async () => {
+    const { grid } = await mountGrid({
+      startRows: 6,
+      startCols: 1,
+      copyPaste: { copyColumnHeaders: true },
+    });
+    grid.setDataAtCell(0, 0, 'v');
+    grid.selectCell(0, 0);
+    const copied = clipboardEvent('copy');
+    clipboardOf(grid).onCopy(copied, false);
+    expect(copied.clipboardData?.getData('text/plain')).toBe('A\nv');
+
+    grid.selectCell(2, 0);
+    clipboardOf(grid).paste(copied.clipboardData?.getData('text/plain') ?? '');
+    expect([2, 3].map((row) => grid.getDataAtCell(row, 0))).toEqual(['A', 'v']);
+  });
+});
 
 describe('what may leave the grid', () => {
   it('blanks a cell marked not copyable', async () => {

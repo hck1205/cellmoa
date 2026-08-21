@@ -35,6 +35,7 @@ export {
   escapeClipboardValue,
   parseClipboardText,
   parsePastedValue,
+  pasteExtent,
   toClipboardHtml,
   toClipboardText,
 } from './copyPaste.js';

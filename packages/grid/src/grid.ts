@@ -699,7 +699,10 @@ setDataAtRowProp(row: number, prop: string | number, value: string): void {
       return;
     }
     const height = values.length;
-    const width = Math.max(...values.map((row) => row.length));
+    // Folded rather than spread: `Math.max(...rows)` puts one argument on the
+    // stack per row, and a paste of about 130,000 rows throws `RangeError`
+    // instead of pasting. A big paste is exactly when this is reached.
+    const width = values.reduce((widest, row) => Math.max(widest, row.length), 0);
     const lastRow = endRow ?? startRow + height - 1;
     const lastCol = endCol ?? startCol + width - 1;
 

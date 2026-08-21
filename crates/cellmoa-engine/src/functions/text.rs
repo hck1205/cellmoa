@@ -22,6 +22,40 @@ fn char_index_of_byte(s: &str, byte: usize) -> usize {
     s[..byte].chars().count()
 }
 
+/// The search shared by FIND and SEARCH, which differ only in case.
+///
+/// The folded search measures its start offset and reports its answer in the
+/// lower-cased string rather than carrying either across from the original,
+/// because lower-casing can change how long a character is. The bounds check
+/// stays on the original, since that is the string whose characters the user
+/// counted. Where the lower-cased form of a character is the longer one — `İ`
+/// becomes two characters — every position after it shifts, so SEARCH can name
+/// a position the original string does not have.
+///
+/// Neither honours the wildcards Excel allows in SEARCH: a `?` or `*` in the
+/// needle is matched literally rather than standing for one character or for
+/// any run of them.
+fn locate(ctx: &EvalCtx, a: &[Operand], fold_case: bool) -> Operand {
+    args!(
+        needle = arg_text(ctx, a, 0),
+        haystack = arg_text(ctx, a, 1),
+        start = opt_num(ctx, a, 2, 1.0),
+    );
+    if start < 1.0 || start as usize > char_len(&haystack) + 1 {
+        return Operand::error(CellError::Value);
+    }
+    let (hay, pin) = if fold_case {
+        (haystack.to_lowercase(), needle.to_lowercase())
+    } else {
+        (haystack, needle)
+    };
+    let offset: usize = hay.chars().take(start as usize - 1).map(char::len_utf8).sum();
+    match hay[offset..].find(&pin) {
+        Some(byte) => Operand::number(char_index_of_byte(&hay, offset + byte) as f64 + 1.0),
+        None => Operand::error(CellError::Value),
+    }
+}
+
 pub const FUNCTIONS: &[Function] = &[
     f("LEN", 1, Some(1), |ctx, a| match arg_text(ctx, a, 0) {
         Ok(s) => Operand::number(char_len(&s) as f64),
@@ -147,43 +181,8 @@ pub const FUNCTIONS: &[Function] = &[
         // EXACT is the one text comparison that is case-sensitive.
         Operand::bool(x == y)
     }),
-    f("FIND", 2, Some(3), |ctx, a| {
-        args!(
-            needle = arg_text(ctx, a, 0),
-            haystack = arg_text(ctx, a, 1),
-            start = opt_num(ctx, a, 2, 1.0),
-        );
-        if start < 1.0 || start as usize > char_len(&haystack) + 1 {
-            return Operand::error(CellError::Value);
-        }
-        let offset: usize = haystack.chars().take(start as usize - 1).map(char::len_utf8).sum();
-        // FIND is case-sensitive and takes no wildcards.
-        match haystack[offset..].find(&needle) {
-            Some(byte) => {
-                Operand::number(char_index_of_byte(&haystack, offset + byte) as f64 + 1.0)
-            }
-            None => Operand::error(CellError::Value),
-        }
-    }),
-    f("SEARCH", 2, Some(3), |ctx, a| {
-        args!(
-            needle = arg_text(ctx, a, 0),
-            haystack = arg_text(ctx, a, 1),
-            start = opt_num(ctx, a, 2, 1.0),
-        );
-        if start < 1.0 || start as usize > char_len(&haystack) + 1 {
-            return Operand::error(CellError::Value);
-        }
-        // SEARCH is the case-insensitive counterpart of FIND. Lower-casing can
-        // change a character's byte length, so the start offset is measured in
-        // the lower-cased string rather than carried over from the original.
-        let (hay, pin) = (haystack.to_lowercase(), needle.to_lowercase());
-        let offset: usize = hay.chars().take(start as usize - 1).map(char::len_utf8).sum();
-        match hay[offset..].find(&pin) {
-            Some(byte) => Operand::number(char_index_of_byte(&hay, offset + byte) as f64 + 1.0),
-            None => Operand::error(CellError::Value),
-        }
-    }),
+    f("FIND", 2, Some(3), |ctx, a| locate(ctx, a, false)),
+    f("SEARCH", 2, Some(3), |ctx, a| locate(ctx, a, true)),
     f("SUBSTITUTE", 3, Some(4), |ctx, a| {
         args!(text = arg_text(ctx, a, 0), old = arg_text(ctx, a, 1), new = arg_text(ctx, a, 2));
         if old.is_empty() {
