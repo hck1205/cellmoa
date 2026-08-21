@@ -127,4 +127,4 @@ export class VerifyOverlay extends BasePlugin {
   }
 }
 
-registerPlugin(VerifyOverlay as never);
+registerPlugin(VerifyOverlay);

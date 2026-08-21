@@ -99,4 +99,4 @@ export class Loading extends BasePlugin {
   }
 }
 
-registerPlugin(Loading as never);
+registerPlugin(Loading);

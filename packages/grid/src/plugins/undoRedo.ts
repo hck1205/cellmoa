@@ -109,4 +109,4 @@ export class UndoRedo extends BasePlugin {
   }
 }
 
-registerPlugin(UndoRedo as never);
+registerPlugin(UndoRedo);

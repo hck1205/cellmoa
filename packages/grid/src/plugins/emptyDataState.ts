@@ -90,4 +90,4 @@ export class EmptyDataState extends BasePlugin {
   }
 }
 
-registerPlugin(EmptyDataState as never);
+registerPlugin(EmptyDataState);

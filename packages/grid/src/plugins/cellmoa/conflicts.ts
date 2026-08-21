@@ -76,4 +76,4 @@ export class Conflicts extends BasePlugin {
   }
 }
 
-registerPlugin(Conflicts as never);
+registerPlugin(Conflicts);

@@ -101,4 +101,4 @@ export class MoveCells extends BasePlugin {
   }
 }
 
-registerPlugin(MoveCells as never);
+registerPlugin(MoveCells);

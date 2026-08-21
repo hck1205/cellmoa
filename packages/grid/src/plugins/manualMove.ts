@@ -120,6 +120,6 @@ export class ManualColumnFreeze extends BasePlugin {
   }
 }
 
-registerPlugin(ManualRowMove as never);
-registerPlugin(ManualColumnMove as never);
-registerPlugin(ManualColumnFreeze as never);
+registerPlugin(ManualRowMove);
+registerPlugin(ManualColumnMove);
+registerPlugin(ManualColumnFreeze);

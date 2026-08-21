@@ -145,4 +145,4 @@ export class Search extends BasePlugin {
   }
 }
 
-registerPlugin(Search as never);
+registerPlugin(Search);

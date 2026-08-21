@@ -200,4 +200,4 @@ export class Dialog extends BasePlugin {
   }
 }
 
-registerPlugin(Dialog as never);
+registerPlugin(Dialog);

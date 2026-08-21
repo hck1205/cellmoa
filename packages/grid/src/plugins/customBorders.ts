@@ -237,4 +237,4 @@ export class CustomBorders extends BasePlugin {
   }
 }
 
-registerPlugin(CustomBorders as never);
+registerPlugin(CustomBorders);

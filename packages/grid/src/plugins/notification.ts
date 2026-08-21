@@ -142,4 +142,4 @@ export class Notification extends BasePlugin {
   }
 }
 
-registerPlugin(Notification as never);
+registerPlugin(Notification);

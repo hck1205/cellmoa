@@ -140,7 +140,7 @@ export class AutoRowSize extends BasePlugin {
   }
 }
 
-registerPlugin(AutoRowSize as never);
+registerPlugin(AutoRowSize);
 
 /**
  * Spreading the columns to fill the container.
@@ -238,7 +238,7 @@ export class StretchColumns extends BasePlugin {
   }
 }
 
-registerPlugin(StretchColumns as never);
+registerPlugin(StretchColumns);
 
 /**
  * Sizing a column to its widest cell.
@@ -312,6 +312,6 @@ export class AutoColumnSize extends BasePlugin {
   }
 }
 
-registerPlugin(ManualRowResize as never);
-registerPlugin(ManualColumnResize as never);
-registerPlugin(AutoColumnSize as never);
+registerPlugin(ManualRowResize);
+registerPlugin(ManualColumnResize);
+registerPlugin(AutoColumnSize);

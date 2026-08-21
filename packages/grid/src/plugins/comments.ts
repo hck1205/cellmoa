@@ -118,4 +118,4 @@ export class Comments extends BasePlugin {
   }
 }
 
-registerPlugin(Comments as never);
+registerPlugin(Comments);

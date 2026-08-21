@@ -362,4 +362,4 @@ export class CopyPaste extends BasePlugin {
   }
 }
 
-registerPlugin(CopyPaste as never);
+registerPlugin(CopyPaste);

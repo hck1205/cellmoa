@@ -59,4 +59,4 @@ export class DropdownMenu extends MenuPlugin {
   }
 }
 
-registerPlugin(DropdownMenu as never);
+registerPlugin(DropdownMenu);

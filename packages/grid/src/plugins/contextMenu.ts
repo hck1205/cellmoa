@@ -54,4 +54,4 @@ export class ContextMenu extends MenuPlugin {
   }
 }
 
-registerPlugin(ContextMenu as never);
+registerPlugin(ContextMenu);

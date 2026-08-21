@@ -154,4 +154,4 @@ export class ExportFile extends BasePlugin {
   }
 }
 
-registerPlugin(ExportFile as never);
+registerPlugin(ExportFile);

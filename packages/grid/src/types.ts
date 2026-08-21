@@ -12,7 +12,7 @@
  */
 
 import type { Grid } from './grid.js';
-import type { CellData, Coords, GridSettings } from './settings.js';
+import type { Coords, GridSettings } from './settings.js';
 import type { CellEditor, CellRenderer, CellValidator, EditorInstance } from './cellTypes/index.js';
 import type { HookHandler, HookName } from './hooks.js';
 import type { ColorScheme, DensityType, RegisteredTheme, ThemeDefinition, ThemeTokens } from './themes/index.js';
@@ -58,9 +58,6 @@ export type RowObject = Record<string, unknown>;
 
 /** The same row as the source holds it, before the grid read it. */
 export type SourceRowData = RowObject;
-
-/** The whole cell, value and rendering, as the engine reports it. */
-export type CellData_ = CellData;
 
 // --- functions -------------------------------------------------------------
 

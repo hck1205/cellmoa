@@ -126,7 +126,7 @@ export class DragToScroll extends BasePlugin {
   }
 }
 
-registerPlugin(DragToScroll as never);
+registerPlugin(DragToScroll);
 
 /**
  * Scrolling with a finger.
@@ -199,4 +199,4 @@ export class TouchScroll extends BasePlugin {
   }
 }
 
-registerPlugin(TouchScroll as never);
+registerPlugin(TouchScroll);

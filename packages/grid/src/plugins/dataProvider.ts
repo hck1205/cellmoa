@@ -17,6 +17,31 @@
 import { BasePlugin, registerPlugin } from './base.js';
 import { PHRASE } from '../i18n/keys.js';
 import type { CellChange } from '../grid.js';
+import type {
+  DataProviderSettings,
+  FetchOptions,
+  FetchResult,
+  FilterDescriptor,
+  MutationOperation,
+  QueryParameters,
+  RowUpdate,
+  RowsCreate,
+  SortDescriptor,
+} from '../settings.js';
+
+// Re-exported so `getPlugin('dataProvider')` and its types come from one
+// import, as they did when they were declared here.
+export type {
+  DataProviderSettings,
+  FetchOptions,
+  FetchResult,
+  FilterDescriptor,
+  MutationOperation,
+  QueryParameters,
+  RowUpdate,
+  RowsCreate,
+  SortDescriptor,
+};
 
 /**
  * The change sources that mean a person changed a value.
@@ -26,84 +51,6 @@ import type { CellChange } from '../grid.js';
  * would be the grid arguing with itself.
  */
 const EDIT_SOURCES = new Set(['edit', 'paste', 'autofill', 'populateFromArray', 'cut']);
-
-/** How the rows should be ordered. */
-export interface SortDescriptor {
-  /** The column's name, which is what a server can act on. */
-  prop: string | number;
-  order: 'asc' | 'desc';
-}
-
-/** One column's filter, as the source receives it. */
-export interface FilterDescriptor {
-  prop: string | number;
-  conditions: Array<{ name: string; args: unknown[] }>;
-  operation?: 'conjunction' | 'disjunction';
-}
-
-/** What the grid asks the source for. */
-export interface QueryParameters {
-  /** 1-based. */
-  page: number;
-  pageSize: number;
-  sort: SortDescriptor | null;
-  filters: FilterDescriptor[] | null;
-}
-
-/**
- * A fetch's options, which are the query plus what the source must not see.
- *
- * `skipLoading` says the fetch is one the grid started for its own reasons —
- * after a sort, or after a write went through — so the overlay should not flash
- * over a table the reader is already looking at. It never reaches `fetchRows`:
- * how the grid draws is not the source's business.
- */
-export interface FetchOptions extends Partial<QueryParameters> {
-  skipLoading?: boolean;
-}
-
-/** What the source answers with. */
-export interface FetchResult {
-  rows: string[][];
-  totalRows: number;
-}
-
-/** One row's worth of changes, as `onRowsUpdate` receives them. */
-export interface RowUpdate {
-  id: unknown;
-  changes: Record<string, string>;
-  rowData?: string[];
-}
-
-/** What `onRowsCreate` receives. */
-export interface RowsCreate {
-  position: 'above' | 'below';
-  referenceRowId?: unknown;
-  rowsAmount: number;
-}
-
-export type MutationOperation = 'create' | 'update' | 'remove';
-
-export interface DataProviderSettings {
-  /**
-   * Names a row.
-   *
-   * A string reads that column; a function decides. Without one the grid has
-   * nothing stable to send a server — a visual index changes when the page
-   * does — so writing is refused rather than sent against the wrong row.
-   */
-  rowId?: string | ((row: number, values: string[]) => unknown);
-  /** Fetches a page. `signal` aborts when this request is overtaken. */
-  fetchRows?: (
-    query: QueryParameters,
-    context: { signal: AbortSignal },
-  ) => Promise<FetchResult> | FetchResult;
-  onRowsCreate?: (payload: RowsCreate) => Promise<unknown> | unknown;
-  onRowsUpdate?: (rows: RowUpdate[]) => Promise<unknown> | unknown;
-  onRowsRemove?: (ids: unknown[]) => Promise<unknown> | unknown;
-  /** Called when a fetch throws, so a host with its own error UI can use it. */
-  onError?: (error: unknown, query: QueryParameters) => void;
-}
 
 export const INITIAL_QUERY: QueryParameters = { page: 1, pageSize: 10, sort: null, filters: null };
 
@@ -650,4 +597,4 @@ function isAbort(error: unknown): boolean {
   return (error as { name?: string } | null)?.name === 'AbortError';
 }
 
-registerPlugin(DataProvider as never);
+registerPlugin(DataProvider);

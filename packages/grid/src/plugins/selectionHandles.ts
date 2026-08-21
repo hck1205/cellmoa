@@ -143,7 +143,7 @@ export class SelectionHandles extends Handles {
   }
 }
 
-registerPlugin(SelectionHandles as never);
+registerPlugin(SelectionHandles);
 
 /**
  * The touch handles: one at each end of the selection, which resize it.
@@ -209,4 +209,4 @@ export class MultipleSelectionHandles extends Handles {
   }
 }
 
-registerPlugin(MultipleSelectionHandles as never);
+registerPlugin(MultipleSelectionHandles);

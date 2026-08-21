@@ -255,5 +255,5 @@ export class MultiColumnSorting extends ColumnSorting {
   }
 }
 
-registerPlugin(ColumnSorting as never);
-registerPlugin(MultiColumnSorting as never);
+registerPlugin(ColumnSorting);
+registerPlugin(MultiColumnSorting);

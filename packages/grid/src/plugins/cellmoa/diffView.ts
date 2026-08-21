@@ -157,4 +157,4 @@ export class DiffView extends BasePlugin {
   }
 }
 
-registerPlugin(DiffView as never);
+registerPlugin(DiffView);

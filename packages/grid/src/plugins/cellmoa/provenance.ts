@@ -253,4 +253,4 @@ export class Provenance extends BasePlugin {
   }
 }
 
-registerPlugin(Provenance as never);
+registerPlugin(Provenance);

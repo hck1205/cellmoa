@@ -217,4 +217,4 @@ export class Filters extends BasePlugin {
   }
 }
 
-registerPlugin(Filters as never);
+registerPlugin(Filters);

@@ -144,4 +144,4 @@ export class NestedHeaders extends BasePlugin {
   }
 }
 
-registerPlugin(NestedHeaders as never);
+registerPlugin(NestedHeaders);

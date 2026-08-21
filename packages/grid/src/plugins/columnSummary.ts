@@ -148,4 +148,4 @@ export class ColumnSummary extends BasePlugin {
   }
 }
 
-registerPlugin(ColumnSummary as never);
+registerPlugin(ColumnSummary);

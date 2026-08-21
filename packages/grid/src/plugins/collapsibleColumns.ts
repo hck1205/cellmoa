@@ -198,4 +198,4 @@ export class CollapsibleColumns extends BasePlugin {
   }
 }
 
-registerPlugin(CollapsibleColumns as never);
+registerPlugin(CollapsibleColumns);

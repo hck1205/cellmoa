@@ -148,6 +148,6 @@ export class TrimRows extends BasePlugin {
   }
 }
 
-registerPlugin(HiddenRows as never);
-registerPlugin(HiddenColumns as never);
-registerPlugin(TrimRows as never);
+registerPlugin(HiddenRows);
+registerPlugin(HiddenColumns);
+registerPlugin(TrimRows);

@@ -194,4 +194,4 @@ export class NestedRows extends BasePlugin {
   }
 }
 
-registerPlugin(NestedRows as never);
+registerPlugin(NestedRows);

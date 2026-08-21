@@ -161,4 +161,4 @@ export class MergeCells extends BasePlugin {
   }
 }
 
-registerPlugin(MergeCells as never);
+registerPlugin(MergeCells);

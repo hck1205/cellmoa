@@ -33,6 +33,7 @@ export { Hooks, EXTRA_HOOK_NAMES, HOOK_NAMES, isHookName } from './hooks.js';
 export type { HookHandler, HookName } from './hooks.js';
 
 export { IndexMapper } from './indexMapper.js';
+export { MetaManager } from './metaManager.js';
 
 export { CellRange, Selection } from './selection.js';
 export type { SelectionMode, SelectionState } from './selection.js';
@@ -42,7 +43,6 @@ export {
   DEFAULT_ROW_HEADER_WIDTH,
   DEFAULT_ROW_HEIGHT,
   DEFAULT_SETTINGS,
-  MetaManager,
   SETTING_COUNT,
   SETTING_NAMES,
   isSettingName,

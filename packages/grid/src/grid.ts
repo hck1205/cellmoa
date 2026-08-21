@@ -23,6 +23,7 @@ import type { Engine } from './engine.js';
 import { Hooks } from './hooks.js';
 import type { HookHandler } from './hooks.js';
 import { IndexMapper } from './indexMapper.js';
+import { MetaManager } from './metaManager.js';
 import { CellRange, Selection } from './selection.js';
 import type { SelectionMode } from './selection.js';
 import {
@@ -30,10 +31,9 @@ import {
   DEFAULT_ROW_HEADER_WIDTH,
   DEFAULT_ROW_HEIGHT,
   DEFAULT_SETTINGS,
-  MetaManager,
 } from './settings.js';
 import type { CellData, Coords, GridSettings } from './settings.js';
-import { getPluginConstructor, registeredPlugins } from './plugins/base.js';
+import { registeredPlugins } from './plugins/base.js';
 import type { BasePlugin } from './plugins/base.js';
 // Importing the plugins for their side effect: each module registers itself,
 // and a grid built without them would silently have no features.
@@ -2893,7 +2893,6 @@ if ('data' in settings) {
       this.#plugins.set(constructor.pluginName, plugin);
       plugin.enablePlugin();
     }
-    void getPluginConstructor;
   }
 
   #mount(): void {

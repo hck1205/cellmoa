@@ -162,4 +162,4 @@ export class Autofill extends BasePlugin {
   }
 }
 
-registerPlugin(Autofill as never);
+registerPlugin(Autofill);

@@ -241,4 +241,4 @@ export class Pagination extends BasePlugin {
   }
 }
 
-registerPlugin(Pagination as never);
+registerPlugin(Pagination);
