@@ -190,6 +190,23 @@ fn co_moment(xs: &[f64], ys: &[f64]) -> (f64, f64, f64) {
     (sxy, sxx, syy)
 }
 
+/// The least-squares line through paired samples, as slope and intercept.
+///
+/// SLOPE, INTERCEPT and FORECAST are three readings of one fit, and Excel takes
+/// the dependent variable first in all three. Fitting in one place is what stops
+/// them disagreeing — a user who works out `SLOPE * x + INTERCEPT` by hand
+/// should land on exactly what FORECAST says — and it leaves only one guard to
+/// keep for the x that has no spread and so has no line to fit.
+fn least_squares(ctx: &EvalCtx, ys: &Operand, xs: &Operand) -> Result<(f64, f64), CellError> {
+    let (ys, xs) = paired(ctx, ys, xs)?;
+    let (sxy, sxx, _) = co_moment(&xs, &ys);
+    if sxx == 0.0 {
+        return Err(CellError::Div0);
+    }
+    let slope = sxy / sxx;
+    Ok((slope, mean(&ys) - slope * mean(&xs)))
+}
+
 /// The percentile of a sorted list, interpolating between neighbours.
 fn percentile_inclusive(sorted: &[f64], k: f64) -> Result<f64, CellError> {
     if sorted.is_empty() || !(0.0..=1.0).contains(&k) {
@@ -573,28 +590,13 @@ pub const FUNCTIONS: &[Function] = &[
     array_fn("COVARIANCE.P", 2, Some(2), |ctx, a| covariance(ctx, a, 0)),
     array_fn("COVAR", 2, Some(2), |ctx, a| covariance(ctx, a, 0)),
     array_fn("COVARIANCE.S", 2, Some(2), |ctx, a| covariance(ctx, a, 1)),
-    array_fn("SLOPE", 2, Some(2), |ctx, a| {
-        // Excel takes the dependent variable first.
-        let (ys, xs) = match paired(ctx, &a[0], &a[1]) {
-            Ok(v) => v,
-            Err(e) => return Operand::error(e),
-        };
-        let (sxy, sxx, _) = co_moment(&xs, &ys);
-        if sxx == 0.0 {
-            return Operand::error(CellError::Div0);
-        }
-        number(sxy / sxx)
+    array_fn("SLOPE", 2, Some(2), |ctx, a| match least_squares(ctx, &a[0], &a[1]) {
+        Ok((slope, _)) => number(slope),
+        Err(e) => Operand::error(e),
     }),
-    array_fn("INTERCEPT", 2, Some(2), |ctx, a| {
-        let (ys, xs) = match paired(ctx, &a[0], &a[1]) {
-            Ok(v) => v,
-            Err(e) => return Operand::error(e),
-        };
-        let (sxy, sxx, _) = co_moment(&xs, &ys);
-        if sxx == 0.0 {
-            return Operand::error(CellError::Div0);
-        }
-        number(mean(&ys) - sxy / sxx * mean(&xs))
+    array_fn("INTERCEPT", 2, Some(2), |ctx, a| match least_squares(ctx, &a[0], &a[1]) {
+        Ok((_, intercept)) => number(intercept),
+        Err(e) => Operand::error(e),
     }),
     array_fn("FORECAST", 3, Some(3), |ctx, a| forecast(ctx, a)),
     array_fn("FORECAST.LINEAR", 3, Some(3), |ctx, a| forecast(ctx, a)),
@@ -774,14 +776,8 @@ fn covariance(ctx: &EvalCtx, a: &[Operand], ddof: usize) -> Operand {
 
 fn forecast(ctx: &EvalCtx, a: &[Operand]) -> Operand {
     args!(x = arg_num(ctx, a, 0));
-    let (ys, xs) = match paired(ctx, &a[1], &a[2]) {
-        Ok(v) => v,
-        Err(e) => return Operand::error(e),
-    };
-    let (sxy, sxx, _) = co_moment(&xs, &ys);
-    if sxx == 0.0 {
-        return Operand::error(CellError::Div0);
+    match least_squares(ctx, &a[1], &a[2]) {
+        Ok((slope, intercept)) => number(intercept + slope * x),
+        Err(e) => Operand::error(e),
     }
-    let slope = sxy / sxx;
-    number(mean(&ys) + slope * (x - mean(&xs)))
 }

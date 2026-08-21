@@ -148,7 +148,9 @@ impl Diff {
                 Change::SheetAdded { .. }
                 | Change::SheetRemoved { .. }
                 | Change::SheetRenamed { .. } => summary.sheets += 1,
-                _ => summary.names += 1,
+                Change::NameAdded { .. }
+                | Change::NameRemoved { .. }
+                | Change::NameChanged { .. } => summary.names += 1,
             }
         }
         summary
@@ -268,6 +270,20 @@ fn fingerprint_sheet_content(sheet: &Sheet) -> String {
     format!("{}/{}", digests.inputs, digests.values)
 }
 
+/// A value's type, which the digest needs on top of the text because two
+/// values of different types can display identically: the number `1` and the
+/// text `1` read the same on screen, and so do a `#N/A` and the seven
+/// characters someone typed to imitate it.
+fn value_tag(value: &Value) -> u8 {
+    match value {
+        Value::Blank => 0,
+        Value::Number(_) => 1,
+        Value::Text(_) => 2,
+        Value::Bool(_) => 3,
+        Value::Error(_) => 4,
+    }
+}
+
 /// The rows of a sheet that hold anything, and a digest of each.
 fn row_digests(sheet: &Sheet) -> (Vec<u32>, Vec<String>) {
     let mut rows: BTreeMap<u32, Sha256> = BTreeMap::new();
@@ -284,6 +300,7 @@ fn row_digests(sheet: &Sheet) -> (Vec<u32>, Vec<String>) {
             }
         }
         let value = cell.value.to_string();
+        hasher.update(&[value_tag(&cell.value)]);
         hasher.update(&(value.len() as u64).to_be_bytes());
         hasher.update(value.as_bytes());
     }
@@ -518,6 +535,20 @@ mod tests {
     }
 
     #[test]
+    fn a_number_retyped_as_text_is_still_a_change() {
+        // Both cells show `1`, but one of them is text, and the difference is
+        // the one between a total and a #VALUE!. A digest that cannot tell
+        // them apart would align the rows and report nothing at all.
+        let before = workbook(&[("Sheet1", &[(0, 0, "1")])]);
+        let mut after = workbook(&[("Sheet1", &[])]);
+        after.sheet_mut(0).unwrap().set(0, 0, Cell::literal(Value::text("1")));
+
+        let changes = diff(&before, &after).changes;
+        assert_eq!(changes.len(), 1, "got {changes:#?}");
+        assert!(matches!(changes[0], Change::CellChanged { .. }), "got {changes:#?}");
+    }
+
+    #[test]
     fn adding_and_removing_sheets() {
         let before = workbook(&[("A", &[(0, 0, "1")])]);
         let after = workbook(&[("A", &[(0, 0, "1")]), ("B", &[(0, 0, "2")])]);
@@ -563,9 +594,25 @@ mod tests {
     fn the_summary_counts_by_kind() {
         let before = workbook(&[("Sheet1", &[(0, 0, "1")])]);
         let after = workbook(&[("Sheet1", &[(0, 0, "2")]), ("New", &[])]);
-        let summary = diff(&before, &after).summary();
+        let differences = diff(&before, &after);
+        assert_eq!(differences.len(), 2);
+        let summary = differences.summary();
         assert_eq!(summary.cells, 1);
         assert_eq!(summary.sheets, 1);
+        assert_eq!(summary.to_string(), "1 sheet(s), 0 row(s), 1 cell(s), 0 name(s)");
+    }
+
+    #[test]
+    fn changes_are_rendered_with_the_row_numbers_a_person_sees() {
+        // Rows are held zero-based and shown one-based, which is the only
+        // thing standing between a report and the row above the one it means.
+        let before = workbook(&[("Sheet1", &[(0, 0, "a"), (0, 1, "b"), (0, 2, "c")])]);
+        let after = workbook(&[("Sheet1", &[(0, 0, "a"), (0, 1, "c")])]);
+        assert_eq!(diff(&before, &after).to_string(), "- Sheet1 row 2\n");
+
+        let before = workbook(&[("Sheet1", &[(0, 1, "1")])]);
+        let after = workbook(&[("Sheet1", &[(0, 1, "2")])]);
+        assert_eq!(diff(&before, &after).to_string(), "~ Sheet1!A2: 1 => 2\n");
     }
 
     #[test]

@@ -224,10 +224,13 @@ impl<'a> Lexer<'a> {
             // longer literals first makes the intent explicit.
             CellError::NA,
         ];
-        let rest = &self.src[start..];
+        // Every literal is ASCII, so the comparison is done on bytes. Slicing
+        // the `str` instead would abort the process on input like `#NUM…`,
+        // where the length of the literal falls inside a multi-byte character.
+        let rest = &self.src.as_bytes()[start..];
         for err in LITERALS {
             let lit = err.as_str();
-            if rest.len() >= lit.len() && rest[..lit.len()].eq_ignore_ascii_case(lit) {
+            if rest.get(..lit.len()).is_some_and(|head| head.eq_ignore_ascii_case(lit.as_bytes())) {
                 self.advance_bytes(lit.len());
                 return Ok(TokKind::Error(err));
             }
@@ -271,9 +274,14 @@ impl<'a> Lexer<'a> {
         if self.peek().is_some_and(is_ref_char) {
             return Err(ParseError::new(format!("malformed number near `{text}`"), start));
         }
-        text.parse::<f64>()
-            .map(TokKind::Number)
-            .map_err(|_| ParseError::new(format!("malformed number `{text}`"), start))
+        match text.parse::<f64>() {
+            Ok(n) if n.is_finite() => Ok(TokKind::Number(n)),
+            // `1e999` parses happily into infinity, and infinity is written back
+            // out as `#NUM!`, so accepting it would quietly turn a number into an
+            // error the first time the workbook was exported.
+            Ok(_) => Err(ParseError::new(format!("number `{text}` is out of range"), start)),
+            Err(_) => Err(ParseError::new(format!("malformed number `{text}`"), start)),
+        }
     }
 
     /// Reads a `'Quoted Sheet'!A1` reference, including the 3-D form.
@@ -392,6 +400,85 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, ParseError> {
     Lexer::new(src).tokenize()
 }
 
+/// Inputs that have no business lexing or parsing, kept in one place so the
+/// lexer and the parser can both be pointed at them.
+#[cfg(test)]
+pub(crate) const MALFORMED: &[&str] = &[
+    "",
+    " ",
+    "=",
+    "$",
+    "$$",
+    "$A$",
+    "A$",
+    "'",
+    "'a",
+    "'a'",
+    "'a'!",
+    "'a''b'!",
+    "!",
+    "!A1",
+    "Sheet1!",
+    "Sheet1!!",
+    "A1!!B1",
+    ":",
+    ":A1",
+    "A1:",
+    "(",
+    ")",
+    "((",
+    "()",
+    "{",
+    "}",
+    "{}",
+    "{1",
+    "{1;",
+    "{,}",
+    "{1,2;3}",
+    "\"",
+    "\"a",
+    "#",
+    "#WAT!",
+    "#DIV/0",
+    "#N/A!",
+    "#N/\u{e9}",
+    "#NUM\u{e9}",
+    "#\u{e9}",
+    "1e",
+    "1e+",
+    "1e999",
+    "1E5A",
+    "1.2.3",
+    ".",
+    "..",
+    "-",
+    "--",
+    "+-+-1",
+    "%",
+    "^",
+    "&",
+    "<",
+    ">",
+    "<>",
+    ",",
+    ";",
+    "@",
+    "[",
+    "]",
+    "\\",
+    "~",
+    "\u{20ac}",
+    "\u{feff}1",
+    "\u{0}",
+    "SUM(",
+    "SUM(A1",
+    "SUM(A1))",
+    "1 A1",
+    "1+",
+    "1+*2",
+    "A1 B1)",
+];
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -492,5 +579,34 @@ mod tests {
     #[test]
     fn function_names_may_contain_dots_and_underscores() {
         assert_eq!(kinds("_xlfn.STDEV.P")[0], ident(None, "_xlfn.STDEV.P"));
+    }
+
+    #[test]
+    fn a_hash_followed_by_non_ascii_is_rejected_not_sliced() {
+        // Matching `#NUM!` against `#NUM\u{e9}` used to cut the source at byte 5,
+        // which lands inside the `\u{e9}` and aborts the process.
+        for src in ["#N/\u{e9}", "#NUM\u{e9}", "#DIV/\u{e9}", "#\u{e9}\u{e9}\u{e9}", "#\u{1f600}"] {
+            assert!(tokenize(src).is_err(), "`{src}` should be a lexing error");
+        }
+    }
+
+    #[test]
+    fn a_number_too_large_for_f64_is_rejected() {
+        // `1e999` parses to infinity, and infinity prints back as `#NUM!`, so
+        // accepting it turns a number into an error on the next round trip.
+        assert!(tokenize("1e999").is_err());
+        assert!(tokenize("1e400").is_err());
+        assert_eq!(kinds("1e308")[0], TokKind::Number(1e308));
+        // Underflow is not the same problem: it is the ordinary loss of
+        // precision every float literal is subject to.
+        assert_eq!(kinds("1e-999")[0], TokKind::Number(0.0));
+    }
+
+    #[test]
+    fn no_malformed_input_makes_the_lexer_panic() {
+        for src in super::MALFORMED {
+            // The contract is a `Result`, never a panic; either arm is fine.
+            let _ = tokenize(src);
+        }
     }
 }

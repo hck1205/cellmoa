@@ -1402,3 +1402,170 @@ fn shape_statistics_need_enough_values() {
     // the same refusal by the other route.
     assert_eq!(calc("=SKEW.P({5})"), Value::Error(CellError::Div0));
 }
+
+// ---------------------------------------------------------------------------
+// The least-squares family
+// ---------------------------------------------------------------------------
+
+/// SLOPE, INTERCEPT, FORECAST, RSQ, PEARSON, COVARIANCE and STEYX.
+///
+/// Only the first three had ever been exercised, and only on a line that fits
+/// its points exactly — which is the one case where a wrong denominator still
+/// looks right. These points do not lie on a line, so every constant below
+/// depends on the arithmetic actually being Excel's.
+#[test]
+fn the_regression_family_matches_excel() {
+    // x = 1..5, y = 2, 3, 5, 4, 6.
+    let (y, x) = ("{2,3,5,4,6}", "{1,2,3,4,5}");
+    about(&format!("=SLOPE({y},{x})"), 0.9);
+    about(&format!("=INTERCEPT({y},{x})"), 1.3);
+    about(&format!("=FORECAST(6,{y},{x})"), 6.7);
+    about(&format!("=PEARSON({x},{y})"), 0.9);
+    about(&format!("=RSQ({x},{y})"), 0.81);
+    about(&format!("=COVARIANCE.P({x},{y})"), 1.8);
+    about(&format!("=COVARIANCE.S({x},{y})"), 2.25);
+    about(&format!("=STEYX({y},{x})"), (1.9f64 / 3.0).sqrt());
+}
+
+/// The three readings of the fitted line agree with each other.
+///
+/// SLOPE, INTERCEPT and FORECAST answer one regression, so a user who works the
+/// prediction out by hand has to land where FORECAST does.
+#[test]
+fn forecasting_agrees_with_the_slope_and_intercept_it_reports() {
+    let (y, x) = ("{2,3,5,4,6}", "{1,2,3,4,5}");
+    let by_hand = calc_num(&format!("=SLOPE({y},{x})*12+INTERCEPT({y},{x})"));
+    assert_eq!(calc_num(&format!("=FORECAST(12,{y},{x})")), by_hand);
+}
+
+/// An x with no spread has no line, and mismatched samples have no pairs.
+#[test]
+fn regression_refuses_what_it_cannot_fit() {
+    // Every x is the same, so the slope would divide by zero.
+    assert_eq!(calc("=SLOPE({1,2,3},{5,5,5})"), Value::Error(CellError::Div0));
+    assert_eq!(calc("=INTERCEPT({1,2,3},{5,5,5})"), Value::Error(CellError::Div0));
+    assert_eq!(calc("=FORECAST(1,{1,2,3},{5,5,5})"), Value::Error(CellError::Div0));
+    assert_eq!(calc("=RSQ({5,5,5},{1,2,3})"), Value::Error(CellError::Div0));
+    // STEYX divides by n-2, so two points are not enough.
+    assert_eq!(calc("=STEYX({1,2},{1,3})"), Value::Error(CellError::Div0));
+    // A sample covariance needs a second pair to have a spread at all.
+    assert_eq!(calc("=COVARIANCE.S({1},{2})"), Value::Error(CellError::Div0));
+    // Excel pairs the two samples off element by element, so unequal counts
+    // are not a smaller regression but no regression.
+    assert_eq!(calc("=SLOPE({1,2,3},{1,2})"), Value::Error(CellError::NA));
+    assert_eq!(calc("=INTERCEPT({1,2,3},{1,2})"), Value::Error(CellError::NA));
+    assert_eq!(calc("=FORECAST(1,{1,2,3},{1,2})"), Value::Error(CellError::NA));
+}
+
+// ---------------------------------------------------------------------------
+// More distributions
+// ---------------------------------------------------------------------------
+
+/// WEIBULL.DIST and GAMMA.DIST, in both the density and the cumulative form.
+///
+/// Only the cumulative half of each was covered — WEIBULL through a case whose
+/// parameters were all one, and GAMMA only through a round trip against its own
+/// inverse, which agrees with itself whatever the normalising constant is. The
+/// densities below are the closed forms Excel reports.
+#[test]
+fn the_weibull_and_gamma_densities() {
+    // Shape 3, scale 4, at x = 2: the scaled value is (2/4)^3 = 1/8.
+    about("=WEIBULL.DIST(2,3,4,TRUE)", 1.0 - (-0.125f64).exp());
+    about("=WEIBULL.DIST(2,3,4,FALSE)", 0.1875 * (-0.125f64).exp());
+    // Shape 3, scale 4, at x = 2: x^2 e^(-x/4) / (4^3 * 2!).
+    about("=GAMMA.DIST(2,3,4,FALSE)", 4.0 * (-0.5f64).exp() / 128.0);
+    about("=GAMMA.DIST(2,3,4,TRUE)", 1.0 - 1.625 * (-0.5f64).exp());
+    // The legacy spellings are the same functions.
+    about("=WEIBULL(2,3,4,TRUE)", 1.0 - (-0.125f64).exp());
+    about("=GAMMADIST(2,3,4,TRUE)", 1.0 - 1.625 * (-0.5f64).exp());
+}
+
+/// Shape and scale have to be positive, and neither distribution reaches below
+/// zero.
+#[test]
+fn the_weibull_and_gamma_reject_impossible_parameters() {
+    assert_eq!(calc("=WEIBULL.DIST(-1,3,4,TRUE)"), Value::Error(CellError::Num));
+    assert_eq!(calc("=WEIBULL.DIST(2,0,4,TRUE)"), Value::Error(CellError::Num));
+    assert_eq!(calc("=WEIBULL.DIST(2,3,0,TRUE)"), Value::Error(CellError::Num));
+    assert_eq!(calc("=GAMMA.DIST(-1,3,4,TRUE)"), Value::Error(CellError::Num));
+    assert_eq!(calc("=GAMMA.DIST(2,0,4,TRUE)"), Value::Error(CellError::Num));
+    assert_eq!(calc("=GAMMA.DIST(2,3,0,TRUE)"), Value::Error(CellError::Num));
+    // A non-numeric argument is a #VALUE!, not a domain complaint.
+    assert_eq!(calc("=GAMMA.DIST(\"x\",3,4,TRUE)"), Value::Error(CellError::Value));
+}
+
+/// A Poisson mean of zero is a legal argument, not a domain error.
+///
+/// Excel refuses only a negative mean, so a mean of zero has to answer with the
+/// distribution that puts all its mass on zero. The logarithmic form of the
+/// density asks for ln(0) to say that, and used to return `#NUM!` instead.
+#[test]
+fn a_poisson_mean_of_zero_puts_every_outcome_at_zero() {
+    assert_eq!(calc_num("=POISSON.DIST(0,0,FALSE)"), 1.0);
+    assert_eq!(calc_num("=POISSON.DIST(1,0,FALSE)"), 0.0);
+    assert_eq!(calc_num("=POISSON.DIST(0,0,TRUE)"), 1.0);
+    // A negative mean, or a negative count, still is one.
+    assert_eq!(calc("=POISSON.DIST(1,-1,FALSE)"), Value::Error(CellError::Num));
+    assert_eq!(calc("=POISSON.DIST(-1,3,FALSE)"), Value::Error(CellError::Num));
+}
+
+/// The F quantile refuses degrees of freedom below one, as F.DIST does.
+///
+/// Without the check the incomplete beta returns a NaN, the bisection reads
+/// that as a bracket it has already closed, and the answer comes back as a
+/// number near zero — which is far worse than an error, because it looks like
+/// one.
+#[test]
+fn the_f_quantile_checks_its_degrees_of_freedom() {
+    assert_eq!(calc("=F.INV(0.5,0,7)"), Value::Error(CellError::Num));
+    assert_eq!(calc("=F.INV(0.5,3,0)"), Value::Error(CellError::Num));
+    assert_eq!(calc("=F.INV.RT(0.5,-3,-7)"), Value::Error(CellError::Num));
+    assert_eq!(calc("=FINV(0.05,0,7)"), Value::Error(CellError::Num));
+    // A probability outside [0, 1] is a #NUM! too.
+    assert_eq!(calc("=F.INV(-0.5,3,7)"), Value::Error(CellError::Num));
+    assert_eq!(calc("=F.INV.RT(1.5,3,7)"), Value::Error(CellError::Num));
+    // The two tails name the same point from opposite ends.
+    about("=F.INV.RT(0.2,3,7)", calc_num("=F.INV(0.8,3,7)"));
+}
+
+// ---------------------------------------------------------------------------
+// Finding text
+// ---------------------------------------------------------------------------
+
+/// FIND and SEARCH, including the start position neither had ever been given.
+///
+/// The two share a body that differs only in case folding, so the case rules
+/// and the start position are the whole of what distinguishes them.
+#[test]
+fn finding_text_from_a_starting_position() {
+    // "hello world" has an o at 5 and another at 8.
+    assert_eq!(calc_num("=FIND(\"o\",\"hello world\")"), 5.0);
+    assert_eq!(calc_num("=FIND(\"o\",\"hello world\",6)"), 8.0);
+    assert_eq!(calc_num("=SEARCH(\"O\",\"hello world\")"), 5.0);
+    assert_eq!(calc_num("=SEARCH(\"O\",\"hello world\",6)"), 8.0);
+    // FIND is the case-sensitive one.
+    assert_eq!(calc("=FIND(\"O\",\"hello world\")"), Value::Error(CellError::Value));
+    // Positions are counted in characters, so a start position past a
+    // multi-byte character still lands where the user sees it.
+    assert_eq!(calc_num("=FIND(\"어\",\"한국어\",2)"), 3.0);
+    assert_eq!(calc_num("=SEARCH(\"어\",\"한국어\",3)"), 3.0);
+    // An empty needle matches at the start position, wherever that is.
+    assert_eq!(calc_num("=FIND(\"\",\"abc\")"), 1.0);
+    assert_eq!(calc_num("=FIND(\"\",\"abc\",2)"), 2.0);
+}
+
+/// Excel answers `#VALUE!` for both a missing needle and an impossible start.
+#[test]
+fn finding_text_that_is_not_there() {
+    assert_eq!(calc("=FIND(\"x\",\"abc\")"), Value::Error(CellError::Value));
+    assert_eq!(calc("=SEARCH(\"x\",\"abc\")"), Value::Error(CellError::Value));
+    // A start of zero is out of range; one past the end is not, but nothing
+    // remains to search.
+    assert_eq!(calc("=FIND(\"a\",\"abc\",0)"), Value::Error(CellError::Value));
+    assert_eq!(calc("=FIND(\"c\",\"abc\",4)"), Value::Error(CellError::Value));
+    assert_eq!(calc("=FIND(\"a\",\"abc\",5)"), Value::Error(CellError::Value));
+    assert_eq!(calc("=SEARCH(\"a\",\"abc\",5)"), Value::Error(CellError::Value));
+    // An error in an argument is that error, not a blanket #VALUE!.
+    assert_eq!(calc("=FIND(\"a\",1/0)"), Value::Error(CellError::Div0));
+    assert_eq!(calc("=SEARCH(\"a\",\"abc\",1/0)"), Value::Error(CellError::Div0));
+}
