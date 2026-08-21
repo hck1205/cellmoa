@@ -120,6 +120,25 @@ fn variance(values: &[f64], ddof: usize) -> Result<f64, CellError> {
 
 /// The values of an argument list as `AVERAGEA` and friends see them: text
 /// counts as zero and booleans as 0 or 1, rather than being skipped.
+/// The sum of `((v - mean) / stddev)^power` over the values.
+///
+/// SKEW, SKEW.P and KURT differ only in the power, in whether the standard
+/// deviation is of the sample or the population, and in what they do with the
+/// total afterwards. Everything before that — the mean, the deviation, and the
+/// refusal to divide by a deviation of zero — was written three times, and the
+/// zero check is exactly the sort of thing a fourth one would be written
+/// without.
+fn standardised_moments(values: &[f64], ddof: usize, power: i32) -> Result<f64, CellError> {
+    let m = mean(values);
+    let s = variance(values, ddof).map(f64::sqrt)?;
+    if s == 0.0 {
+        // Every value is the mean, so no value has a distance from it to speak
+        // of — a shape statistic has nothing to describe.
+        return Err(CellError::Div0);
+    }
+    Ok(values.iter().map(|v| ((v - m) / s).powi(power)).sum())
+}
+
 fn collect_numbers_counting_text(ctx: &EvalCtx, args: &[Operand]) -> Result<Vec<f64>, CellError> {
     let mut out = Vec::new();
     let mut error = None;
@@ -424,51 +443,34 @@ pub const FUNCTIONS: &[Function] = &[
     }),
     f("SKEW", 1, None, |ctx, a| match collect_numbers(ctx, a) {
         Ok(values) if values.len() < 3 => Operand::error(CellError::Div0),
-        Ok(values) => {
-            let n = values.len() as f64;
-            let m = mean(&values);
-            let Ok(s) = variance(&values, 1).map(f64::sqrt) else {
-                return Operand::error(CellError::Div0);
-            };
-            if s == 0.0 {
-                return Operand::error(CellError::Div0);
+        Ok(values) => match standardised_moments(&values, 1, 3) {
+            Ok(total) => {
+                let n = values.len() as f64;
+                number(n / ((n - 1.0) * (n - 2.0)) * total)
             }
-            let total: f64 = values.iter().map(|v| ((v - m) / s).powi(3)).sum();
-            number(n / ((n - 1.0) * (n - 2.0)) * total)
-        }
+            Err(e) => Operand::error(e),
+        },
         Err(e) => Operand::error(e),
     }),
     f("SKEW.P", 1, None, |ctx, a| match collect_numbers(ctx, a) {
         Ok(values) if values.is_empty() => Operand::error(CellError::Div0),
-        Ok(values) => {
-            let m = mean(&values);
-            let Ok(s) = variance(&values, 0).map(f64::sqrt) else {
-                return Operand::error(CellError::Div0);
-            };
-            if s == 0.0 {
-                return Operand::error(CellError::Div0);
-            }
-            let n = values.len() as f64;
-            number(values.iter().map(|v| ((v - m) / s).powi(3)).sum::<f64>() / n)
-        }
+        Ok(values) => match standardised_moments(&values, 0, 3) {
+            Ok(total) => number(total / values.len() as f64),
+            Err(e) => Operand::error(e),
+        },
         Err(e) => Operand::error(e),
     }),
     f("KURT", 1, None, |ctx, a| match collect_numbers(ctx, a) {
         Ok(values) if values.len() < 4 => Operand::error(CellError::Div0),
-        Ok(values) => {
-            let n = values.len() as f64;
-            let m = mean(&values);
-            let Ok(s) = variance(&values, 1).map(f64::sqrt) else {
-                return Operand::error(CellError::Div0);
-            };
-            if s == 0.0 {
-                return Operand::error(CellError::Div0);
+        Ok(values) => match standardised_moments(&values, 1, 4) {
+            Ok(total) => {
+                let n = values.len() as f64;
+                let scale = n * (n + 1.0) / ((n - 1.0) * (n - 2.0) * (n - 3.0));
+                let correction = 3.0 * (n - 1.0).powi(2) / ((n - 2.0) * (n - 3.0));
+                number(scale * total - correction)
             }
-            let total: f64 = values.iter().map(|v| ((v - m) / s).powi(4)).sum();
-            let scale = n * (n + 1.0) / ((n - 1.0) * (n - 2.0) * (n - 3.0));
-            let correction = 3.0 * (n - 1.0).powi(2) / ((n - 2.0) * (n - 3.0));
-            number(scale * total - correction)
-        }
+            Err(e) => Operand::error(e),
+        },
         Err(e) => Operand::error(e),
     }),
     // --- other means --------------------------------------------------------

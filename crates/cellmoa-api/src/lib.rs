@@ -14,7 +14,7 @@ use cellmoa_core::model::{CellAddr, CellContent, SheetId, Workbook};
 use cellmoa_core::reference::{col_to_letters, parse_sheet_qualified, CellRef, RangeRef};
 use cellmoa_core::value::Value;
 use cellmoa_engine::structure::{Alter, AlterError};
-use cellmoa_engine::verify::verify;
+use cellmoa_engine::verify::{verify, Spec};
 use cellmoa_engine::{catalogue, Engine};
 use cellmoa_xlsx::Package;
 use protocol::{CellView, Request, Response, Who, Write};
@@ -117,12 +117,7 @@ impl Session {
     /// Handles a parsed request.
     pub fn dispatch(&mut self, request: Request) -> Response {
         match request {
-            Request::New { sheet } => {
-                self.engine = blank(&sheet.unwrap_or_else(|| "Sheet1".to_string()));
-                self.source = None;
-                self.path = None;
-                self.ok(json!({}))
-            }
+            Request::New { sheet } => self.new_workbook(sheet),
             Request::Open { path } => self.open(&path),
             Request::Save { path } => self.save(path),
             Request::Sheets => self.sheets(),
@@ -140,46 +135,67 @@ impl Session {
             Request::Translate { formula, rows, cols } => self.translate(&formula, rows, cols),
             Request::Actors { sheet, range } => self.actors(sheet.as_deref(), range.as_deref()),
             Request::History { cell, sheet } => self.history(&cell, sheet.as_deref()),
-            Request::Fingerprint => {
-                let digests = fingerprint(self.engine.workbook());
-                self.ok(json!({
-                    "fingerprint": {
-                        "workbook": digests.workbook,
-                        "inputs": digests.inputs,
-                        "values": digests.values,
-                        "sheets": digests.sheets.iter().map(|s| json!({
-                            "name": s.name, "inputs": s.inputs, "values": s.values
-                        })).collect::<Vec<_>>(),
-                    }
-                }))
-            }
-            Request::Verify { spec } => {
-                let report = verify(&self.engine, &spec);
-                let passed = report.passed();
-                self.ok(json!({ "passed": passed, "report": report }))
-            }
-            Request::Snapshot { name } => {
-                self.snapshots.insert(name.clone(), self.engine.doc.workbook.clone());
-                self.ok(json!({ "snapshot": name, "revision": self.engine.doc.revision() }))
-            }
-            Request::Snapshots => self.ok(json!({
-                "snapshots": self.snapshots.keys().collect::<Vec<_>>(),
-            })),
+            Request::Fingerprint => self.fingerprint(),
+            Request::Verify { spec } => self.verify(&spec),
+            Request::Snapshot { name } => self.snapshot(name),
+            Request::Snapshots => self.snapshots(),
             Request::Diff { against } => self.diff(&against),
             Request::UndoState => self.undo_state(),
-            Request::Journal => {
-                let journal = Journal::of(&self.engine.doc);
-                self.ok(json!({ "journal": journal }))
-            }
-            Request::Functions => {
-                let names: Vec<&str> = catalogue().iter().map(|f| f.name).collect();
-                self.ok(json!({ "count": names.len(), "functions": names }))
-            }
+            Request::Journal => self.journal(),
+            Request::Functions => self.functions(),
         }
     }
 
     fn ok(&self, data: serde_json::Value) -> Response {
         Response::ok(self.engine.revision(), data)
+    }
+
+    fn new_workbook(&mut self, sheet: Option<String>) -> Response {
+        self.engine = blank(&sheet.unwrap_or_else(|| "Sheet1".to_string()));
+        // The new workbook has no file behind it, so anything remembered about
+        // the old one would name a document this is not.
+        self.source = None;
+        self.path = None;
+        self.ok(json!({}))
+    }
+
+    fn fingerprint(&self) -> Response {
+        let digests = fingerprint(self.engine.workbook());
+        self.ok(json!({
+            "fingerprint": {
+                "workbook": digests.workbook,
+                "inputs": digests.inputs,
+                "values": digests.values,
+                "sheets": digests.sheets.iter().map(|s| json!({
+                    "name": s.name, "inputs": s.inputs, "values": s.values
+                })).collect::<Vec<_>>(),
+            }
+        }))
+    }
+
+    fn verify(&self, spec: &Spec) -> Response {
+        let report = verify(&self.engine, spec);
+        let passed = report.passed();
+        self.ok(json!({ "passed": passed, "report": report }))
+    }
+
+    fn snapshot(&mut self, name: String) -> Response {
+        self.snapshots.insert(name.clone(), self.engine.doc.workbook.clone());
+        self.ok(json!({ "snapshot": name, "revision": self.engine.doc.revision() }))
+    }
+
+    fn snapshots(&self) -> Response {
+        self.ok(json!({ "snapshots": self.snapshots.keys().collect::<Vec<_>>() }))
+    }
+
+    fn journal(&self) -> Response {
+        let journal = Journal::of(&self.engine.doc);
+        self.ok(json!({ "journal": journal }))
+    }
+
+    fn functions(&self) -> Response {
+        let names: Vec<&str> = catalogue().iter().map(|f| f.name).collect();
+        self.ok(json!({ "count": names.len(), "functions": names }))
     }
 
     fn open(&mut self, path: &str) -> Response {

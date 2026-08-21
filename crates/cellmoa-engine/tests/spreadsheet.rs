@@ -1361,3 +1361,44 @@ fn a_criteria_header_naming_no_field_is_an_error() {
     type_in(&mut engine, "H1", "=DSUM(A1:C6,\"Salary\",E1:E2)");
     assert_eq!(value(&engine, "H1"), Value::Error(CellError::Value));
 }
+
+// ---------------------------------------------------------------------------
+// Shape statistics
+// ---------------------------------------------------------------------------
+
+/// SKEW, SKEW.P and KURT, against Excel's answers.
+///
+/// The three shared their mean-and-deviation preamble until it was factored
+/// out, and nothing here covered them at the time — so the factoring was
+/// unverified. These are the values Excel gives for the same arguments.
+#[test]
+fn shape_statistics_match_excel() {
+    // 3, 4, 5, 2, 3, 4, 5, 6, 4, 7
+    let data = "{3,4,5,2,3,4,5,6,4,7}";
+    assert!((calc_num(&format!("=SKEW({data})")) - 0.359543071).abs() < 1e-6);
+    assert!((calc_num(&format!("=SKEW.P({data})")) - 0.303193339).abs() < 1e-6);
+    assert!((calc_num(&format!("=KURT({data})")) - -0.151799637).abs() < 1e-6);
+}
+
+/// A list with no spread has no shape to describe.
+///
+/// Every value equals the mean, so the standard deviation is zero and the
+/// standardised moments would divide by it. Excel answers `#DIV/0!`, and the
+/// guard that produces that is the one most easily dropped in a rewrite.
+#[test]
+fn shape_statistics_refuse_a_list_with_no_spread() {
+    assert_eq!(calc("=SKEW({5,5,5,5})"), Value::Error(CellError::Div0));
+    assert_eq!(calc("=SKEW.P({5,5,5,5})"), Value::Error(CellError::Div0));
+    assert_eq!(calc("=KURT({5,5,5,5})"), Value::Error(CellError::Div0));
+}
+
+/// Too few values for the statistic to be defined.
+#[test]
+fn shape_statistics_need_enough_values() {
+    // SKEW divides by (n-1)(n-2), so it needs three; KURT needs four.
+    assert_eq!(calc("=SKEW({1,2})"), Value::Error(CellError::Div0));
+    assert_eq!(calc("=KURT({1,2,3})"), Value::Error(CellError::Div0));
+    // SKEW.P needs only one value, but one value has no spread, so it lands on
+    // the same refusal by the other route.
+    assert_eq!(calc("=SKEW.P({5})"), Value::Error(CellError::Div0));
+}

@@ -423,41 +423,43 @@ if ('data' in settings) {
 
   // --- data ----------------------------------------------------------------
 
-  /** The engine behind the grid. */
+  // The workbook, and reading and writing it.
+
+/** The engine behind the grid. */
   get engine(): Engine {
     return this.#engine;
   }
 
-  /** The data source, for plugins that need more than the grid exposes. */
+/** The data source, for plugins that need more than the grid exposes. */
   get source(): DataSource {
     return this.#data;
   }
 
-  /** The workbook's revision. */
+/** The workbook's revision. */
   get revision(): number {
     return this.#data.revision;
   }
 
-  /** How many rows the user can see, hidden ones included. */
+/** How many rows the user can see, hidden ones included. */
   countRows(): number {
     return this.rowIndex.visibleLength;
   }
 
-  /** How many columns the user can see. */
+/** How many columns the user can see. */
   countCols(): number {
     return this.colIndex.visibleLength;
   }
 
-  /** How many rows the data has, trimmed ones included. */
+/** How many rows the data has, trimmed ones included. */
   countSourceRows(): number {
     return this.rowIndex.length;
   }
 
-  countSourceCols(): number {
+countSourceCols(): number {
     return this.colIndex.length;
   }
 
-  /**
+/**
    * The value a renderer should show, after the settings have had their say.
    *
    * `valueGetter` replaces the value; `valueFormatter` decides how it reads.
@@ -473,7 +475,7 @@ if ('data' in settings) {
     return shown === null || shown === undefined ? '' : String(shown);
   }
 
-  /** The displayed text of a cell. */
+/** The displayed text of a cell. */
   getDataAtCell(row: number, col: number): string {
     const physical = this.#physical(row, col);
     if (!physical) {
@@ -483,7 +485,7 @@ if ('data' in settings) {
     return this.#displayValue(row, col, this.#data.text(physical.row, physical.col));
   }
 
-  /** Everything about a cell, or `null` when it holds nothing. */
+/** Everything about a cell, or `null` when it holds nothing. */
   getCell(row: number, col: number): CellData | null {
     const physical = this.#physical(row, col);
     if (!physical) {
@@ -493,7 +495,7 @@ if ('data' in settings) {
     return this.#data.get(physical.row, physical.col);
   }
 
-  /** What an editor should start with: the formula if there is one. */
+/** What an editor should start with: the formula if there is one. */
   getSourceDataAtCell(row: number, col: number): string {
     const physical = this.#physical(row, col);
     if (!physical) {
@@ -503,7 +505,7 @@ if ('data' in settings) {
     return this.#data.editableValue(physical.row, physical.col);
   }
 
-  /** Every visible cell, row by row. */
+/** Every visible cell, row by row. */
   getData(): string[][] {
     const rows = this.countRows();
     const cols = this.countCols();
@@ -513,17 +515,89 @@ if ('data' in settings) {
     );
   }
 
-  /** One row of visible cells. */
+/** One row of visible cells. */
   getDataAtRow(row: number): string[] {
     return Array.from({ length: this.countCols() }, (_, col) => this.getDataAtCell(row, col));
   }
 
-  /** One column of visible cells. */
+/** One column of visible cells. */
   getDataAtCol(col: number): string[] {
     return Array.from({ length: this.countRows() }, (_, row) => this.getDataAtCell(row, col));
   }
 
-  /**
+/** Every row's source values — formulas, not their results. */
+  getSourceData(): string[][] {
+    return Array.from({ length: this.countRows() }, (_, row) => this.getSourceDataAtRow(row));
+  }
+
+getSourceDataArray(): string[][] {
+    return this.getSourceData();
+  }
+
+getSourceDataAtRow(row: number): string[] {
+    return Array.from({ length: this.countCols() }, (_, col) =>
+      this.getSourceDataAtCell(row, col),
+    );
+  }
+
+getSourceDataAtCol(col: number): string[] {
+    return Array.from({ length: this.countRows() }, (_, row) =>
+      this.getSourceDataAtCell(row, col),
+    );
+  }
+
+getDataAtProp(prop: string | number): string[] {
+    const col = this.propToCol(prop);
+    return col < 0 ? [] : this.getDataAtCol(col);
+  }
+
+getDataAtRowProp(row: number, prop: string | number): string {
+    const col = this.propToCol(prop);
+    return col < 0 ? '' : this.getDataAtCell(row, col);
+  }
+
+/** What the clipboard would take, which a `copyable: false` cell withholds. */
+  getCopyableData(row: number, col: number): string {
+    return this.getCellMeta(row, col)['copyable'] === false ? '' : this.getDataAtCell(row, col);
+  }
+
+getCopyableSourceData(row: number, col: number): string {
+    return this.getCellMeta(row, col)['copyable'] === false
+      ? ''
+      : this.getSourceDataAtCell(row, col);
+  }
+
+/**
+   * The one type a rectangle has, or `mixed`.
+   *
+   * `mixed` is the useful answer: a caller asking is deciding whether it can
+   * treat the block uniformly, and "they differ" is what it needs to hear.
+   */
+  getDataType(startRow: number, startCol: number, endRow: number, endCol: number): string {
+    let found: string | null = null;
+    for (let row = startRow; row <= endRow; row += 1) {
+      for (let col = startCol; col <= endCol; col += 1) {
+        const type = String(this.getCellMeta(row, col).type ?? 'text');
+        if (found === null) {
+          found = type;
+        } else if (found !== type) {
+          return 'mixed';
+        }
+      }
+    }
+    return found ?? 'text';
+  }
+
+/** The columns, as a shape — the nearest thing a workbook has to a schema. */
+  getSchema(): Record<string, null> {
+    const schema: Record<string, null> = {};
+    for (let col = 0; col < this.countCols(); col += 1) {
+      schema[String(this.colToProp(col))] = null;
+    }
+    return schema;
+  }
+
+/**
    * Writes one cell.
    *
    * The value is typed as a user would type it: a leading `=` makes a formula,
@@ -533,7 +607,7 @@ if ('data' in settings) {
     this.setDataAtCells([[row, col, value]], source);
   }
 
-  /**
+/**
    * Writes several cells as one change.
    *
    * One call rather than several is not only faster: the engine recalculates
@@ -593,7 +667,19 @@ if ('data' in settings) {
     this.render();
   }
 
-  /**
+/** Writes without going through the editor's parsing and validation. */
+  setSourceDataAtCell(row: number, col: number, value: string): void {
+    this.setDataAtCell(row, col, value, 'loadData');
+  }
+
+setDataAtRowProp(row: number, prop: string | number, value: string): void {
+    const col = this.propToCol(prop);
+    if (col >= 0) {
+      this.setDataAtCell(row, col, value);
+    }
+  }
+
+/**
    * Fills a rectangle from a two-dimensional array, as a paste does.
    *
    * The source repeats to cover the target when the target is a whole multiple
@@ -627,7 +713,7 @@ if ('data' in settings) {
     this.setDataAtCells(changes, source);
   }
 
-  /** Clears the selected cells. */
+/** Clears the selected cells. */
   emptySelectedCells(source: ChangeSource = 'edit'): void {
     const cells = this.#selection.cells();
     this.setDataAtCells(
@@ -636,7 +722,94 @@ if ('data' in settings) {
     );
   }
 
-  /**
+/** Sets the alignment class on a rectangle of cells. */
+  setAlignment(
+    range: { start: { row: number; col: number }; end: { row: number; col: number } },
+    className: string,
+  ): void {
+    // Horizontal and vertical are separate axes, so setting one must not clear
+    // the other: `htLeft htMiddle` is a perfectly ordinary pair.
+    const axis = className.startsWith('htTop') ||
+      className.startsWith('htMiddle') ||
+      className.startsWith('htBottom')
+      ? ['htTop', 'htMiddle', 'htBottom']
+      : ['htLeft', 'htCenter', 'htRight', 'htJustify'];
+
+    for (let row = Math.min(range.start.row, range.end.row); row <= Math.max(range.start.row, range.end.row); row += 1) {
+      for (let col = Math.min(range.start.col, range.end.col); col <= Math.max(range.start.col, range.end.col); col += 1) {
+        const existing = String(this.getCellMeta(row, col)['className'] ?? '')
+          .split(/\s+/)
+          .filter((name) => name !== '' && !axis.includes(name));
+        this.setCellMeta(row, col, 'className', [...existing, className].join(' '));
+      }
+    }
+    this.render();
+  }
+
+/** Replaces everything with the given rows. */
+  loadData(data: string[][]): void {
+    if (this.hooks.allows('beforeLoadData', data) === false) {
+      return;
+    }
+    this.replaceRows(data, 'loadData');
+    this.hooks.run('afterLoadData', undefined, data);
+  }
+
+/**
+   * Writes rows over everything, clearing whatever they do not reach.
+   *
+   * The clearing is the part worth having in one place: a load that only wrote
+   * the values it was given would leave the tail of a longer previous dataset
+   * on screen, which reads as rows that were not replaced rather than rows that
+   * are gone. `source` is what tells the hooks and the journal which kind of
+   * load this was — a person's `loadData`, or a page arriving from a server.
+   */
+  replaceRows(data: string[][], source: ChangeSource): void {
+    const changes: Array<[number, number, string]> = [];
+    const height = Math.max(data.length, this.countRows());
+    const width = Math.max(this.countCols(), ...data.map((row) => row.length), 0);
+    for (let row = 0; row < height; row += 1) {
+      for (let col = 0; col < width; col += 1) {
+        changes.push([row, col, data[row]?.[col] ?? '']);
+      }
+    }
+    this.setDataAtCells(changes, source);
+  }
+
+/** The same, but keeping the index maps — a sort survives it. */
+  updateData(data: string[][]): void {
+    const changes: Array<[number, number, string]> = [];
+    data.forEach((line, row) => {
+      line.forEach((value, col) => {
+        changes.push([row, col, value]);
+      });
+    });
+    this.setDataAtCells(changes, 'updateData');
+    this.hooks.run('afterUpdateData', undefined, data);
+  }
+
+/** Replaces part of a row, as `Array.prototype.splice` does. */
+  spliceRow(row: number, start: number, amount: number, ...values: string[]): void {
+    const line = this.getSourceDataAtRow(row);
+    const width = line.length;
+    line.splice(start, amount, ...values);
+    this.setDataAtCells(
+      pad(line, width).map((value, col) => [row, col, value] as [number, number, string]),
+      'spliceRow',
+    );
+  }
+
+spliceCol(col: number, start: number, amount: number, ...values: string[]): void {
+    const line = this.getSourceDataAtCol(col);
+    const height = line.length;
+    line.splice(start, amount, ...values);
+    this.setDataAtCells(
+      pad(line, height).map((value, row) => [row, col, value] as [number, number, string]),
+      'spliceCol',
+    );
+  }
+
+/**
    * Inserts or deletes rows or columns.
    *
    * The name and the action strings are Handsontable's, so ported code works
@@ -697,15 +870,13 @@ if ('data' in settings) {
     this.render();
   }
 
-  /** The selection as a menu command wants it: plain corners. */
-  getMenuSelection(): Array<{ start: { row: number; col: number }; end: { row: number; col: number } }> {
-    return this.selection.ranges.map((range) => ({
-      start: { row: range.topRow, col: range.startCol },
-      end: { row: range.bottomRow, col: range.endCol },
-    }));
+/** Whether columns may be added or removed at all. */
+  isColumnModificationAllowed(): boolean {
+    const settings = this.getSettings();
+    return settings.allowInsertColumn !== false || settings.allowRemoveColumn !== false;
   }
 
-  /**
+/**
    * Moves a formula's relative references by a distance.
    *
    * Copying a formula and moving it are different operations and only one of
@@ -722,56 +893,29 @@ if ('data' in settings) {
     return typeof response['formula'] === 'string' ? response['formula'] : formula;
   }
 
-  /**
-   * The manager for the areas around the grid.
-   *
-   * A caller registers an element and says which side it belongs on; where it
-   * lands is the manager's business, which is what lets the `layout` setting
-   * reorder things the caller never knew about.
-   */
-  getLayoutManager(): LayoutManager | null {
-    return this.#view?.layout ?? null;
+/** The selection as a menu command wants it: plain corners. */
+  getMenuSelection(): Array<{ start: { row: number; col: number }; end: { row: number; col: number } }> {
+    return this.selection.ranges.map((range) => ({
+      start: { row: range.topRow, col: range.startCol },
+      end: { row: range.bottomRow, col: range.endCol },
+    }));
   }
 
-  /**
-   * A phrase in the grid's language.
-   *
-   * `count` chooses between "Remove row" and "Remove rows": one command, one
-   * key, and the number decides — which is why a menu item's label is a
-   * function of the selection rather than a fixed string.
-   */
-  getTranslatedPhrase(key: string, count?: number): string {
-    return phrase(String(this.getSettings().language ?? DEFAULT_LANGUAGE), key, count);
-  }
+  // --- history -------------------------------------------------------------
 
-  /**
-   * The locale used for formatting.
-   *
-   * Separate from the language on purpose: someone reading an English
-   * interface may still want German number formatting.
-   */
-  getLocale(): string {
-    return String(
-      this.getSettings().locale ?? this.getSettings().language ?? DEFAULT_LANGUAGE,
-    );
-  }
+  // Undo, redo, and who made a change.
 
-  /** Whether the grid is laid out right-to-left. */
-  isRtl(): boolean {
-    return this.getSettings().layoutDirection === 'rtl';
-  }
-
-  /** Whether there is anything to undo. */
+/** Whether there is anything to undo. */
   canUndo(): boolean {
     return this.#undoState().canUndo === true;
   }
 
-  /** Whether there is anything to redo. */
+/** Whether there is anything to redo. */
   canRedo(): boolean {
     return this.#undoState().canRedo === true;
   }
 
-  /**
+/**
    * Whether one kind of actor has anything left to take back.
    *
    * `kind` is matched against the actor's kind — `agent`, `human`, `script`,
@@ -782,7 +926,7 @@ if ('data' in settings) {
     return this.#lastChangeBy(kind) !== null;
   }
 
-  /** Takes back the most recent change made by an agent, leaving yours alone. */
+/** Takes back the most recent change made by an agent, leaving yours alone. */
   undoLastAgentChange(): void {
     const actor = this.#lastChangeBy('agent');
     if (actor !== null) {
@@ -790,35 +934,11 @@ if ('data' in settings) {
     }
   }
 
-  /** Sets the alignment class on a rectangle of cells. */
-  setAlignment(
-    range: { start: { row: number; col: number }; end: { row: number; col: number } },
-    className: string,
-  ): void {
-    // Horizontal and vertical are separate axes, so setting one must not clear
-    // the other: `htLeft htMiddle` is a perfectly ordinary pair.
-    const axis = className.startsWith('htTop') ||
-      className.startsWith('htMiddle') ||
-      className.startsWith('htBottom')
-      ? ['htTop', 'htMiddle', 'htBottom']
-      : ['htLeft', 'htCenter', 'htRight', 'htJustify'];
-
-    for (let row = Math.min(range.start.row, range.end.row); row <= Math.max(range.start.row, range.end.row); row += 1) {
-      for (let col = Math.min(range.start.col, range.end.col); col <= Math.max(range.start.col, range.end.col); col += 1) {
-        const existing = String(this.getCellMeta(row, col)['className'] ?? '')
-          .split(/\s+/)
-          .filter((name) => name !== '' && !axis.includes(name));
-        this.setCellMeta(row, col, 'className', [...existing, className].join(' '));
-      }
-    }
-    this.render();
-  }
-
-  #undoState(): Record<string, unknown> {
+#undoState(): Record<string, unknown> {
     return this.#engine.call({ op: 'undo_state' });
   }
 
-  /** The id of the actor whose last undoable change was of the given kind. */
+/** The id of the actor whose last undoable change was of the given kind. */
   #lastChangeBy(kind: string): string | null {
     const next = this.#undoState()['nextUndo'] as
       | { actor?: { kind?: string; id?: string } }
@@ -827,7 +947,7 @@ if ('data' in settings) {
     return next?.actor?.kind === kind ? (next.actor.id ?? null) : null;
   }
 
-  /** Undoes the last change. */
+/** Undoes the last change. */
   undo(): void {
     if (this.hooks.allows('beforeUndo') === false) {
       return;
@@ -838,7 +958,7 @@ if ('data' in settings) {
     this.render();
   }
 
-  /** Re-applies the last undone change. */
+/** Re-applies the last undone change. */
   redo(): void {
     if (this.hooks.allows('beforeRedo') === false) {
       return;
@@ -849,7 +969,7 @@ if ('data' in settings) {
     this.render();
   }
 
-  /**
+/**
    * Undoes only what one actor did.
    *
    * This has no counterpart in Handsontable, and it is the point of recording
@@ -866,7 +986,7 @@ if ('data' in settings) {
     this.render();
   }
 
-  /** Puts back what `undoBy` took away, for the same actor. */
+/** Puts back what `undoBy` took away, for the same actor. */
   redoBy(actor: string): void {
     if (this.hooks.allows('beforeRedo', actor) === false) {
       return;
@@ -877,7 +997,39 @@ if ('data' in settings) {
     this.render();
   }
 
-  /**
+/** Who changed a cell, when, and why. */
+  getCellHistory(row: number, col: number): Array<Record<string, unknown>> {
+    const physical = this.#physical(row, col);
+    return physical ? this.#data.history(physical.row, physical.col) : [];
+  }
+
+  // --- hiding --------------------------------------------------------------
+
+  // A row or column that is there but not drawn.
+
+/**
+   * Whether a row is hidden — present in the data but not drawn.
+   *
+   * Hidden is not the same as trimmed: a hidden row still counts, still holds
+   * its values and is still what a formula referring to it reads. Anything
+   * walking the table by visual index has to be able to tell the two apart.
+   */
+  isRowHidden(row: number): boolean {
+    const physical = this.rowIndex.toPhysical(row);
+    return physical !== null && this.rowIndex.isHidden(physical);
+  }
+
+/** The same for a column. */
+  isColumnHidden(col: number): boolean {
+    const physical = this.colIndex.toPhysical(col);
+    return physical !== null && this.colIndex.isHidden(physical);
+  }
+
+  // --- themes, layout and language -----------------------------------------
+
+  // How the grid looks, and which way it reads.
+
+/**
    * The theme in force.
    *
    * `theme` may be given as a registered theme object or as a name; `themeName`
@@ -896,7 +1048,7 @@ if ('data' in settings) {
     return null;
   }
 
-  /**
+/**
    * How much taller or shorter the theme's density makes a row.
    *
    * A multiplier over whatever the settings asked for, so a caller who set a
@@ -906,262 +1058,43 @@ if ('data' in settings) {
     return DENSITY_SCALE[this.getTheme()?.density ?? 'default'];
   }
 
-  /**
-   * How deep the column header is.
+/**
+   * The manager for the areas around the grid.
    *
-   * One row unless a plugin says otherwise, which is what `nestedHeaders`
-   * changes. The height of the header area follows from this, so it has to be
-   * asked before anything is laid out.
+   * A caller registers an element and says which side it belongs on; where it
+   * lands is the manager's business, which is what lets the `layout` setting
+   * reorder things the caller never knew about.
    */
-  countColHeaderLevels(): number {
-    return Math.max((this.hooks.run('modifyColHeaderLevels', 1) as number) ?? 1, 1);
+  getLayoutManager(): LayoutManager | null {
+    return this.#view?.layout ?? null;
   }
 
-  /**
-   * The column header, as rows of cells.
+/**
+   * A phrase in the grid's language.
    *
-   * The plain case is one row of one-column cells. A plugin that wants a nested
-   * header replaces the whole structure through the hook, because the levels
-   * above the bottom one are not per-column at all — they are spans.
+   * `count` chooses between "Remove row" and "Remove rows": one command, one
+   * key, and the number decides — which is why a menu item's label is a
+   * function of the selection rather than a fixed string.
    */
-  getColHeaderRows(firstCol: number, lastCol: number): ColHeaderCell[][] {
-    if (!this.hasColHeaders()) {
-      return [];
-    }
-    const plain: ColHeaderCell[] = [];
-    for (let col = firstCol; col <= lastCol; col += 1) {
-      plain.push({ col, colspan: 1, level: 0, label: this.getColHeader(col) });
-    }
-    const levels = this.hooks.run('modifyColHeaderRows', [plain], firstCol, lastCol);
-    return (levels as ColHeaderCell[][]) ?? [plain];
+  getTranslatedPhrase(key: string, count?: number): string {
+    return phrase(String(this.getSettings().language ?? DEFAULT_LANGUAGE), key, count);
   }
 
-  /**
-   * How wide the row-header area is, in pixels.
+/**
+   * The locale used for formatting.
    *
-   * An array configures one width per header *column*. This grid draws a single
-   * row-header column, so an array is read as the total width it should take —
-   * which keeps a layout sized for several of them from collapsing.
+   * Separate from the language on purpose: someone reading an English
+   * interface may still want German number formatting.
    */
-  getRowHeaderWidth(): number {
-    const setting = this.getSettings().rowHeaderWidth;
-    if (Array.isArray(setting)) {
-      return setting.reduce((total, width) => total + (width ?? 0), 0) || DEFAULT_ROW_HEADER_WIDTH;
-    }
-    return typeof setting === 'number' ? setting : DEFAULT_ROW_HEADER_WIDTH;
-  }
-
-  /** How tall one level of the column header is. */
-  getColHeaderHeight(level = 0): number {
-    const setting = this.getSettings().columnHeaderHeight;
-    const base = Array.isArray(setting)
-      ? (setting[level] ?? DEFAULT_ROW_HEIGHT)
-      : typeof setting === 'number'
-        ? setting
-        : DEFAULT_ROW_HEIGHT;
-    return Math.round(base * this.densityScale());
-  }
-
-  /**
-   * How much room the headers actually take.
-   *
-   * `getRowHeaderWidth` and `getColHeaderHeight` answer "how big is one",
-   * which is the wrong question for anything measuring the table: a grid with
-   * `colHeaders: false` draws no band at all, and a nested header draws
-   * several. Everything that positions against the headers — the renderer, the
-   * visible-row arithmetic, `getTableHeight` — asks these instead, so they
-   * cannot drift apart from what was drawn.
-   */
-  #drawnHeaderWidth(): number {
-    return this.hasRowHeaders() ? this.getRowHeaderWidth() : 0;
-  }
-
-  #drawnHeaderHeight(): number {
-    if (!this.hasColHeaders()) {
-      return 0;
-    }
-    let total = 0;
-    for (let level = 0; level < this.countColHeaderLevels(); level += 1) {
-      total += this.getColHeaderHeight(level);
-    }
-    return total;
-  }
-
-  /**
-   * Whether a row is hidden — present in the data but not drawn.
-   *
-   * Hidden is not the same as trimmed: a hidden row still counts, still holds
-   * its values and is still what a formula referring to it reads. Anything
-   * walking the table by visual index has to be able to tell the two apart.
-   */
-  isRowHidden(row: number): boolean {
-    const physical = this.rowIndex.toPhysical(row);
-    return physical !== null && this.rowIndex.isHidden(physical);
-  }
-
-  /** The same for a column. */
-  isColumnHidden(col: number): boolean {
-    const physical = this.colIndex.toPhysical(col);
-    return physical !== null && this.colIndex.isHidden(physical);
-  }
-
-  /** Who changed a cell, when, and why. */
-  getCellHistory(row: number, col: number): Array<Record<string, unknown>> {
-    const physical = this.#physical(row, col);
-    return physical ? this.#data.history(physical.row, physical.col) : [];
-  }
-
-  /** Every row's source values — formulas, not their results. */
-  getSourceData(): string[][] {
-    return Array.from({ length: this.countRows() }, (_, row) => this.getSourceDataAtRow(row));
-  }
-
-  getSourceDataArray(): string[][] {
-    return this.getSourceData();
-  }
-
-  getSourceDataAtRow(row: number): string[] {
-    return Array.from({ length: this.countCols() }, (_, col) =>
-      this.getSourceDataAtCell(row, col),
+  getLocale(): string {
+    return String(
+      this.getSettings().locale ?? this.getSettings().language ?? DEFAULT_LANGUAGE,
     );
   }
 
-  getSourceDataAtCol(col: number): string[] {
-    return Array.from({ length: this.countRows() }, (_, row) =>
-      this.getSourceDataAtCell(row, col),
-    );
-  }
-
-  /** Writes without going through the editor's parsing and validation. */
-  setSourceDataAtCell(row: number, col: number, value: string): void {
-    this.setDataAtCell(row, col, value, 'loadData');
-  }
-
-  getDataAtProp(prop: string | number): string[] {
-    const col = this.propToCol(prop);
-    return col < 0 ? [] : this.getDataAtCol(col);
-  }
-
-  getDataAtRowProp(row: number, prop: string | number): string {
-    const col = this.propToCol(prop);
-    return col < 0 ? '' : this.getDataAtCell(row, col);
-  }
-
-  setDataAtRowProp(row: number, prop: string | number, value: string): void {
-    const col = this.propToCol(prop);
-    if (col >= 0) {
-      this.setDataAtCell(row, col, value);
-    }
-  }
-
-  /** What the clipboard would take, which a `copyable: false` cell withholds. */
-  getCopyableData(row: number, col: number): string {
-    return this.getCellMeta(row, col)['copyable'] === false ? '' : this.getDataAtCell(row, col);
-  }
-
-  getCopyableSourceData(row: number, col: number): string {
-    return this.getCellMeta(row, col)['copyable'] === false
-      ? ''
-      : this.getSourceDataAtCell(row, col);
-  }
-
-  /**
-   * The one type a rectangle has, or `mixed`.
-   *
-   * `mixed` is the useful answer: a caller asking is deciding whether it can
-   * treat the block uniformly, and "they differ" is what it needs to hear.
-   */
-  getDataType(startRow: number, startCol: number, endRow: number, endCol: number): string {
-    let found: string | null = null;
-    for (let row = startRow; row <= endRow; row += 1) {
-      for (let col = startCol; col <= endCol; col += 1) {
-        const type = String(this.getCellMeta(row, col).type ?? 'text');
-        if (found === null) {
-          found = type;
-        } else if (found !== type) {
-          return 'mixed';
-        }
-      }
-    }
-    return found ?? 'text';
-  }
-
-  /** The columns, as a shape — the nearest thing a workbook has to a schema. */
-  getSchema(): Record<string, null> {
-    const schema: Record<string, null> = {};
-    for (let col = 0; col < this.countCols(); col += 1) {
-      schema[String(this.colToProp(col))] = null;
-    }
-    return schema;
-  }
-
-  /** Replaces everything with the given rows. */
-  loadData(data: string[][]): void {
-    if (this.hooks.allows('beforeLoadData', data) === false) {
-      return;
-    }
-    this.replaceRows(data, 'loadData');
-    this.hooks.run('afterLoadData', undefined, data);
-  }
-
-  /**
-   * Writes rows over everything, clearing whatever they do not reach.
-   *
-   * The clearing is the part worth having in one place: a load that only wrote
-   * the values it was given would leave the tail of a longer previous dataset
-   * on screen, which reads as rows that were not replaced rather than rows that
-   * are gone. `source` is what tells the hooks and the journal which kind of
-   * load this was — a person's `loadData`, or a page arriving from a server.
-   */
-  replaceRows(data: string[][], source: ChangeSource): void {
-    const changes: Array<[number, number, string]> = [];
-    const height = Math.max(data.length, this.countRows());
-    const width = Math.max(this.countCols(), ...data.map((row) => row.length), 0);
-    for (let row = 0; row < height; row += 1) {
-      for (let col = 0; col < width; col += 1) {
-        changes.push([row, col, data[row]?.[col] ?? '']);
-      }
-    }
-    this.setDataAtCells(changes, source);
-  }
-
-  /** The same, but keeping the index maps — a sort survives it. */
-  updateData(data: string[][]): void {
-    const changes: Array<[number, number, string]> = [];
-    data.forEach((line, row) => {
-      line.forEach((value, col) => {
-        changes.push([row, col, value]);
-      });
-    });
-    this.setDataAtCells(changes, 'updateData');
-    this.hooks.run('afterUpdateData', undefined, data);
-  }
-
-  /** Replaces part of a row, as `Array.prototype.splice` does. */
-  spliceRow(row: number, start: number, amount: number, ...values: string[]): void {
-    const line = this.getSourceDataAtRow(row);
-    const width = line.length;
-    line.splice(start, amount, ...values);
-    this.setDataAtCells(
-      pad(line, width).map((value, col) => [row, col, value] as [number, number, string]),
-      'spliceRow',
-    );
-  }
-
-  spliceCol(col: number, start: number, amount: number, ...values: string[]): void {
-    const line = this.getSourceDataAtCol(col);
-    const height = line.length;
-    line.splice(start, amount, ...values);
-    this.setDataAtCells(
-      pad(line, height).map((value, row) => [row, col, value] as [number, number, string]),
-      'spliceCol',
-    );
-  }
-
-  /** Whether columns may be added or removed at all. */
-  isColumnModificationAllowed(): boolean {
-    const settings = this.getSettings();
-    return settings.allowInsertColumn !== false || settings.allowRemoveColumn !== false;
+/** Whether the grid is laid out right-to-left. */
+  isRtl(): boolean {
+    return this.getSettings().layoutDirection === 'rtl';
   }
 
   // --- counting ------------------------------------------------------------
@@ -1545,6 +1478,89 @@ if ('data' in settings) {
 
   get rowSizes(): SizeMap {
     return this.#rowSizes;
+  }
+
+// How many bands of header there are, and how big they are.
+
+/**
+   * How deep the column header is.
+   *
+   * One row unless a plugin says otherwise, which is what `nestedHeaders`
+   * changes. The height of the header area follows from this, so it has to be
+   * asked before anything is laid out.
+   */
+  countColHeaderLevels(): number {
+    return Math.max((this.hooks.run('modifyColHeaderLevels', 1) as number) ?? 1, 1);
+  }
+
+/**
+   * The column header, as rows of cells.
+   *
+   * The plain case is one row of one-column cells. A plugin that wants a nested
+   * header replaces the whole structure through the hook, because the levels
+   * above the bottom one are not per-column at all — they are spans.
+   */
+  getColHeaderRows(firstCol: number, lastCol: number): ColHeaderCell[][] {
+    if (!this.hasColHeaders()) {
+      return [];
+    }
+    const plain: ColHeaderCell[] = [];
+    for (let col = firstCol; col <= lastCol; col += 1) {
+      plain.push({ col, colspan: 1, level: 0, label: this.getColHeader(col) });
+    }
+    const levels = this.hooks.run('modifyColHeaderRows', [plain], firstCol, lastCol);
+    return (levels as ColHeaderCell[][]) ?? [plain];
+  }
+
+/**
+   * How wide the row-header area is, in pixels.
+   *
+   * An array configures one width per header *column*. This grid draws a single
+   * row-header column, so an array is read as the total width it should take —
+   * which keeps a layout sized for several of them from collapsing.
+   */
+  getRowHeaderWidth(): number {
+    const setting = this.getSettings().rowHeaderWidth;
+    if (Array.isArray(setting)) {
+      return setting.reduce((total, width) => total + (width ?? 0), 0) || DEFAULT_ROW_HEADER_WIDTH;
+    }
+    return typeof setting === 'number' ? setting : DEFAULT_ROW_HEADER_WIDTH;
+  }
+
+/** How tall one level of the column header is. */
+  getColHeaderHeight(level = 0): number {
+    const setting = this.getSettings().columnHeaderHeight;
+    const base = Array.isArray(setting)
+      ? (setting[level] ?? DEFAULT_ROW_HEIGHT)
+      : typeof setting === 'number'
+        ? setting
+        : DEFAULT_ROW_HEIGHT;
+    return Math.round(base * this.densityScale());
+  }
+
+/**
+   * How much room the headers actually take.
+   *
+   * `getRowHeaderWidth` and `getColHeaderHeight` answer "how big is one",
+   * which is the wrong question for anything measuring the table: a grid with
+   * `colHeaders: false` draws no band at all, and a nested header draws
+   * several. Everything that positions against the headers — the renderer, the
+   * visible-row arithmetic, `getTableHeight` — asks these instead, so they
+   * cannot drift apart from what was drawn.
+   */
+  #drawnHeaderWidth(): number {
+    return this.hasRowHeaders() ? this.getRowHeaderWidth() : 0;
+  }
+
+#drawnHeaderHeight(): number {
+    if (!this.hasColHeaders()) {
+      return 0;
+    }
+    let total = 0;
+    for (let level = 0; level < this.countColHeaderLevels(); level += 1) {
+      total += this.getColHeaderHeight(level);
+    }
+    return total;
   }
 
   // --- cell meta -----------------------------------------------------------
