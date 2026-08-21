@@ -82,11 +82,7 @@ fn matching_numbers(ctx: &EvalCtx, a: &[Operand]) -> Result<Vec<f64>, CellError>
 }
 
 /// Shared body: aggregate the matching numbers, or report why not.
-fn aggregate(
-    ctx: &EvalCtx,
-    a: &[Operand],
-    finish: impl Fn(&[f64]) -> Option<f64>,
-) -> Operand {
+fn aggregate(ctx: &EvalCtx, a: &[Operand], finish: impl Fn(&[f64]) -> Option<f64>) -> Operand {
     match matching_numbers(ctx, a) {
         Ok(values) => match finish(&values) {
             Some(v) => number(v),
@@ -109,9 +105,7 @@ fn variance(values: &[f64], ddof: usize) -> Option<f64> {
 }
 
 pub const FUNCTIONS: &[Function] = &[
-    array_fn("DSUM", 3, Some(3), |ctx, a| {
-        aggregate(ctx, a, |values| Some(values.iter().sum()))
-    }),
+    array_fn("DSUM", 3, Some(3), |ctx, a| aggregate(ctx, a, |values| Some(values.iter().sum()))),
     array_fn("DPRODUCT", 3, Some(3), |ctx, a| {
         aggregate(ctx, a, |values| Some(values.iter().product()))
     }),
@@ -124,12 +118,8 @@ pub const FUNCTIONS: &[Function] = &[
     }),
     array_fn("DVAR", 3, Some(3), |ctx, a| aggregate(ctx, a, |v| variance(v, 1))),
     array_fn("DVARP", 3, Some(3), |ctx, a| aggregate(ctx, a, |v| variance(v, 0))),
-    array_fn("DSTDEV", 3, Some(3), |ctx, a| {
-        aggregate(ctx, a, |v| variance(v, 1).map(f64::sqrt))
-    }),
-    array_fn("DSTDEVP", 3, Some(3), |ctx, a| {
-        aggregate(ctx, a, |v| variance(v, 0).map(f64::sqrt))
-    }),
+    array_fn("DSTDEV", 3, Some(3), |ctx, a| aggregate(ctx, a, |v| variance(v, 1).map(f64::sqrt))),
+    array_fn("DSTDEVP", 3, Some(3), |ctx, a| aggregate(ctx, a, |v| variance(v, 0).map(f64::sqrt))),
     array_fn("DCOUNT", 3, Some(3), |ctx, a| match matching_numbers(ctx, a) {
         Ok(values) => Operand::number(values.len() as f64),
         Err(e) => Operand::error(e),

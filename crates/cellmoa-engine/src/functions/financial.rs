@@ -140,11 +140,7 @@ fn flows_and_dates(ctx: &EvalCtx, a: &[Operand]) -> Result<(Vec<f64>, Vec<f64>),
 /// Present value of dated cash flows discounted on an actual/365 basis.
 fn xnpv(rate: f64, values: &[f64], dates: &[f64]) -> f64 {
     let start = dates[0];
-    values
-        .iter()
-        .zip(dates)
-        .map(|(v, d)| v / (1.0 + rate).powf((d - start) / 365.0))
-        .sum()
+    values.iter().zip(dates).map(|(v, d)| v / (1.0 + rate).powf((d - start) / 365.0)).sum()
 }
 
 pub const FUNCTIONS: &[Function] = &[
@@ -206,8 +202,10 @@ pub const FUNCTIONS: &[Function] = &[
             kind = opt_num(ctx, a, 5, 0.0),
         );
         // The principal portion is whatever the payment is not interest.
-        match (payment(rate, nper, pv, fv, kind), interest_payment(rate, period, nper, pv, fv, kind))
-        {
+        match (
+            payment(rate, nper, pv, fv, kind),
+            interest_payment(rate, period, nper, pv, fv, kind),
+        ) {
             (Ok(pmt), Ok(interest)) => number(pmt - interest),
             (Err(e), _) | (_, Err(e)) => Operand::error(e),
         }
@@ -266,7 +264,6 @@ pub const FUNCTIONS: &[Function] = &[
     }),
     f("CUMIPMT", 6, Some(6), |ctx, a| cumulative(ctx, a, true)),
     f("CUMPRINC", 6, Some(6), |ctx, a| cumulative(ctx, a, false)),
-
     // --- cash flows ---------------------------------------------------------
     f("NPV", 2, None, |ctx, a| {
         args!(rate = arg_num(ctx, a, 0));
@@ -340,7 +337,6 @@ pub const FUNCTIONS: &[Function] = &[
             Err(e) => Operand::error(e),
         }
     }),
-
     // --- depreciation --------------------------------------------------------
     f("SLN", 3, Some(3), |ctx, a| {
         args!(cost = arg_num(ctx, a, 0), salvage = arg_num(ctx, a, 1), life = arg_num(ctx, a, 2));
@@ -427,7 +423,8 @@ pub const FUNCTIONS: &[Function] = &[
             // Once straight-line over the remaining life is larger, VDB
             // switches to it — unless the caller says not to.
             let straight_line = (cost - accumulated - salvage) / (life - period + 1.0);
-            let amount = if !no_switch && straight_line > declining { straight_line } else { declining };
+            let amount =
+                if !no_switch && straight_line > declining { straight_line } else { declining };
             let overlap = (period.min(end) - (period - 1.0).max(start)).max(0.0);
             total += amount * overlap;
             accumulated += amount;
@@ -435,7 +432,6 @@ pub const FUNCTIONS: &[Function] = &[
         }
         number(total)
     }),
-
     // --- rates ---------------------------------------------------------------
     f("EFFECT", 2, Some(2), |ctx, a| {
         args!(nominal = arg_num(ctx, a, 0), periods = arg_num(ctx, a, 1));
@@ -489,7 +485,6 @@ pub const FUNCTIONS: &[Function] = &[
         let digits = fraction.log10().ceil().max(1.0);
         number(whole + (decimal - whole) * fraction / 10f64.powf(digits))
     }),
-
     // --- discounted securities ------------------------------------------------
     f("DISC", 4, Some(5), |ctx, a| {
         args!(price = arg_num(ctx, a, 2), redemption = arg_num(ctx, a, 3));

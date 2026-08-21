@@ -20,8 +20,6 @@ use std::sync::OnceLock;
 /// makes that mistake unrepresentable.
 macro_rules! categories {
     ($($name:ident),+ $(,)?) => {
-        $(pub mod $name;)+
-
         /// Every category's catalogue, in registration order.
         fn catalogues() -> &'static [&'static [Function]] {
             &[$($name::FUNCTIONS),+]
@@ -32,6 +30,23 @@ macro_rules! categories {
         const CATEGORY_NAMES: &[&str] = &[$(stringify!($name)),+];
     };
 }
+
+// Declared here rather than inside `categories!`, because rustfmt cannot expand
+// a macro to find them: for as long as the `pub mod` lines lived in there,
+// `cargo fmt --check` descended into none of these files and reported success
+// over whatever they contained. `every_category_file_is_declared` below is what
+// now keeps a new file from being written and never listed.
+pub mod database;
+pub mod date;
+pub mod distributions;
+pub mod engineering;
+pub mod financial;
+pub mod info;
+pub mod logical;
+pub mod lookup;
+pub mod math;
+pub mod stats;
+pub mod text;
 
 categories!(
     math,
@@ -347,6 +362,42 @@ mod tests {
             let first = catalogue[0].name;
             assert!(lookup(first).is_some(), "`{first}` from `{name}` is not registered");
         }
+    }
+
+    /// Every category file is declared, listed, and reachable.
+    ///
+    /// The module declarations used to be generated from the `categories!` list,
+    /// which made "declared but not registered" unrepresentable — at the cost of
+    /// hiding every one of these files from rustfmt. Reading the directory gives
+    /// the same guarantee without the cost: a file added here and forgotten in
+    /// the list fails, and so does a name in the list with no file behind it.
+    #[test]
+    fn every_category_file_is_declared() {
+        // Not categories: this module itself, and the matcher that exports no
+        // functions of its own.
+        const NOT_A_CATEGORY: &[&str] = &["mod", "criteria"];
+
+        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/src/functions");
+        let mut found: Vec<String> = std::fs::read_dir(dir)
+            .expect("the functions directory is where this file is")
+            .filter_map(|entry| {
+                let path = entry.ok()?.path();
+                if path.extension()? != "rs" {
+                    return None;
+                }
+                let stem = path.file_stem()?.to_str()?.to_string();
+                (!NOT_A_CATEGORY.contains(&stem.as_str())).then_some(stem)
+            })
+            .collect();
+        found.sort();
+
+        let mut listed: Vec<String> = CATEGORY_NAMES.iter().map(|n| n.to_string()).collect();
+        listed.sort();
+
+        assert_eq!(
+            found, listed,
+            "a category file is not in `categories!`, or the other way round"
+        );
     }
 
     #[test]
