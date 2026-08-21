@@ -83,6 +83,9 @@ export {
 export type { KeyCombination, ShortcutCallback, ShortcutOptions } from './shortcuts.js';
 
 export { SizeMap } from './sizes.js';
+export { EDITOR_KEYS, coreKeymap, edgeTarget, mirror } from './keymap.js';
+export type { KeyActions } from './keymap.js';
+
 export { View } from './view.js';
 export type { CellRenderContext, ColHeaderCell, ViewModel, Viewport } from './view.js';
 

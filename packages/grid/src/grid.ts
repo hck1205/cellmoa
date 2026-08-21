@@ -23,6 +23,8 @@ import type { Engine } from './engine.js';
 import { Hooks } from './hooks.js';
 import type { HookHandler } from './hooks.js';
 import { IndexMapper } from './indexMapper.js';
+import { EDITOR_KEYS, coreKeymap, edgeTarget, mirror } from './keymap.js';
+import type { KeyActions } from './keymap.js';
 import { MetaManager } from './metaManager.js';
 import { CellRange, Selection } from './selection.js';
 import type { SelectionMode } from './selection.js';
@@ -2548,131 +2550,89 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
     }
     const grid = this.shortcuts.getContext('grid')!;
     const editor = this.shortcuts.getContext('editor')!;
-    /**
-     * Mirrors a horizontal step when the grid is laid out right to left.
-     *
-     * The arrow keys are about the screen, not about the data: in an RTL sheet
-     * the leftward arrow moves toward the higher column number, because that is
-     * where "left" is. Vertical movement is unaffected.
-     */
-    const mirror = (col: number): number => (this.isRtl() ? -col : col);
 
-    const move = (row: number, col: number) => () => {
-      col = mirror(col);
-      const wrapped = this.#selection.moveBy(row, col, this.#wraps({ row, col }));
-      if (wrapped) {
-        this.#afterSelection();
-        const highlight = this.#selection.highlight;
-        if (highlight) {
-          this.scrollViewportTo(highlight.row, highlight.col);
-        }
-      }
-    };
-    const extend = (rowDelta: number, colDelta: number) => () => {
-      colDelta = mirror(colDelta);
-      const last = this.#selection.last;
-      const highlight = this.#selection.highlight;
-      if (!last || !highlight) {
-        return;
-      }
-      // Shift+arrow moves the far edge, which is whichever corner is not the
-      // anchor.
-      this.#selection.extendTo({ row: last.to.row + rowDelta, col: last.to.col + colDelta });
-      this.#afterSelection();
-    };
-    const edge = (rowDelta: number, colDelta: number, extending: boolean) => () => {
-      colDelta = mirror(colDelta);
-      const highlight = this.#selection.highlight;
-      if (!highlight) {
-        return;
-      }
-      const target = {
-        row: rowDelta === 0 ? highlight.row : rowDelta > 0 ? this.countRows() - 1 : 0,
-        col: colDelta === 0 ? highlight.col : colDelta > 0 ? this.countCols() - 1 : 0,
-      };
-      if (extending) {
-        this.#selection.extendTo(target);
-      } else {
-        this.#selection.setCell(target);
-      }
-      this.#afterSelection();
-      this.scrollViewportTo(target.row, target.col);
-    };
-
-    grid.addShortcuts(
-      [
-        { keys: [['arrowup']], callback: move(-1, 0) },
-        { keys: [['arrowdown']], callback: move(1, 0) },
-        { keys: [['arrowleft']], callback: move(0, -1) },
-        { keys: [['arrowright']], callback: move(0, 1) },
-        { keys: [['shift', 'arrowup']], callback: extend(-1, 0) },
-        { keys: [['shift', 'arrowdown']], callback: extend(1, 0) },
-        { keys: [['shift', 'arrowleft']], callback: extend(0, -1) },
-        { keys: [['shift', 'arrowright']], callback: extend(0, 1) },
-        { keys: [['mod', 'arrowup']], callback: edge(-1, 0, false) },
-        { keys: [['mod', 'arrowdown']], callback: edge(1, 0, false) },
-        { keys: [['mod', 'arrowleft']], callback: edge(0, -1, false) },
-        { keys: [['mod', 'arrowright']], callback: edge(0, 1, false) },
-        { keys: [['mod', 'shift', 'arrowup']], callback: edge(-1, 0, true) },
-        { keys: [['mod', 'shift', 'arrowdown']], callback: edge(1, 0, true) },
-        { keys: [['mod', 'shift', 'arrowleft']], callback: edge(0, -1, true) },
-        { keys: [['mod', 'shift', 'arrowright']], callback: edge(0, 1, true) },
-        { keys: [['home']], callback: edge(0, -1, false) },
-        { keys: [['end']], callback: edge(0, 1, false) },
-        { keys: [['mod', 'home']], callback: () => this.selectCell(0, 0) },
-        {
-          keys: [['mod', 'end']],
-          callback: () => this.selectCell(this.countRows() - 1, this.countCols() - 1),
-        },
-        { keys: [['pageup']], callback: move(-this.#pageSize(), 0) },
-        { keys: [['pagedown']], callback: move(this.#pageSize(), 0) },
-        { keys: [['mod', 'a']], callback: () => this.selectAll() },
-        {
-          keys: [['shift', 'space']],
-          callback: () => {
-            const highlight = this.#selection.highlight;
-            if (highlight) {
-              this.selectRows(highlight.row);
-            }
-          },
-        },
-        {
-          keys: [['mod', 'space']],
-          callback: () => {
-            const highlight = this.#selection.highlight;
-            if (highlight) {
-              this.selectColumns(highlight.col);
-            }
-          },
-        },
-        { keys: [['enter']], callback: () => this.#onEnter(false) },
-        { keys: [['shift', 'enter']], callback: () => this.#onEnter(true) },
-        { keys: [['f2']], callback: () => this.beginEditing() },
-        { keys: [['tab']], callback: () => this.#onTab(false) },
-        { keys: [['shift', 'tab']], callback: () => this.#onTab(true) },
-        { keys: [['delete']], callback: () => this.emptySelectedCells() },
-        { keys: [['backspace']], callback: () => this.emptySelectedCells() },
-        { keys: [['escape']], callback: () => this.deselectCell() },
-        { keys: [['mod', 'z']], callback: () => this.undo() },
-        { keys: [['mod', 'y']], callback: () => this.redo() },
-        { keys: [['mod', 'shift', 'z']], callback: () => this.redo() },
-      ],
-      { group: 'core' },
-    );
-
-    // The editor context lets the open editor answer first, and only handles
-    // what it declines.
+    grid.addShortcuts(coreKeymap(this.#keyActions()), { group: 'core' });
     editor.addShortcut({
-      keys: [
-        ['enter'], ['shift', 'enter'], ['tab'], ['shift', 'tab'], ['escape'],
-        ['alt', 'enter'],
-      ],
+      keys: EDITOR_KEYS,
       group: 'core',
       callback: (event) => this.#editor?.handleKey?.(event) ?? false,
     });
 
     view.root.tabIndex = 0;
     view.root.addEventListener('keydown', this.#onKeyDown);
+  }
+
+  /**
+   * What the keymap calls when a key is pressed.
+   *
+   * Built once and handed to the table, so the table stays a table: which key
+   * does what is one question, and what "moving" means is another.
+   */
+  #keyActions(): KeyActions {
+    return {
+      move: (step) => {
+        const { row, col } = mirror(step, this.isRtl());
+        const wrapped = this.#selection.moveBy(row, col, this.#wraps({ row, col }));
+        if (wrapped) {
+          this.#afterSelection();
+          const highlight = this.#selection.highlight;
+          if (highlight) {
+            this.scrollViewportTo(highlight.row, highlight.col);
+          }
+        }
+      },
+      extend: (step) => {
+        const { row, col } = mirror(step, this.isRtl());
+        const last = this.#selection.last;
+        if (!last || !this.#selection.highlight) {
+          return;
+        }
+        // Shift+arrow moves the far edge, which is whichever corner is not the
+        // anchor.
+        this.#selection.extendTo({ row: last.to.row + row, col: last.to.col + col });
+        this.#afterSelection();
+      },
+      edge: (step, extending) => {
+        const highlight = this.#selection.highlight;
+        if (!highlight) {
+          return;
+        }
+        const target = edgeTarget(highlight, mirror(step, this.isRtl()), {
+          rows: this.countRows(),
+          cols: this.countCols(),
+        });
+        if (extending) {
+          this.#selection.extendTo(target);
+        } else {
+          this.#selection.setCell(target);
+        }
+        this.#afterSelection();
+        this.scrollViewportTo(target.row, target.col);
+      },
+      selectAll: () => this.selectAll(),
+      selectCell: (row, col) => this.selectCell(row, col),
+      selectRowOfHighlight: () => {
+        const highlight = this.#selection.highlight;
+        if (highlight) {
+          this.selectRows(highlight.row);
+        }
+      },
+      selectColumnOfHighlight: () => {
+        const highlight = this.#selection.highlight;
+        if (highlight) {
+          this.selectColumns(highlight.col);
+        }
+      },
+      lastCell: () => ({ row: this.countRows() - 1, col: this.countCols() - 1 }),
+      pageSize: () => this.#pageSize(),
+      enter: (shift) => this.#onEnter(shift),
+      tab: (shift) => this.#onTab(shift),
+      beginEditing: () => this.beginEditing(),
+      emptySelectedCells: () => this.emptySelectedCells(),
+      deselectCell: () => this.deselectCell(),
+      undo: () => this.undo(),
+      redo: () => this.redo(),
+    };
   }
 
   #onKeyDown = (event: KeyboardEvent): void => {
