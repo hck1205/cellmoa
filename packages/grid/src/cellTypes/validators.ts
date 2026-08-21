@@ -8,6 +8,7 @@
  */
 
 import type { GridSettings } from '../settings.js';
+import { optionsOf } from './options.js';
 import type { CellValidator } from './types.js';
 import { VALID, invalid } from './types.js';
 
@@ -55,13 +56,12 @@ export function listValidator(source?: unknown): CellValidator {
     if (value.startsWith('=')) {
       return VALID;
     }
-    const options = (Array.isArray(source) ? source : (meta.source as unknown[])) ?? [];
-    if (!Array.isArray(options) || options.length === 0) {
+    const allowed = Array.isArray(source) ? source.map(String) : optionsOf(meta);
+    if (allowed.length === 0) {
       // Nothing to check against is not a failure; a source given as a
       // function is resolved by the editor, not here.
       return VALID;
     }
-    const allowed = options.map(String);
     if (meta.strict === false) {
       return VALID;
     }
@@ -81,11 +81,11 @@ export const multiSelectValidator: CellValidator = (value, meta) => {
   if (empty) {
     return empty;
   }
-  const options = (meta.source as unknown[]) ?? [];
-  if (!Array.isArray(options) || options.length === 0) {
+  const options = optionsOf(meta);
+  if (options.length === 0) {
     return VALID;
   }
-  const allowed = new Set(options.map(String));
+  const allowed = new Set(options);
   const chosen = value
     .split(',')
     .map((part) => part.trim())

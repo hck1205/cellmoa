@@ -57,6 +57,13 @@ describe('validators', () => {
     expect((await validate('blue', { ...meta, strict: false })).valid).toBe(true);
   });
 
+  it('checks a list given as selectOptions, which is where the editor reads it', async () => {
+    const validate = getValidator('select')!;
+    const meta = { selectOptions: ['red', 'green'] };
+    expect((await validate('red', meta)).valid).toBe(true);
+    expect((await validate('blue', meta)).valid).toBe(false);
+  });
+
   it('checks dates and times loosely enough to match the parser', async () => {
     const date = getValidator('date')!;
     expect((await date('2024-01-01', {})).valid).toBe(true);

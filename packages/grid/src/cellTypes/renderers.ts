@@ -42,8 +42,8 @@ function write(td: HTMLTableCellElement, text: string, meta: RenderContext['meta
     td.textContent = text;
     return;
   }
-  const sanitizer = meta.sanitizer;
-  td.innerHTML = typeof sanitizer === 'function' ? String((sanitizer as (html: string) => string)(text)) : text;
+  const sanitizer = meta.sanitizer as ((html: string) => string) | undefined;
+  td.innerHTML = typeof sanitizer === 'function' ? String(sanitizer(text)) : text;
 }
 
 /** The default: whatever the engine says the cell shows. */
@@ -114,7 +114,7 @@ export function formatNumeric(
     formatters.set(key, formatter);
   }
   return formatter.format(value);
-};
+}
 
 /**
  * Text, but always as HTML.
@@ -170,13 +170,15 @@ export const autocompleteRenderer: CellRenderer = (context) => {
   context.td.classList.add('cm-autocomplete');
 };
 
-/** Hides the value behind a fixed number of symbols. */
+/** Hides the value behind a row of symbols. */
 export const passwordRenderer: CellRenderer = (context) => {
   applyCommon(context);
   const { td, cell, meta } = context;
   const text = cell?.text ?? '';
   const symbol = String(meta.hashSymbol ?? '*');
-  // A fixed length by default, so the mask does not leak how long the secret is.
+  // The mask is as long as the value, as Handsontable's is. `hashLength` fixes
+  // it instead, which is what hides how long the secret is — worth asking for,
+  // and not something to impose on a caller who only wanted the value covered.
   const length = typeof meta.hashLength === 'number' ? meta.hashLength : text.length;
   td.textContent = text === '' ? '' : symbol.repeat(Math.max(length, 0));
 };

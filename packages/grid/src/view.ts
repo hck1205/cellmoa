@@ -6,150 +6,39 @@
  * the data rather than creating anything — which is the only way the browser
  * survives a spreadsheet.
  *
- * The layout is four panes, so that frozen rows and columns stay put while the
- * middle scrolls:
+ * This file owns the elements and the order of a render; the three pieces it
+ * orchestrates each live next door, because each answers a different question
+ * and changes for a different reason:
  *
- *     corner │ top      (frozen rows)
- *     ───────┼──────────
- *     left   │ main
- *     (frozen columns)
+ *     geometry  which rows and columns are in the window
+ *     panes     the tables the cells are drawn into
+ *     chrome    what the settings put on the outermost elements
  */
 
-import { columnLetters } from './dataSource.js';
+import { Chrome } from './chrome.js';
+import type {
+  CellRenderContext,
+  ColHeaderCell,
+  ViewModel,
+  Viewport,
+} from './viewModel.js';
+
+// Re-exported because every caller has always imported them from here, and
+// where a type is declared is not something a caller should have to care about.
+export type { CellRenderContext, ColHeaderCell, ViewModel, Viewport };
+import { fetchRange, measure, viewportOf } from './geometry.js';
+import type { Metrics, ScrollState } from './geometry.js';
 import { LayoutManager } from './layout.js';
+import { CLASS, createElement, createPane, drawPane, placePanes } from './panes.js';
+import type { Pane, PaneName } from './panes.js';
 import type { SizeMap } from './sizes.js';
 
-/** What the view needs to know to draw a cell. */
-export interface CellRenderContext {
-  row: number;
-  col: number;
-  /** The element to fill in. It is reused between renders. */
-  td: HTMLTableCellElement;
-}
 
-/**
- * One cell in the column header.
- *
- * A header can be more than one row deep — a group label spanning several
- * columns above the columns themselves — so a cell carries its own span and
- * knows which level it is on.
- */
-export interface ColHeaderCell {
-  /** The leftmost column this cell sits above. */
-  col: number;
-  /** How many columns it spans. */
-  colspan: number;
-  /** Which header row it is on, 0 at the top. */
-  level: number;
-  label: string;
-}
 
-/** Everything the view reads from the grid. */
-export interface ViewModel {
-  rowCount(): number;
-  colCount(): number;
-  rowSizes(): SizeMap;
-  colSizes(): SizeMap;
-  fixedRowsTop(): number;
-  fixedColumnsStart(): number;
-  /** Whether headers are drawn, and what they say. */
-  rowHeader(row: number): string | null;
-  /**
-   * The column header, as rows of cells covering `firstCol`..`lastCol`.
-   *
-   * An empty array means no column header at all. One row of one-column cells
-   * is the ordinary case; more rows are a nested header.
-   */
-  colHeaderRows(firstCol: number, lastCol: number): ColHeaderCell[][];
-  rowHeaderWidth(): number;
-  /** The whole column-header area, however many levels deep it is. */
-  colHeaderHeight(): number;
-  /** One level of it, so a nested header can give its rows different heights. */
-  colHeaderLevelHeight?(level: number): number;
-  /** Called after a header cell is built, so a plugin can decorate it. */
-  renderColHeader?(th: HTMLTableCellElement, cell: ColHeaderCell): void;
-  /** The same for a row header. */
-  renderRowHeader?(th: HTMLTableCellElement, row: number): void;
-  /**
-   * ARIA roles and indexes on the table, its rows and its cells.
-   *
-   * A grid built out of `<div>`s and absolute positions is invisible to a
-   * screen reader without them: what the eye reads as a table is, to anything
-   * that cannot see it, a pile of unrelated boxes.
-   */
-  ariaTags?(): boolean;
-  /** `rtl` mirrors the layout, for languages written right to left. */
-  direction?(): 'ltr' | 'rtl';
-  /** How many rows are frozen at the bottom. */
-  fixedRowsBottom?(): number;
-  /** Swallow the wheel, for a page that scrolls the grid itself. */
-  preventWheel?(): boolean;
-  /**
-   * The theme, as the classes it wants and the properties it sets.
-   *
-   * Properties as well as classes, so a theme registered at run time works
-   * without the page having loaded a stylesheet for it.
-   */
-  theme?(): { classNames: string[]; properties: Record<string, string> } | null;
-  /** Extra class names for the grid's own elements. */
-  tableClassName?(): string[];
-  /**
-   * The size the grid should take, as CSS.
-   *
-   * `null` means "whatever the container is", which is the default and the only
-   * thing that works when the page decides the layout.
-   */
-  size?(): { width: string | null; height: string | null; preventOverflow: 'horizontal' | 'vertical' | false };
-  /** Called before drawing, so the data for the window can be fetched. */
-  prepare(startRow: number, endRow: number, startCol: number, endCol: number): void;
-  /** Fills in one cell. */
-  renderCell(context: CellRenderContext): void;
-  /** Extra rows and columns to draw beyond the viewport, to smooth scrolling. */
-  /**
-   * How many rows and columns to draw beyond the viewport.
-   *
-   * `all` draws every one there is — which is what a page that wants to print
-   * the grid, or search it with the browser's own find, has to have, and what
-   * makes a large grid unusable if switched on by accident.
-   */
-  overscan(): { rows: number | 'all'; cols: number | 'all' };
-}
 
-/** Marks a class as one the settings put there, so a later change can take it off. */
-const CUSTOM_CLASS_MARK = 'cm-custom-';
+/** A run of rows or of columns, both ends included. */
+type Span = { first: number; last: number };
 
-/** Which pane an element belongs to. */
-type PaneName = 'main' | 'top' | 'left' | 'corner' | 'bottom' | 'bottomLeft';
-
-interface Pane {
-  name: PaneName;
-  element: HTMLDivElement;
-  table: HTMLTableElement;
-  body: HTMLTableSectionElement;
-}
-
-/** The visible window, in indexes. */
-export interface Viewport {
-  firstRow: number;
-  lastRow: number;
-  firstCol: number;
-  lastCol: number;
-}
-
-const CLASS = {
-  root: 'cm-grid',
-  wrapper: 'cm-wrapper',
-  slot: 'cm-slot',
-  overlay: 'cm-overlay',
-  scroller: 'cm-scroller',
-  spacer: 'cm-spacer',
-  pane: 'cm-pane',
-  header: 'cm-header',
-  rowHeader: 'cm-row-header',
-  colHeader: 'cm-col-header',
-  corner: 'cm-corner',
-  cell: 'cm-cell',
-};
 
 /**
  * Draws a grid into a container.
@@ -157,14 +46,19 @@ const CLASS = {
 export class View {
   readonly root: HTMLDivElement;
   readonly scroller: HTMLDivElement;
+  /** The element holding the grid and everything around it. */
+  readonly wrapper: HTMLElement;
+  /** The layer floating UI is drawn in, over the grid. */
+  readonly overlay: HTMLElement;
+  /** The slots around the grid. */
+  readonly layout: LayoutManager;
 
   #model: ViewModel;
   #spacer: HTMLDivElement;
   #panes: Record<PaneName, Pane>;
+  #chrome: Chrome;
   #viewport: Viewport = { firstRow: 0, lastRow: -1, firstCol: 0, lastCol: -1 };
   #frame: number | null = null;
-  /** The custom properties the current theme set, so the next one can clear them. */
-  #themeProperties: string[] = [];
   #document: Document;
 
   constructor(container: HTMLElement, model: ViewModel) {
@@ -172,7 +66,6 @@ export class View {
     this.#document = container.ownerDocument;
 
     this.root = this.#element('div', CLASS.root);
-    this.#applyChrome();
     this.root.style.position = 'relative';
     this.root.style.overflow = 'hidden';
 
@@ -189,12 +82,12 @@ export class View {
     this.scroller.appendChild(this.#spacer);
 
     this.#panes = {
-      main: this.#createPane('main'),
-      top: this.#createPane('top'),
-      left: this.#createPane('left'),
-      corner: this.#createPane('corner'),
-      bottom: this.#createPane('bottom'),
-      bottomLeft: this.#createPane('bottomLeft'),
+      main: createPane(this.#document, 'main'),
+      top: createPane(this.#document, 'top'),
+      left: createPane(this.#document, 'left'),
+      corner: createPane(this.#document, 'corner'),
+      bottom: createPane(this.#document, 'bottom'),
+      bottomLeft: createPane(this.#document, 'bottomLeft'),
     };
     // Frozen panes sit above the scrolling one, so their cells win a click.
     for (const name of ['main', 'left', 'top', 'corner', 'bottom', 'bottomLeft'] as const) {
@@ -220,24 +113,14 @@ export class View {
     this.layout = new LayoutManager(slots, this.overlay);
 
     container.appendChild(this.wrapper);
-    this.scroller.addEventListener('scroll', this.#onScroll);
-    this.scroller.addEventListener(
-      'wheel',
-      (event) => {
-        if (this.#model.preventWheel?.()) {
-          event.preventDefault();
-        }
-      },
-      { passive: false },
-    );
-  }
+    // Once the wrapper is in the page, so that a grid told to stay inside its
+    // parent can measure that parent on the first pass rather than the second.
+    this.#chrome = new Chrome(this.root, this.wrapper, model);
+    this.#chrome.apply();
 
-  /** The element holding the grid and everything around it. */
-  readonly wrapper!: HTMLElement;
-  /** The layer floating UI is drawn in, over the grid. */
-  readonly overlay!: HTMLElement;
-  /** The slots around the grid. */
-  readonly layout!: LayoutManager;
+    this.scroller.addEventListener('scroll', this.#onScroll);
+    this.scroller.addEventListener('wheel', this.#onWheel, { passive: false });
+  }
 
   /** The window currently drawn. */
   get viewport(): Viewport {
@@ -255,29 +138,26 @@ export class View {
 
   /** Scrolls so a cell is inside the viewport, moving as little as possible. */
   scrollTo(row: number, col: number): void {
-    const rows = this.#model.rowSizes();
-    const cols = this.#model.colSizes();
-    const headerWidth = this.#model.rowHeaderWidth();
-    const headerHeight = this.#model.colHeaderHeight();
-    const frozenHeight = this.#frozenHeight();
-    const frozenWidth = this.#frozenWidth();
+    const metrics = measure(this.#model);
 
-    const top = rows.offsetOf(row);
-    const bottom = top + rows.sizeOf(row);
-    const visibleTop = this.scroller.scrollTop + frozenHeight;
-    const visibleBottom = this.scroller.scrollTop + this.scroller.clientHeight - headerHeight;
+    const top = metrics.rows.offsetOf(row);
+    const bottom = top + metrics.rows.sizeOf(row);
+    const visibleTop = this.scroller.scrollTop + metrics.frozenHeight;
+    const visibleBottom =
+      this.scroller.scrollTop + this.scroller.clientHeight - metrics.headerHeight;
     if (top < visibleTop) {
-      this.scroller.scrollTop = Math.max(top - frozenHeight, 0);
+      this.scroller.scrollTop = Math.max(top - metrics.frozenHeight, 0);
     } else if (bottom > visibleBottom) {
       this.scroller.scrollTop += bottom - visibleBottom;
     }
 
-    const left = cols.offsetOf(col);
-    const right = left + cols.sizeOf(col);
-    const visibleLeft = this.scroller.scrollLeft + frozenWidth;
-    const visibleRight = this.scroller.scrollLeft + this.scroller.clientWidth - headerWidth;
+    const left = metrics.cols.offsetOf(col);
+    const right = left + metrics.cols.sizeOf(col);
+    const visibleLeft = this.scroller.scrollLeft + metrics.frozenWidth;
+    const visibleRight =
+      this.scroller.scrollLeft + this.scroller.clientWidth - metrics.headerWidth;
     if (left < visibleLeft) {
-      this.scroller.scrollLeft = Math.max(left - frozenWidth, 0);
+      this.scroller.scrollLeft = Math.max(left - metrics.frozenWidth, 0);
     } else if (right > visibleRight) {
       this.scroller.scrollLeft += right - visibleRight;
     }
@@ -286,118 +166,64 @@ export class View {
 
   /** Draws, or redraws, the visible window. */
   render(): void {
-    this.#applyChrome();
-    const rows = this.#model.rowSizes();
-    const cols = this.#model.colSizes();
-    const headerWidth = this.#model.rowHeaderWidth();
-    const headerHeight = this.#model.colHeaderHeight();
-    const fixedRows = Math.min(this.#model.fixedRowsTop(), this.#model.rowCount());
-    const fixedCols = Math.min(this.#model.fixedColumnsStart(), this.#model.colCount());
+    this.#chrome.apply();
+    const metrics = measure(this.#model);
+    const scroll = this.#scrollState();
 
-    this.#spacer.style.width = `${cols.total + headerWidth}px`;
-    this.#spacer.style.height = `${rows.total + headerHeight}px`;
+    this.#spacer.style.width = `${metrics.cols.total + metrics.headerWidth}px`;
+    this.#spacer.style.height = `${metrics.rows.total + metrics.headerHeight}px`;
 
-    const frozenHeight = this.#frozenHeight();
-    const frozenWidth = this.#frozenWidth();
+    const viewport = viewportOf(this.#model, metrics, scroll);
+    this.#viewport = viewport;
 
-    // The scrolling pane starts after the frozen rows and columns, and its
-    // window is measured from where the frozen area ends.
-    const viewHeight = Math.max(this.scroller.clientHeight - headerHeight - frozenHeight, 0);
-    const viewWidth = Math.max(this.scroller.clientWidth - headerWidth - frozenWidth, 0);
-    const overscan = this.#model.overscan();
+    const needed = fetchRange(metrics, viewport);
+    this.#model.prepare(needed.startRow, needed.endRow, needed.startCol, needed.endCol);
 
-    const rowRange = rows.rangeAt(this.scroller.scrollTop + frozenHeight, viewHeight);
-    const colRange = cols.rangeAt(this.scroller.scrollLeft + frozenWidth, viewWidth);
+    const { bottomFrozen } = metrics;
+    placePanes(this.#panes, metrics, scroll);
 
-    const firstRow =
-      overscan.rows === 'all' ? fixedRows : Math.max(rowRange.first - overscan.rows, fixedRows);
-    const lastRow =
-      overscan.rows === 'all'
-        ? this.#model.rowCount() - 1
-        : Math.min(rowRange.last + overscan.rows, this.#model.rowCount() - 1);
-    const firstCol =
-      overscan.cols === 'all' ? fixedCols : Math.max(colRange.first - overscan.cols, fixedCols);
-    const lastCol =
-      overscan.cols === 'all'
-        ? this.#model.colCount() - 1
-        : Math.min(colRange.last + overscan.cols, this.#model.colCount() - 1);
+    const frozenRows: Span = { first: 0, last: metrics.fixedRows - 1 };
+    const frozenCols: Span = { first: 0, last: metrics.fixedCols - 1 };
+    const rows: Span = { first: viewport.firstRow, last: viewport.lastRow };
+    const cols: Span = { first: viewport.firstCol, last: viewport.lastCol };
 
-    this.#viewport = { firstRow, lastRow, firstCol, lastCol };
-
-    // One fetch covers every pane, so the frozen rows do not cost a second
-    // round trip to the engine.
-    this.#model.prepare(
-      Math.min(firstRow, 0),
-      Math.max(lastRow, fixedRows - 1),
-      Math.min(firstCol, 0),
-      Math.max(lastCol, fixedCols - 1),
-    );
-
-    const bottomFrozen = this.#bottomRange();
-    this.#layoutPanes(headerWidth, headerHeight, frozenWidth, frozenHeight, bottomFrozen);
-
-    this.#drawPane(this.#panes.corner, 0, fixedRows - 1, 0, fixedCols - 1, true, true);
-    this.#drawPane(this.#panes.top, 0, fixedRows - 1, firstCol, lastCol, true, false);
-    this.#drawPane(this.#panes.left, firstRow, lastRow, 0, fixedCols - 1, false, true);
-    this.#drawPane(this.#panes.main, firstRow, lastRow, firstCol, lastCol, false, false);
+    this.#draw(this.#panes.corner, metrics, frozenRows, frozenCols, true, true);
+    this.#draw(this.#panes.top, metrics, frozenRows, cols, true, false);
+    this.#draw(this.#panes.left, metrics, rows, frozenCols, false, true);
+    this.#draw(this.#panes.main, metrics, rows, cols, false, false);
     if (bottomFrozen) {
-      this.#model.prepare(bottomFrozen.first, bottomFrozen.last, firstCol, lastCol);
-      this.#drawPane(
-        this.#panes.bottomLeft,
-        bottomFrozen.first,
-        bottomFrozen.last,
-        0,
-        fixedCols - 1,
-        false,
-        true,
-      );
-      this.#drawPane(
-        this.#panes.bottom,
-        bottomFrozen.first,
-        bottomFrozen.last,
-        firstCol,
-        lastCol,
-        false,
-        false,
-      );
+      this.#model.prepare(bottomFrozen.first, bottomFrozen.last, cols.first, cols.last);
+      this.#draw(this.#panes.bottomLeft, metrics, bottomFrozen, frozenCols, false, true);
+      this.#draw(this.#panes.bottom, metrics, bottomFrozen, cols, false, false);
     } else {
       this.#panes.bottom.body.replaceChildren();
       this.#panes.bottomLeft.body.replaceChildren();
     }
   }
 
-  /**
-   * The rows frozen at the bottom, or `null` when none are.
-   *
-   * They come off the end of the sheet, not off the top, so the range moves
-   * whenever the sheet grows — which is what makes a totals row stay under the
-   * data rather than under wherever row 20 happens to be.
-   */
-  #bottomRange(): { first: number; last: number } | null {
-    const count = Math.min(this.#model.fixedRowsBottom?.() ?? 0, this.#model.rowCount());
-    if (count <= 0) {
-      return null;
-    }
-    return { first: this.#model.rowCount() - count, last: this.#model.rowCount() - 1 };
-  }
-
-  /** How tall the bottom frozen area is. */
-  #bottomHeight(): number {
-    const range = this.#bottomRange();
-    if (!range) {
-      return 0;
-    }
-    const rows = this.#model.rowSizes();
-    let total = 0;
-    for (let row = range.first; row <= range.last; row += 1) {
-      total += rows.sizeOf(row);
-    }
-    return total;
+  #draw(
+    pane: Pane,
+    metrics: Metrics,
+    rows: Span,
+    cols: Span,
+    colHeader: boolean,
+    rowHeader: boolean,
+  ): void {
+    const area = {
+      firstRow: rows.first,
+      lastRow: rows.last,
+      firstCol: cols.first,
+      lastCol: cols.last,
+      colHeader,
+      rowHeader,
+    };
+    drawPane(pane, area, metrics, this.#model, this.#document);
   }
 
   /** Releases the DOM and the listeners. */
   destroy(): void {
     this.scroller.removeEventListener('scroll', this.#onScroll);
+    this.scroller.removeEventListener('wheel', this.#onWheel);
     if (this.#frame !== null) {
       cancelAnimationFrame(this.#frame);
     }
@@ -435,270 +261,13 @@ export class View {
     return null;
   }
 
-  #frozenHeight(): number {
-    const rows = this.#model.rowSizes();
-    const fixed = Math.min(this.#model.fixedRowsTop(), this.#model.rowCount());
-    return rows.offsetOf(fixed);
-  }
-
-  #frozenWidth(): number {
-    const cols = this.#model.colSizes();
-    const fixed = Math.min(this.#model.fixedColumnsStart(), this.#model.colCount());
-    return cols.offsetOf(fixed);
-  }
-
-  #layoutPanes(
-    headerWidth: number,
-    headerHeight: number,
-    frozenWidth: number,
-    frozenHeight: number,
-    bottomFrozen: { first: number; last: number } | null,
-  ): void {
-    const place = (
-      pane: Pane,
-      left: number,
-      top: number,
-      width: string,
-      height: string,
-    ): void => {
-      const style = pane.element.style;
-      style.position = 'absolute';
-      style.left = `${left}px`;
-      style.top = `${top}px`;
-      style.width = width;
-      style.height = height;
-      style.overflow = 'hidden';
+  #scrollState(): ScrollState {
+    return {
+      top: this.scroller.scrollTop,
+      left: this.scroller.scrollLeft,
+      width: this.scroller.clientWidth,
+      height: this.scroller.clientHeight,
     };
-    place(this.#panes.corner, 0, 0, `${headerWidth + frozenWidth}px`, `${headerHeight + frozenHeight}px`);
-    place(this.#panes.top, headerWidth + frozenWidth, 0, 'auto', `${headerHeight + frozenHeight}px`);
-    place(this.#panes.left, 0, headerHeight + frozenHeight, `${headerWidth + frozenWidth}px`, 'auto');
-    place(this.#panes.main, headerWidth + frozenWidth, headerHeight + frozenHeight, 'auto', 'auto');
-    const bottomHeight = bottomFrozen ? this.#bottomHeight() : 0;
-    const bottomTop = Math.max(this.scroller.clientHeight - bottomHeight, 0);
-    place(this.#panes.bottomLeft, 0, bottomTop, `${headerWidth + frozenWidth}px`, `${bottomHeight}px`);
-    place(this.#panes.bottom, headerWidth + frozenWidth, bottomTop, 'auto', `${bottomHeight}px`);
-    this.#panes.bottom.element.hidden = !bottomFrozen;
-    this.#panes.bottomLeft.element.hidden = !bottomFrozen;
-
-    // Only the panes that scroll get an offset; the corner never moves.
-    this.#panes.top.table.style.transform = `translateX(${-this.scroller.scrollLeft}px)`;
-    this.#panes.left.table.style.transform = `translateY(${-this.scroller.scrollTop}px)`;
-    this.#panes.main.table.style.transform =
-      `translate(${-this.scroller.scrollLeft}px, ${-this.scroller.scrollTop}px)`;
-    // The bottom panes hold rows from the end of the sheet, so their contents
-    // are offset by where those rows actually sit rather than by the scroll.
-    if (bottomFrozen) {
-      const rows = this.#model.rowSizes();
-      const offset = rows.offsetOf(bottomFrozen.first) - headerHeight;
-      this.#panes.bottom.table.style.transform =
-        `translate(${-this.scroller.scrollLeft}px, ${-offset}px)`;
-      this.#panes.bottomLeft.table.style.transform = `translateY(${-offset}px)`;
-    }
-  }
-
-  /**
-   * Draws one pane.
-   *
-   * Rows are positioned absolutely rather than laid out by the table, so a
-   * pane that starts at row 5000 does not need 5000 empty rows above it.
-   */
-  #drawPane(
-    pane: Pane,
-    firstRow: number,
-    lastRow: number,
-    firstCol: number,
-    lastCol: number,
-    withColHeader: boolean,
-    withRowHeader: boolean,
-  ): void {
-    const rows = this.#model.rowSizes();
-    const cols = this.#model.colSizes();
-    const headerWidth = this.#model.rowHeaderWidth();
-    const headerHeight = this.#model.colHeaderHeight();
-
-    pane.body.replaceChildren();
-    pane.table.style.position = 'absolute';
-    pane.table.style.left = '0';
-    pane.table.style.top = '0';
-
-    if (withColHeader && headerHeight > 0) {
-      const levels = this.#model.colHeaderRows(firstCol, lastCol);
-      levels.forEach((cells, level) => {
-        const tr = this.#element('tr', CLASS.header) as unknown as HTMLTableRowElement;
-        tr.style.height = `${
-          this.#model.colHeaderLevelHeight?.(level) ?? headerHeight / Math.max(levels.length, 1)
-        }px`;
-        tr.dataset.level = String(level);
-        if (this.#model.ariaTags?.() !== false) {
-          tr.setAttribute('role', 'row');
-        }
-        if (withRowHeader && headerWidth > 0) {
-          const corner = this.#element('th', CLASS.corner);
-          corner.style.width = `${headerWidth}px`;
-          // The corner is one cell however deep the header is, so it spans the
-          // remaining rows rather than being repeated on each of them.
-          if (level === 0 && levels.length > 1) {
-            corner.rowSpan = levels.length;
-          }
-          if (level === 0 || levels.length === 1) {
-            tr.appendChild(corner);
-          }
-        }
-        for (const cell of cells) {
-          const th = this.#element('th', CLASS.colHeader);
-          if (this.#model.ariaTags?.() !== false) {
-            th.setAttribute('role', 'columnheader');
-            th.setAttribute('aria-colindex', String(cell.col + 1));
-          }
-          let width = 0;
-          for (let col = cell.col; col < cell.col + cell.colspan; col += 1) {
-            width += cols.sizeOf(col);
-          }
-          th.style.width = `${width}px`;
-          th.dataset.col = String(cell.col);
-          th.dataset.level = String(cell.level);
-          if (cell.colspan > 1) {
-            th.colSpan = cell.colspan;
-          }
-          th.textContent = cell.label !== '' ? cell.label : columnLetters(cell.col);
-          this.#model.renderColHeader?.(th, cell);
-          tr.appendChild(th);
-        }
-        pane.body.appendChild(tr);
-      });
-    }
-
-    const aria = this.#model.ariaTags?.() !== false;
-    for (let row = firstRow; row <= lastRow; row += 1) {
-      const tr = this.#document.createElement('tr');
-      tr.style.height = `${rows.sizeOf(row)}px`;
-      tr.dataset.row = String(row);
-      if (aria) {
-        tr.setAttribute('role', 'row');
-        // One-based, and counted in the whole table rather than in the window
-        // being drawn: a screen reader announcing "row 1 of 12" while the user
-        // is at row 400 would be worse than saying nothing.
-        tr.setAttribute('aria-rowindex', String(row + 1));
-      }
-      // Each pane draws its own slice, so the row is placed by its own offset
-      // within that slice rather than by its index in the sheet.
-      tr.style.position = 'absolute';
-      tr.style.top = `${rows.offsetOf(row) + (withColHeader ? 0 : headerHeight)}px`;
-      tr.style.left = '0';
-
-      if (withRowHeader && headerWidth > 0) {
-        const th = this.#element('th', CLASS.rowHeader);
-        if (aria) {
-          th.setAttribute('role', 'rowheader');
-        }
-        th.style.width = `${headerWidth}px`;
-        th.dataset.row = String(row);
-        th.textContent = this.#model.rowHeader(row) ?? String(row + 1);
-        this.#model.renderRowHeader?.(th, row);
-        tr.appendChild(th);
-      }
-      for (let col = firstCol; col <= lastCol; col += 1) {
-        const td = this.#document.createElement('td');
-        td.className = CLASS.cell;
-        td.style.width = `${cols.sizeOf(col)}px`;
-        td.dataset.row = String(row);
-        td.dataset.col = String(col);
-        if (aria) {
-          td.setAttribute('role', 'gridcell');
-          td.setAttribute('aria-colindex', String(col + 1));
-        }
-        this.#model.renderCell({ row, col, td });
-        tr.appendChild(td);
-      }
-      pane.body.appendChild(tr);
-    }
-
-    // The header row is in normal flow; the data rows are absolute, so the
-    // table needs an explicit height to hold them.
-    pane.table.style.height = `${rows.total + headerHeight}px`;
-    pane.table.style.width = `${cols.total + headerWidth}px`;
-  }
-
-  /**
-   * Puts the language direction, the theme and the ARIA role on the root.
-   *
-   * Re-applied on every render rather than once at construction, because all
-   * three are settings and settings change.
-   */
-  #applyChrome(): void {
-    this.#applySize();
-    const direction = this.#model.direction?.() ?? 'ltr';
-    this.root.dir = direction;
-    this.root.classList.toggle(`${CLASS.root}--rtl`, direction === 'rtl');
-
-    // Off with the last theme's classes and properties before the next one's
-    // go on: a theme that set a colour the new one does not would otherwise
-    // leave that colour behind.
-    for (const existing of [...this.root.classList]) {
-      if (existing.startsWith('cm-theme-') || existing.startsWith('ht-theme-') ||
-          existing.startsWith('cm-density-')) {
-        this.root.classList.remove(existing);
-      }
-    }
-    for (const property of [...this.#themeProperties]) {
-      this.root.style.removeProperty(property);
-    }
-    this.#themeProperties = [];
-
-    const theme = this.#model.theme?.();
-    if (theme) {
-      this.root.classList.add(...theme.classNames);
-      for (const [name, value] of Object.entries(theme.properties)) {
-        const property = `--ht-${name}`;
-        this.root.style.setProperty(property, value);
-        this.#themeProperties.push(property);
-      }
-    }
-    // A marker class records which classes came from the settings, so changing
-    // the setting takes exactly those off again and leaves the grid's own —
-    // and anything the page added itself — alone.
-    for (const existing of [...this.root.classList]) {
-      if (existing.startsWith(CUSTOM_CLASS_MARK)) {
-        this.root.classList.remove(existing, existing.slice(CUSTOM_CLASS_MARK.length));
-      }
-    }
-    for (const name of this.#model.tableClassName?.() ?? []) {
-      this.root.classList.add(name, `${CUSTOM_CLASS_MARK}${name}`);
-    }
-    if (this.#model.ariaTags?.() !== false) {
-      this.root.setAttribute('role', 'grid');
-      this.root.setAttribute('aria-rowcount', String(this.#model.rowCount()));
-      this.root.setAttribute('aria-colcount', String(this.#model.colCount()));
-    } else {
-      this.root.removeAttribute('role');
-      this.root.removeAttribute('aria-rowcount');
-      this.root.removeAttribute('aria-colcount');
-    }
-  }
-
-  /**
-   * Sizes the wrapper from the settings.
-   *
-   * Unset means the container decides, which is what a page laying the grid out
-   * with CSS expects. `preventOverflow` caps the grid at its parent instead, for
-   * a parent that has a size of its own and means it.
-   */
-  #applySize(): void {
-    const size = this.#model.size?.();
-    if (!size || !this.wrapper) {
-      return;
-    }
-    this.wrapper.style.width = size.width ?? '';
-    this.wrapper.style.height = size.height ?? '';
-    const parent = this.wrapper.parentElement;
-    if (size.preventOverflow && parent) {
-      const limit = size.preventOverflow === 'horizontal' ? 'maxWidth' : 'maxHeight';
-      const from = size.preventOverflow === 'horizontal' ? parent.clientWidth : parent.clientHeight;
-      this.wrapper.style[limit] = `${from}px`;
-    } else {
-      this.wrapper.style.maxWidth = '';
-      this.wrapper.style.maxHeight = '';
-    }
   }
 
   #onScroll = (): void => {
@@ -713,19 +282,16 @@ export class View {
     });
   };
 
-  #createPane(name: PaneName): Pane {
-    const element = this.#element('div', `${CLASS.pane} ${CLASS.pane}--${name}`);
-    const table = this.#document.createElement('table');
-    table.className = 'cm-table';
-    const body = this.#document.createElement('tbody');
-    table.appendChild(body);
-    element.appendChild(table);
-    return { name, element, table, body };
-  }
+  #onWheel = (event: WheelEvent): void => {
+    if (this.#model.preventWheel?.()) {
+      event.preventDefault();
+    }
+  };
 
-  #element(tag: string, className: string): HTMLDivElement & HTMLTableCellElement {
-    const element = this.#document.createElement(tag);
-    element.className = className;
-    return element as HTMLDivElement & HTMLTableCellElement;
+  #element<K extends keyof HTMLElementTagNameMap>(
+    tag: K,
+    className: string,
+  ): HTMLElementTagNameMap[K] {
+    return createElement(this.#document, tag, className);
   }
 }

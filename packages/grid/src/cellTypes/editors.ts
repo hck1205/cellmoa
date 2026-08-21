@@ -7,6 +7,7 @@
  * whether it came from a keyboard or a file.
  */
 
+import { optionsOf } from './options.js';
 import type { CellEditor, EditorContext, EditorInstance } from './types.js';
 
 /**
@@ -78,7 +79,10 @@ export const textEditor: CellEditor = (context) => {
         return true;
       }
       if (event.key === 'Enter' || event.key === 'Tab') {
-        // Alt+Enter is a line break in a spreadsheet, not a commit.
+        // Alt+Enter asks for a line break, not a commit. A single-line input
+        // has nowhere to put one — `type: 'textarea'` is the editor that has —
+        // but writing the cell on a keystroke that meant something else would
+        // still be wrong.
         if (event.key === 'Enter' && event.altKey) {
           return false;
         }
@@ -153,8 +157,8 @@ export const textareaEditor: CellEditor = (context) => {
         context.cancel();
         return true;
       }
-      // In a multi-line editor plain Enter inserts a line; only a modified one
-      // commits.
+      // A modified Enter is left to the textarea, which is the only way to put
+      // a line into a cell that is meant to hold a paragraph.
       if (event.key === 'Enter' && !event.altKey && !event.ctrlKey && !event.metaKey) {
         context.commit(area.value, moveFor(event));
         return true;
@@ -168,28 +172,12 @@ export const textareaEditor: CellEditor = (context) => {
   };
 };
 
-/** The values a list editor offers. */
-function optionsOf(context: EditorContext): string[] {
-  const source = context.meta.source;
-  if (Array.isArray(source)) {
-    return source.map(String);
-  }
-  const selectOptions = context.meta.selectOptions;
-  if (Array.isArray(selectOptions)) {
-    return selectOptions.map(String);
-  }
-  if (selectOptions && typeof selectOptions === 'object') {
-    return Object.values(selectOptions as Record<string, unknown>).map(String);
-  }
-  return [];
-}
-
 /** A native `<select>`, for a short fixed list. */
 export const selectEditor: CellEditor = (context) => {
   const document = context.parent.ownerDocument;
   const select = document.createElement('select');
   select.className = 'cm-editor cm-editor--select';
-  for (const option of optionsOf(context)) {
+  for (const option of optionsOf(context.meta)) {
     const element = document.createElement('option');
     element.value = option;
     element.textContent = option;
@@ -246,7 +234,7 @@ export const autocompleteEditor: CellEditor = (context) => {
   wrapper.appendChild(list);
   context.parent.appendChild(wrapper);
 
-  const all = optionsOf(context);
+  const all = optionsOf(context.meta);
   const shouldFilter = context.meta.filter !== false;
   const caseSensitive = context.meta.filteringCaseSensitive === true;
   // The list is trimmed to the cell's width by default, which truncates long
@@ -359,7 +347,7 @@ export const multiSelectEditor: CellEditor = (context) => {
   const limit =
     typeof context.meta.maxSelections === 'number' ? context.meta.maxSelections : Infinity;
 
-  let options = optionsOf(context);
+  let options = optionsOf(context.meta);
   const sort = context.meta.sourceSortFunction;
   if (typeof sort === 'function') {
     options = [...options].sort(sort as (a: string, b: string) => number);

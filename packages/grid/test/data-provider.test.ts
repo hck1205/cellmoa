@@ -428,16 +428,125 @@ describe('writing', () => {
     expect(onRowsRemove).not.toHaveBeenCalled();
   });
 
-  it('does not create rows past maxRows', async () => {
+  it('measures maxRows against the dataset, not the page it is showing', async () => {
+    // `maxRows` limits the table. On a server-paged grid the loaded page is
+    // almost never the table, so counting the page capped inserts at the page
+    // size — ten rows on screen and `maxRows: 10` refused every insert, however
+    // few rows the server actually held.
     const onRowsCreate = vi.fn();
     const grid = await makeGrid({
       startRows: 3,
       startCols: 1,
-      maxRows: 3,
-      dataProvider: { fetchRows: () => ({ rows: [], totalRows: 0 }), onRowsCreate },
+      maxRows: 10,
+      pagination: { pageSize: 3 },
+      dataProvider: {
+        fetchRows: () => ({ rows: [['a'], ['b'], ['c']], totalRows: 4 }),
+        onRowsCreate,
+      },
     });
+    await providerOf(grid).fetchData();
+    // The page is full; the dataset is not.
+    await providerOf(grid).createRows({ position: 'below', rowsAmount: 1 });
+    expect(onRowsCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not create rows once the dataset has reached maxRows', async () => {
+    const onRowsCreate = vi.fn();
+    const grid = await makeGrid({
+      startRows: 3,
+      startCols: 1,
+      maxRows: 4,
+      pagination: { pageSize: 3 },
+      dataProvider: {
+        fetchRows: () => ({ rows: [['a'], ['b'], ['c']], totalRows: 4 }),
+        onRowsCreate,
+      },
+    });
+    await providerOf(grid).fetchData();
     await providerOf(grid).createRows({ position: 'below', rowsAmount: 1 });
     expect(onRowsCreate).not.toHaveBeenCalled();
+  });
+});
+
+describe('when the ground shifts underneath it', () => {
+  it('reports a failed refetch after a write that the server accepted', async () => {
+    // The write landed; the reader is now looking at values the server has
+    // moved on from. `fetchData` reports its own failure and resolves rather
+    // than throwing, so the old `try`/`catch` around it caught nothing and this
+    // never fired.
+    const errors: unknown[] = [];
+    let written = false;
+    const grid = await makeGrid({
+      startRows: 2,
+      startCols: 2,
+      colHeaders: ['id', 'name'],
+      dataProvider: {
+        rowId: 'id',
+        fetchRows: () => {
+          if (written) {
+            return Promise.reject(new Error('gone'));
+          }
+          return { rows: [['7', 'Ada']], totalRows: 1 };
+        },
+        onRowsUpdate: () => {
+          written = true;
+        },
+      },
+    });
+    await providerOf(grid).fetchData();
+    grid.addHook('afterRowsMutationError', (_v: unknown, op: unknown) => errors.push(op));
+
+    grid.setDataAtCell(0, 1, 'Grace', 'edit');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(errors).toEqual(['update']);
+  });
+
+  it('shows one fetch failure at a time, not one per attempt', async () => {
+    const grid = await makeGrid({
+      notification: true,
+      dataProvider: { fetchRows: () => Promise.reject(new Error('network down')) },
+    });
+    const plugin = providerOf(grid);
+    await plugin.fetchData();
+    await plugin.fetchData();
+    await plugin.fetchData();
+    // A grid that cannot reach its server would otherwise pile up a permanent
+    // toast per page turn, sort and refetch.
+    expect(grid.view?.overlay.querySelectorAll('.cm-notification')).toHaveLength(1);
+  });
+
+  it('drops queued mutations when it is switched off', async () => {
+    const calls: string[] = [];
+    const grid = await makeGrid({
+      startRows: 2,
+      startCols: 2,
+      dataProvider: {
+        fetchRows: () => ({ rows: [], totalRows: 0 }),
+        onRowsRemove: async (ids: unknown[]) => {
+          calls.push(String(ids[0]));
+          await new Promise((resolve) => setTimeout(resolve, 5));
+        },
+      },
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const plugin = providerOf(grid);
+    const first = plugin.removeRows(['a']);
+    const queued = plugin.removeRows(['b']);
+    // The queue runs its work in a microtask, so a tick is what puts the first
+    // one on the wire and leaves the second waiting behind it.
+    await Promise.resolve();
+    // Switched off by a conflicting setting rather than by clearing its own:
+    // the configuration is still there, so nothing but the plugin's own state
+    // stands between the queued mutation and the server.
+    grid.updateSettings({ manualRowMove: true });
+    expect(grid.isPluginEnabled('dataProvider')).toBe(false);
+    await Promise.allSettled([first, queued]);
+    warn.mockRestore();
+
+    // The first was already in the air and cannot be recalled; the second had
+    // not been asked for, and must not be asked for on behalf of a plugin that
+    // is gone.
+    expect(calls).toEqual(['a']);
   });
 });
 
