@@ -16,12 +16,14 @@
     "./themes": {
       "types": "./dist/themes/index.d.ts",
       "default": "./dist/themes/index.js"
-    }
+    },
+    "./wasm": "./src/wasm/cellmoa_wasm.wasm"
   },
   "files": [
     "dist",
     "src/style.css",
-    "src/themes/themes.css"
+    "src/themes/themes.css",
+    "src/wasm"
   ],
   "scripts": {
     "build:wasm": "cargo build -p cellmoa-wasm --target wasm32-unknown-unknown --release && mkdir -p src/wasm && cp ../../target/wasm32-unknown-unknown/release/cellmoa_wasm.wasm src/wasm/",

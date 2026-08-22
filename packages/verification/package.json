@@ -1,0 +1,26 @@
+{
+  "name": "@cellmoa/verification",
+  "version": "0.1.0",
+  "private": true,
+  "description": "cellmoa beside Handsontable, in a real browser",
+  "type": "module",
+  "scripts": {
+    "dev": "ladle serve",
+    "build": "ladle build",
+    "preview": "ladle preview",
+    "check": "node check.mjs"
+  },
+  "dependencies": {
+    "@cellmoa/grid": "file:../grid",
+    "handsontable": "^18.0.0"
+  },
+  "devDependencies": {
+    "@ladle/react": "^5.0.3",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "playwright": "^1.56.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^5.9.0"
+  }
+}
