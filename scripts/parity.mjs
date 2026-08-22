@@ -151,6 +151,47 @@ const DIVERGENT = {
 const methodsPresent = CORE_METHODS.filter(hasMethod);
 const methodsMissing = CORE_METHODS.filter((name) => !hasMethod(name));
 
+/**
+ * The hooks a handler can actually be called on.
+ *
+ * The table used to say "hooks 253 ✅ — every name registered", which was true
+ * and useless: a hook whose name appears nowhere but the list cannot be fired,
+ * so a caller who registers a handler on it gets silence. Registering the name
+ * is the cheap half.
+ *
+ * A hook counts as reachable if its name appears anywhere in `src/` outside
+ * `hooks.ts`. That is deliberately generous — it counts a name in a ternary or
+ * built from a template prefix, which a stricter test would miss — so a hook
+ * this reports as dead really is dead.
+ */
+function hookReachability() {
+  const declaration = sources.get('hooks.ts') ?? '';
+  const names = [...new Set([...declaration.matchAll(/'([a-zA-Z0-9]+)'/g)].map((m) => m[1]))].filter(
+    (name) => /^(after|before|modify)[A-Z]/.test(name) || name === 'init',
+  );
+
+  const body = [...sources.entries()]
+    .filter(([path]) => path !== 'hooks.ts')
+    .map(([, text]) => text)
+    .join('\n');
+
+  // `after${this.hookPrefix}Show` and its siblings, spelled out.
+  const templated = new Set();
+  for (const [, prefix] of body.matchAll(/hookPrefix\s*=\s*'(\w+)'/g)) {
+    for (const suffix of ['Show', 'Hide', 'Execute']) {
+      templated.add(`before${prefix}${suffix}`);
+      templated.add(`after${prefix}${suffix}`);
+    }
+  }
+
+  const dead = names.filter(
+    (name) => !templated.has(name) && !new RegExp(`\\b${name}\\b`).test(body),
+  );
+  return { declared: names.length, reachable: names.length - dead.length, dead };
+}
+
+const hooks = hookReachability();
+
 const report = {
   settings: { declared: declared.length, read: read.length, unread: unread.length, missing: unread },
   methods: {
@@ -159,12 +200,17 @@ const report = {
     missing: methodsMissing,
     divergent: DIVERGENT,
   },
+  hooks: { declared: hooks.declared, reachable: hooks.reachable, dead: hooks.dead },
 };
 
 if (process.argv.includes('--json')) {
   console.log(JSON.stringify(report, null, 2));
 } else if (process.argv.includes('--missing')) {
-  const what = process.argv.includes('--methods') ? methodsMissing : unread;
+  const what = process.argv.includes('--hooks')
+    ? hooks.dead
+    : process.argv.includes('--methods')
+      ? methodsMissing
+      : unread;
   for (const name of what) {
     console.log(name);
   }
@@ -176,7 +222,9 @@ if (process.argv.includes('--json')) {
   for (const [name, why] of Object.entries(DIVERGENT)) {
     console.log(`          ${name}: ${why}`);
   }
+  const { declared: hd, reachable: hr } = report.hooks;
+  console.log(`hooks     ${hr}/${hd} reachable  (${hd - hr} declared that nothing can fire)`);
 }
 
-const failing = unread.length + methodsMissing.length;
+const failing = unread.length + methodsMissing.length + hooks.dead.length;
 process.exitCode = failing > 0 && process.argv.includes('--strict') ? 1 : 0;

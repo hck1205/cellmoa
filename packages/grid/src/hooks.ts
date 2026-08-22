@@ -100,10 +100,6 @@ export const EXTRA_HOOK_NAMES = [
   'afterVerify',
   /** A comparison against a snapshot finished. */
   'afterDiff',
-  /** A page of rows arrived from a data provider, or failed to. */
-  'beforeFetch',
-  'afterFetch',
-  'afterFetchError',
 ] as const;
 
 export type HookName = (typeof HOOK_NAMES)[number] | (typeof EXTRA_HOOK_NAMES)[number];
