@@ -293,6 +293,72 @@
   justify-content: center;
 }
 
+/* The two the reference documents. `solid` is the default. */
+.cm-dialog-overlay[data-background='solid'] {
+  background: var(--cm-cell-bg);
+}
+
+.cm-dialog-overlay[data-background='semi-transparent'] {
+  background: rgb(0 0 0 / 45%);
+}
+
+.cm-dialog-overlay[data-animation='on'] {
+  animation: cm-fade-in 120ms ease-out;
+}
+
+@keyframes cm-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+/* Someone who asked their system for less motion meant it. */
+@media (prefers-reduced-motion: reduce) {
+  .cm-dialog-overlay[data-animation='on'] {
+    animation: none;
+  }
+}
+
+/* `contentBackground: false` is for a dialog that draws its own surface. */
+.cm-dialog[data-content-background='false'] {
+  border: none;
+  background: none;
+  box-shadow: none;
+}
+
+.cm-dialog-title {
+  margin: 0 0 8px;
+  font-weight: 600;
+}
+
+.cm-dialog-description {
+  margin: 0;
+}
+
+.cm-dialog-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.cm-notification-title {
+  font-weight: 600;
+}
+
+.cm-empty-state-title {
+  font-weight: 600;
+}
+
+.cm-empty-state-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 .cm-dialog-overlay[data-background='dark'] {
   background: rgba(0, 0, 0, 0.45);
 }
@@ -324,22 +390,45 @@
   margin-top: 16px;
 }
 
-/* Transient messages, stacked in a corner. */
+/* Transient messages, stacked in whichever corner `position` names. */
 .cm-notifications {
   position: absolute;
-  right: 12px;
-  bottom: 12px;
   z-index: 150;
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.cm-notifications[data-position='top-start'] {
+  top: 12px;
+  left: 12px;
+  align-items: flex-start;
+}
+
+.cm-notifications[data-position='top-end'] {
+  top: 12px;
+  right: 12px;
+  align-items: flex-end;
+}
+
+.cm-notifications[data-position='bottom-start'] {
+  bottom: 12px;
+  left: 12px;
+  align-items: flex-start;
+}
+
+.cm-notifications[data-position='bottom-end'] {
+  bottom: 12px;
+  right: 12px;
   align-items: flex-end;
 }
 
 .cm-notification {
+  /* A column, because a toast with a title needs the title on its own line. */
   display: flex;
+  flex-direction: column;
   gap: 8px;
-  align-items: center;
+  align-items: stretch;
   max-width: 320px;
   padding: 8px 12px;
   border: 1px solid var(--cm-border);

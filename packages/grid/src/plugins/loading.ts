@@ -7,6 +7,7 @@
  * from the second.
  */
 
+import { PHRASE } from '../i18n/keys.js';
 import { BasePlugin, registerPlugin } from './base.js';
 
 export interface LoadingOptions {
@@ -70,11 +71,17 @@ export class Loading extends BasePlugin {
     this.update(options);
   }
 
-  /** Changes the message without disturbing the count. */
+  /**
+   * Changes the message without disturbing the count.
+   *
+   * The default comes from the dictionary rather than from here, so a grid set
+   * to another language does not cover itself with one English word at the
+   * moment it has nothing else to show.
+   */
   update(options: LoadingOptions): void {
     const text = this.#element?.querySelector('.cm-loading-message');
     if (text) {
-      text.textContent = options.message ?? 'Loading…';
+      text.textContent = options.message ?? this.grid.getTranslatedPhrase(PHRASE.LOADING_TITLE);
     }
   }
 

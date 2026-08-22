@@ -9,7 +9,6 @@ import type {
   Notification,
   StretchColumns,
 } from '../src/plugins/index.js';
-import { DEFAULT_EMPTY_MESSAGE, DEFAULT_FILTERED_MESSAGE } from '../src/plugins/index.js';
 import { mountGrid } from './helpers.js';
 import type { MountOptions } from './helpers.js';
 
@@ -119,7 +118,7 @@ describe('the notification plugin', () => {
     plugin.showMessage({ message: 'first', timeout: 0 });
     plugin.showMessage({ message: 'second', timeout: 0, type: 'error' });
 
-    expect(plugin.getQueueSize()).toBe(2);
+    expect(plugin.getVisibleCount()).toBe(2);
     expect(grid.view?.wrapper.querySelectorAll('.cm-notification')).toHaveLength(2);
     expect(grid.view?.wrapper.querySelector('.cm-notification--error')).not.toBeNull();
   });
@@ -129,7 +128,7 @@ describe('the notification plugin', () => {
     const plugin = grid.getPlugin('notification') as unknown as Notification;
     plugin.showMessage({ id: 'save', message: 'saving', timeout: 0 });
     plugin.showMessage({ id: 'save', message: 'saved', timeout: 0 });
-    expect(plugin.getQueueSize()).toBe(1);
+    expect(plugin.getVisibleCount()).toBe(1);
     expect(grid.view?.wrapper.querySelector('.cm-notification-text')?.textContent).toBe('saved');
   });
 
@@ -225,14 +224,14 @@ describe('the emptyDataState plugin', () => {
     const grid = await makeGrid({ emptyDataState: true, startRows: 0, minRows: 0 });
     const plugin = grid.getPlugin('emptyDataState') as unknown as EmptyDataState;
     expect(plugin.getReason()).toBe('empty');
-    expect(plugin.getMessage('empty')).toBe(DEFAULT_EMPTY_MESSAGE);
+    expect(plugin.getMessage('empty').title).toBe('No data available');
 
     const filtered = await makeGrid({ emptyDataState: true, minRows: 0, startRows: 3 });
     filtered.setDataAtCell(0, 0, 'x');
     filtered.rowIndex.trim([0, 1, 2]);
     const filteredPlugin = filtered.getPlugin('emptyDataState') as unknown as EmptyDataState;
     expect(filteredPlugin.getReason()).toBe('filtered');
-    expect(filteredPlugin.getMessage('filtered')).toBe(DEFAULT_FILTERED_MESSAGE);
+    expect(filteredPlugin.getMessage('filtered').title).toBe('No results found');
   });
 
   it('shows the message it was configured with', async () => {

@@ -64,6 +64,18 @@ export const PHRASE = {
   hideColumn: 'ContextMenu:items.hideColumn',
   showColumn: 'ContextMenu:items.showColumn',
 
+  LOADING_TITLE: 'Loading:title',
+
+  NOTIFICATION_CLOSE: 'Notification:buttons.close',
+
+  EMPTY_DATA_STATE_TITLE: 'EmptyDataState:title',
+  EMPTY_DATA_STATE_DESCRIPTION: 'EmptyDataState:description',
+  EMPTY_DATA_STATE_TITLE_FILTERS: 'EmptyDataState:title.filters',
+  EMPTY_DATA_STATE_DESCRIPTION_FILTERS: 'EmptyDataState:description.filters',
+  EMPTY_DATA_STATE_BUTTONS_FILTERS_RESET: 'EmptyDataState:buttons.filters.reset',
+  EMPTY_DATA_STATE_TITLE_LOADING: 'EmptyDataState:title.loading',
+  EMPTY_DATA_STATE_DESCRIPTION_LOADING: 'EmptyDataState:description.loading',
+
   DATA_PROVIDER_ERROR_FETCH: 'DataProvider:errors.fetch',
   DATA_PROVIDER_ERROR_CREATE: 'DataProvider:errors.create',
   DATA_PROVIDER_ERROR_UPDATE: 'DataProvider:errors.update',
