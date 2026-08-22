@@ -183,6 +183,8 @@ export class Grid {
   #rowSizes = new SizeMap(0, DEFAULT_ROW_HEIGHT);
   #colSizes = new SizeMap(0, DEFAULT_COLUMN_WIDTH);
   #destroyed = false;
+  #measuredRows = -1;
+  #measuredCols = -1;
   #renderSuspended = 0;
   #renderQueued = false;
   /**
@@ -231,6 +233,16 @@ export class Grid {
     );
 
     this.#meta.namesColumnsBy((col) => this.colToProp(col));
+    // A hidden row takes no room, which is the only way the renderer can know
+    // about hiding at all: it walks these sizes and nothing else.
+    this.#rowSizes.hides(
+      (row) => this.isRowHidden(row),
+      () => this.rowIndex.hasHidden,
+    );
+    this.#colSizes.hides(
+      (col) => this.isColumnHidden(col),
+      () => this.colIndex.hasHidden,
+    );
     this.#registerSettingHooks(settings);
     this.#selection.setNavigableHeaders(this.getSettings().navigableHeaders === true);
     this.#syncDimensions(true);
@@ -1924,6 +1936,7 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
     if (this.#destroyed) {
       return;
     }
+    this.#remeasureIfMoved();
     if (this.#renderSuspended > 0) {
       this.#renderQueued = true;
       return;
@@ -1931,6 +1944,28 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
     this.hooks.run('beforeRender', undefined);
     this.#view?.render();
     this.hooks.run('afterRender', undefined);
+  }
+
+  /**
+   * Drops the size maps' cached offsets when the index maps have changed.
+   *
+   * A hidden index measures zero, so the prefix sums the size map keeps are
+   * wrong the moment something is hidden, moved or trimmed. Asking the index
+   * maps for their version is O(1) and happens once a render; the alternative
+   * was for every caller that hides something to remember to say so, which is
+   * the kind of thing that gets forgotten by the next one.
+   */
+  #remeasureIfMoved(): void {
+    const rows = this.rowIndex.version;
+    const cols = this.colIndex.version;
+    if (rows !== this.#measuredRows) {
+      this.#measuredRows = rows;
+      this.#rowSizes.remeasure();
+    }
+    if (cols !== this.#measuredCols) {
+      this.#measuredCols = cols;
+      this.#colSizes.remeasure();
+    }
   }
 
   /** Holds off drawing until `resumeRender`, so a batch draws once. */

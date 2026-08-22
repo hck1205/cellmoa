@@ -148,6 +148,12 @@ export function drawPane(
   }
 
   for (let row = area.firstRow; row <= area.lastRow; row += 1) {
+    // A hidden row measures zero. Drawing it anyway would put an empty `<tr>`
+    // in the table for a screen reader to announce and for `:nth-child` to
+    // count, which is not what "hidden" means to either of them.
+    if (rows.sizeOf(row) === 0) {
+      continue;
+    }
     const tr = document.createElement('tr');
     tr.style.height = `${rows.sizeOf(row)}px`;
     tr.dataset.row = String(row);
@@ -176,6 +182,9 @@ export function drawPane(
       tr.appendChild(th);
     }
     for (let col = area.firstCol; col <= area.lastCol; col += 1) {
+      if (cols.sizeOf(col) === 0) {
+        continue;
+      }
       const td = document.createElement('td');
       td.className = CLASS.cell;
       td.style.width = `${cols.sizeOf(col)}px`;
@@ -229,14 +238,19 @@ function drawColHeader(
       }
     }
     for (const cell of cells) {
+      let width = 0;
+      for (let col = cell.col; col < cell.col + cell.colspan; col += 1) {
+        width += cols.sizeOf(col);
+      }
+      // Every column the header spans is hidden, so the header is too. A
+      // spanning header that still covers one visible column keeps its place.
+      if (width === 0) {
+        continue;
+      }
       const th = createElement(document, 'th', CLASS.colHeader);
       if (aria) {
         th.setAttribute('role', 'columnheader');
         th.setAttribute('aria-colindex', String(cell.col + 1));
-      }
-      let width = 0;
-      for (let col = cell.col; col < cell.col + cell.colspan; col += 1) {
-        width += cols.sizeOf(col);
       }
       th.style.width = `${width}px`;
       th.dataset.col = String(cell.col);
