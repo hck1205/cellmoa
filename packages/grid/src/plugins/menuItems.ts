@@ -14,7 +14,7 @@ import { PHRASE } from '../i18n/keys.js';
 // would go quietly out of date the first time one of these methods is renamed.
 import type { Comments } from './comments.js';
 import type { ColumnSorting } from './columnSorting.js';
-import type { CopyPaste } from './copyPaste.js';
+import type { CopyMode, CopyPaste } from './copyPaste.js';
 import type { ExportFile } from './exportFile.js';
 import type { HiddenColumns, HiddenRows } from './hiding.js';
 import type { ManualColumnFreeze } from './manualMove.js';
@@ -37,6 +37,9 @@ export const ITEM = {
   readOnly: 'make_read_only',
   alignment: 'alignment',
   copy: 'copy',
+  copyWithColumnHeaders: 'copy_with_column_headers',
+  copyWithColumnGroupHeaders: 'copy_with_column_group_headers',
+  copyColumnHeadersOnly: 'copy_column_headers_only',
   cut: 'cut',
   mergeCells: 'mergeCells',
   freezeColumn: 'freeze_column',
@@ -313,6 +316,36 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
         grid.emptySelectedCells('cut');
       },
     };
+
+    /**
+     * The three copies that carry headers.
+     *
+     * Each is disabled when the headers it would carry are not there — a
+     * grid with no column headers has nothing to copy with them, and an
+     * entry that runs and produces the same text as plain copy is worse
+     * than one that is visibly unavailable.
+     */
+    const withHeaders = (key: string, mode: CopyMode, phrase: string): MenuItem => ({
+      key,
+      name: () => grid.getTranslatedPhrase(phrase),
+      disabled: () => nothingSelected() || !clipboard.isHeaderModeAllowed(mode),
+      callback: () => void navigator.clipboard?.writeText(clipboard.getCopyableText(mode)),
+    });
+    items[ITEM.copyWithColumnHeaders] = withHeaders(
+      ITEM.copyWithColumnHeaders,
+      'with-column-headers',
+      PHRASE.copyWithHeaders,
+    );
+    items[ITEM.copyWithColumnGroupHeaders] = withHeaders(
+      ITEM.copyWithColumnGroupHeaders,
+      'with-all-column-headers',
+      PHRASE.copyWithGroupHeaders,
+    );
+    items[ITEM.copyColumnHeadersOnly] = withHeaders(
+      ITEM.copyColumnHeadersOnly,
+      'column-headers-only',
+      PHRASE.copyHeadersOnly,
+    );
   }
 
   if (enabled(grid, 'mergeCells')) {
@@ -440,7 +473,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
           {
             key: 'export_file:csv',
             name: () => grid.getTranslatedPhrase(PHRASE.exportCsv),
-            callback: () => exporter.downloadFile('csv', { columnHeaders: true }),
+            callback: () => exporter.downloadFile('csv', { colHeaders: true }),
           },
           {
             key: 'export_file:xlsx',

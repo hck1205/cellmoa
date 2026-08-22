@@ -15,6 +15,14 @@ export interface HidingSettings {
   rows?: number[];
   columns?: number[];
   indicators?: boolean;
+  /**
+   * Whether a hidden index takes part in a copy. Not yet consulted by anything.
+   *
+   * The exclusion has to happen where the rectangle is read — `CopyPaste`'s
+   * `#collect` — because that is the only place that knows which indexes a copy
+   * is walking over. It is named here rather than dropped so that the setting
+   * has one home when it is honoured.
+   */
   copyPasteEnabled?: boolean;
 }
 

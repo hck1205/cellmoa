@@ -173,7 +173,28 @@
 }
 
 /* The fold control on a collapsible nested header. */
-.cm-grid .cm-collapse {
+.cm-grid /* The edge a hidden row or column sits behind, so `indicators` shows where. */
+.cm-grid th.cm-after-hidden {
+  box-shadow: inset 0 2px 0 var(--cm-border);
+}
+
+.cm-grid th.cm-before-hidden {
+  box-shadow: inset 0 -2px 0 var(--cm-border);
+}
+
+.cm-grid th.cm-col-header.cm-after-hidden {
+  box-shadow: inset 2px 0 0 var(--cm-border);
+}
+
+.cm-grid th.cm-col-header.cm-before-hidden {
+  box-shadow: inset -2px 0 0 var(--cm-border);
+}
+
+.cm-pagination-size {
+  margin-inline-start: 8px;
+}
+
+.cm-collapse {
   float: right;
   width: 14px;
   height: 14px;

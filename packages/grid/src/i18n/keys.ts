@@ -53,6 +53,7 @@ export const PHRASE = {
   copy: 'ContextMenu:items.copy',
   copyWithHeaders: 'ContextMenu:items.copyWithHeaders',
   copyHeadersOnly: 'ContextMenu:items.copyHeadersOnly',
+  copyWithGroupHeaders: 'ContextMenu:items.copyWithGroupHeaders',
   cut: 'ContextMenu:items.cut',
 
   exportFile: 'ContextMenu:items.export',

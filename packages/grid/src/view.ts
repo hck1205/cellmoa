@@ -248,6 +248,38 @@ export class View {
     return null;
   }
 
+  /**
+   * The header an element belongs to, or `null`.
+   *
+   * A column header carries `data-col` and no `data-row`, and a row header the
+   * other way round, so `cellAt` — which needs both — reports nothing for
+   * either. That is why clicking a column header reached no handler at all:
+   * the grid bailed before firing `afterOnCellMouseDown`, and click-to-sort,
+   * which listens for exactly that, could not be reached in a real browser.
+   *
+   * The missing axis is reported as `-1`, which is how the reference numbers a
+   * header too.
+   */
+  headerAt(target: EventTarget | null): { row: number; col: number } | null {
+    let node = target as HTMLElement | null;
+    while (node && node !== this.root) {
+      const row = node.dataset?.row;
+      const col = node.dataset?.col;
+      if (row !== undefined && col !== undefined) {
+        // A cell, not a header. `cellAt` is the question being asked here.
+        return null;
+      }
+      if (col !== undefined && node.tagName === 'TH') {
+        return { row: -1, col: Number(col) };
+      }
+      if (row !== undefined && node.tagName === 'TH') {
+        return { row: Number(row), col: -1 };
+      }
+      node = node.parentElement;
+    }
+    return null;
+  }
+
   /** The rendered element for a cell, if it is on screen. */
   elementAt(row: number, col: number): HTMLTableCellElement | null {
     for (const pane of Object.values(this.#panes)) {

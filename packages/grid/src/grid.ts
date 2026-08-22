@@ -2882,6 +2882,13 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
       }
       const coords = view.cellAt(event.target);
       if (!coords) {
+        // A header is not a cell, and something has to hear the click: sorting
+        // by clicking a column header listens for `afterOnCellMouseDown`, and
+        // the handler used to return here without firing it.
+        const header = view.headerAt(event.target);
+        if (header) {
+          this.#onHeaderMouseDown(event as MouseEvent, header);
+        }
         return;
       }
       if (this.#editor) {
@@ -2956,6 +2963,28 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
    * page outlives the grid, so a listener left on it keeps a destroyed grid
    * alive and answering.
    */
+  /**
+   * A click on a row or column header.
+   *
+   * Selecting the row or column is what every spreadsheet does, and the hooks
+   * fire either way so that a plugin listening for a header click — sorting is
+   * the one that matters — is actually called.
+   */
+  #onHeaderMouseDown(event: MouseEvent, coords: { row: number; col: number }): void {
+    if (this.#editor) {
+      this.closeEditor(true);
+    }
+    if (this.hooks.allows('beforeOnCellMouseDown', event, coords) === false) {
+      return;
+    }
+    if (coords.row === -1 && coords.col >= 0) {
+      this.selectColumns(coords.col);
+    } else if (coords.col === -1 && coords.row >= 0) {
+      this.selectRows(coords.row);
+    }
+    this.hooks.run('afterOnCellMouseDown', undefined, event, coords);
+  }
+
   #onDocument(type: string, handler: (event: Event) => void): void {
     const target = this.#view?.root.ownerDocument;
     if (!target) {

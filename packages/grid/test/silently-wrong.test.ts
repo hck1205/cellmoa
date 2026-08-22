@@ -284,3 +284,54 @@ describe('the checkbox toggle and the renderer', () => {
     expect(grid.getCellMeta(0, 0).type).toBe('intl-date');
   });
 });
+
+describe('clicking a column header', () => {
+  it('sorts, which it could not do through a real DOM before', async () => {
+    // `cellAt` needs both `data-row` and `data-col`; a header carries one, so
+    // the mousedown handler returned before firing anything. Click-to-sort
+    // listens for `afterOnCellMouseDown` and was therefore unreachable — the
+    // plugin's own tests drove the hook directly and could not see this.
+    const { grid } = await mountGrid({ startRows: 3, startCols: 1, columnSorting: true });
+    grid.setDataAtCells([
+      [0, 0, 'c'],
+      [1, 0, 'a'],
+      [2, 0, 'b'],
+    ]);
+    grid.render();
+
+    const header = grid.view!.root.querySelector('th.cm-col-header') as HTMLElement;
+    expect(header, 'the header is drawn').toBeTruthy();
+    header.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+
+    expect(grid.getDataAtCell(0, 0)).toBe('a');
+  });
+
+  it('selects the column', async () => {
+    const { grid } = await mountGrid({ startRows: 3, startCols: 3 });
+    grid.render();
+    const headers = grid.view!.root.querySelectorAll('th.cm-col-header');
+    (headers[1] as HTMLElement).dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    expect(grid.getSelectedLast()).toEqual([0, 1, 2, 1]);
+  });
+
+  it('reports the header as row -1, the way the reference numbers one', async () => {
+    const seen: Array<{ row: number; col: number }> = [];
+    const { grid } = await mountGrid({ startRows: 2, startCols: 2 });
+    grid.addHook('afterOnCellMouseDown', (_v: unknown, _e: unknown, coords: never) => {
+      seen.push(coords);
+    });
+    grid.render();
+    const header = grid.view!.root.querySelector('th.cm-col-header') as HTMLElement;
+    header.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    expect(seen).toEqual([{ row: -1, col: 0 }]);
+  });
+
+  it('lets a hook refuse the click', async () => {
+    const { grid } = await mountGrid({ startRows: 3, startCols: 2 });
+    grid.addHook('beforeOnCellMouseDown', () => false);
+    grid.render();
+    const header = grid.view!.root.querySelector('th.cm-col-header') as HTMLElement;
+    header.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    expect(grid.getSelectedLast()).toBeUndefined();
+  });
+});
