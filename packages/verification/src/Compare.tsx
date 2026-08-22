@@ -150,3 +150,82 @@ export function block(
     Array.from({ length: cols }, (_, col) => cell(row, col)),
   );
 }
+
+/** Where the page this story comes from lives. */
+export function docLink(path: string): string {
+  return `https://handsontable.com/docs/javascript-data-grid/${path}/`;
+}
+
+/**
+ * A page with nothing to compare, and why.
+ *
+ * Roughly a third of the guide is not about a grid feature — release logs,
+ * licences, the reference's own website tooling, and the React/Vue/Angular
+ * wrappers this library does not ship. Leaving those out of the tree would
+ * make the tree look complete when it is not, so they are here saying plainly
+ * what they are. A reader counting stories against the table of contents
+ * should find every page.
+ */
+export function NotAFeature({ page, why, path }: { page: string; why: string; path?: string }) {
+  return (
+    <div
+      style={{
+        font: '13px/1.6 ui-sans-serif, system-ui, sans-serif',
+        maxWidth: '72ch',
+        color: '#3f3f46',
+      }}
+    >
+      <h3 style={{ margin: '0 0 8px', font: '600 15px/1.4 inherit' }}>{page}</h3>
+      <p style={{ margin: '0 0 12px' }}>{why}</p>
+      {path ? (
+        <p style={{ margin: 0 }}>
+          <a href={docLink(path)} target="_blank" rel="noreferrer">
+            Read the page
+          </a>
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * A feature this library does not have, shown against the one that does.
+ *
+ * Different from `NotAFeature`: the page *is* about the grid, and the gap is
+ * real. Only the reference is mounted, because there is nothing on our side to
+ * put beside it — which is the honest picture and the one worth looking at.
+ */
+export function OnlyReference({
+  settings,
+  data,
+  note,
+  height,
+}: Omit<CompareProps, 'afterMount'>) {
+  return (
+    <div style={{ font: '13px/1.5 ui-sans-serif, system-ui, sans-serif' }}>
+      {note ? (
+        <p style={{ margin: '0 0 12px', maxWidth: '78ch', color: '#3f3f46' }}>{note}</p>
+      ) : null}
+      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+        <section style={{ ...panel, background: '#fafafa' }}>
+          <header style={label}>cellmoa — not implemented</header>
+          <div
+            style={{
+              height: height ?? 260,
+              display: 'grid',
+              placeItems: 'center',
+              color: '#71717a',
+              font: '12px/1.5 inherit',
+            }}
+          >
+            nothing to show
+          </div>
+        </section>
+        <section style={panel}>
+          <header style={{ ...label, background: '#f4f4f5' }}>Handsontable 18</header>
+          <Reference settings={settings} data={data} height={height ?? 260} />
+        </section>
+      </div>
+    </div>
+  );
+}

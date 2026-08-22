@@ -8,7 +8,9 @@
     "dev": "ladle serve",
     "build": "ladle build",
     "preview": "ladle preview",
-    "check": "node check.mjs"
+    "check": "node check.mjs",
+    "coverage": "node coverage.mjs",
+    "verify": "node coverage.mjs && npm run build && npm run check"
   },
   "dependencies": {
     "@cellmoa/grid": "file:../grid",

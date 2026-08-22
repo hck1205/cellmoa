@@ -8,6 +8,8 @@ npm install
 npm run dev        # http://localhost:61000
 npm run build      # a static site under build/
 npm run check      # loads every story headless and asserts both halves drew
+npm run coverage   # counts stories against the guide's table of contents
+npm run verify     # coverage, then build, then check
 ```
 
 The grid must be built first, since this loads its `dist` and its `.wasm`:
@@ -33,8 +35,20 @@ Each of them would have been obvious here in a second.
 
 ## The tree
 
-`verification > {category} > {name}`. The category is the file under
-`src/verification/`; the name is a named export.
+`verification > {category} > {name}`. The category is the guide's own section;
+the name is one of its pages. There is a story for **every** page in the guide,
+which is a claim `npm run coverage` counts rather than one this file asserts.
+
+Roughly a third of the guide is not about a grid feature — release logs,
+licences, the reference's own website tooling, and the React/Vue/Angular wrapper
+pages this library has no equivalent for. Those pages are in the tree saying
+plainly what they are, because leaving them out would make the tree look
+complete when it is not, and a reader working through the table of contents
+would be left wondering whether they had been missed.
+
+A page about a feature cellmoa genuinely lacks — the filter panel, keyboard
+access to the menus, drag-to-resize, modular imports — mounts only the
+reference, with nothing beside it. That is the honest picture.
 
 Each story's note says what to look at and what would count as a difference.
 Where the two are meant to differ, the note says so and why — a divergence
