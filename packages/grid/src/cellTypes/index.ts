@@ -13,6 +13,8 @@ import type { CellEditor, CellRenderer, CellTypeDefinition, CellValidator } from
 
 export * from './types.js';
 export { editors, renderers, validators };
+export { checkboxState, checkboxTemplates } from './renderers.js';
+export { isStrictList, optionsOf } from './options.js';
 
 const cellTypes = new Map<string, CellTypeDefinition>();
 const rendererRegistry = new Map<string, CellRenderer>();
@@ -41,6 +43,22 @@ export function registerCellType(name: string, definition: CellTypeDefinition): 
   }
   if (definition.validator) {
     validatorRegistry.set(name, definition.validator);
+  }
+}
+
+/**
+ * Registers a cell type under every name it answers to.
+ *
+ * A type that the documentation calls `intl-date` and the registry calls
+ * `intlDate` is not the same type as far as a configuration is concerned: the
+ * lookup misses, the column falls back to the text renderer, and the grid
+ * shows something plausible that is not what was asked for. So the documented
+ * spellings are registered too, against the same definition, and
+ * `getCellType` returns the same object whichever name it was asked by.
+ */
+function registerCellTypeAs(names: string[], definition: CellTypeDefinition): void {
+  for (const name of names) {
+    registerCellType(name, definition);
   }
 }
 
@@ -109,7 +127,9 @@ registerCellType('select', {
   editor: editors.selectEditor,
   validator: validators.selectValidator,
 });
-registerCellType('multiSelect', {
+// `multiselect` is the reference's own spelling and `multiSelect` the one it
+// shipped with first; both are registered there, so both are registered here.
+registerCellTypeAs(['multiselect', 'multiSelect'], {
   renderer: renderers.multiSelectRenderer,
   editor: editors.multiSelectEditor,
   validator: validators.multiSelectValidator,
@@ -125,12 +145,12 @@ registerCellType('handsontable', {
   editor: editors.autocompleteEditor,
   validator: validators.autocompleteValidator,
 });
-registerCellType('intlDate', {
+registerCellTypeAs(['intl-date', 'intlDate'], {
   renderer: renderers.dateRenderer,
   editor: editors.dateEditor,
   validator: validators.dateValidator,
 });
-registerCellType('intlTime', {
+registerCellTypeAs(['intl-time', 'intlTime'], {
   renderer: renderers.timeRenderer,
   editor: editors.timeEditor,
   validator: validators.timeValidator,

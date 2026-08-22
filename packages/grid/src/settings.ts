@@ -211,8 +211,14 @@ export type CellType =
   | 'multiSelect'
   | 'password'
   | 'handsontable'
+  // Both spellings of the three the reference renames: the documented names
+  // are the hyphenated ones, and a configuration written from the guide has to
+  // type-check as well as resolve.
   | 'intlDate'
-  | 'intlTime';
+  | 'intl-date'
+  | 'intlTime'
+  | 'intl-time'
+  | 'multiselect';
 
 /** A function that decides a cell's settings from its position. */
 export type CellsFunction = (row: number, col: number, prop?: string | number) => GridSettings;

@@ -128,29 +128,90 @@ export const htmlRenderer: CellRenderer = (context) => {
   write(context.td, context.cell?.text ?? '', { ...context.meta, allowHtml: true });
 };
 
+/** A checkbox cell's two values, which are `true` and `false` unless set. */
+export function checkboxTemplates(meta: RenderContext['meta']): {
+  checked: unknown;
+  unchecked: unknown;
+} {
+  return { checked: meta.checkedTemplate ?? true, unchecked: meta.uncheckedTemplate ?? false };
+}
+
+/** Whether a cell's value is the one a template spells. */
+function isTemplate(value: unknown, template: unknown): boolean {
+  const same = String(value ?? '').toLowerCase() === String(template).toLowerCase();
+  return value === template || same;
+}
+
+/**
+ * Which of a checkbox cell's two templates its value matches, if either.
+ *
+ * The renderer draws from this and the grid's toggle writes from it, so there
+ * is one answer rather than two — and there were two: the renderer knew only
+ * about `checkedTemplate` and compared exactly, while the toggle read both and
+ * compared without regard to case. A cell holding `'YES'` against
+ * `checkedTemplate: 'yes'` therefore drew unchecked and then unchecked itself
+ * when it was pressed, which looks like a click that went missing.
+ *
+ * The comparison ignores case because a template says how the column spells
+ * its two states, not how the data that arrived happened to be typed.
+ */
+export function checkboxState(
+  value: unknown,
+  meta: RenderContext['meta'],
+): 'checked' | 'unchecked' | 'none' {
+  const { checked, unchecked } = checkboxTemplates(meta);
+  if (isTemplate(value, checked)) {
+    return 'checked';
+  }
+  return isTemplate(value, unchecked) ? 'unchecked' : 'none';
+}
+
+/**
+ * What a `label` puts beside the checkbox.
+ *
+ * `value` may be a function of the cell, which the documentation shows and
+ * which the renderer used to stringify instead of call — printing the
+ * function's own source into the cell.
+ */
+function checkboxLabel(label: Record<string, unknown>, context: RenderContext): string {
+  const given = label.value;
+  if (typeof given === 'function') {
+    const of = given as (row: number, col: number, prop: unknown, value: unknown) => unknown;
+    return String(of(context.row, context.col, context.meta.data, context.cell?.value) ?? '');
+  }
+  return given === undefined || given === null ? '' : String(given);
+}
+
 /** A checkbox, checked when the cell matches the checked template. */
 export const checkboxRenderer: CellRenderer = (context) => {
   applyCommon(context);
   const { td, cell, meta } = context;
-  const checkedTemplate = meta.checkedTemplate ?? true;
-  const value = cell?.value;
+  const state = checkboxState(cell?.value, meta);
 
   td.replaceChildren();
   const input = td.ownerDocument.createElement('input');
   input.type = 'checkbox';
   input.className = 'cm-checkbox';
-  input.checked = value === checkedTemplate || value === true || value === 'true';
+  input.checked = state === 'checked';
+  if (state === 'none') {
+    // A value that is neither template is drawn unchecked but marked, so that
+    // a cell nobody has answered stays distinct from one deliberately set to
+    // the unchecked value. The class name is the documented one, because that
+    // is what a stylesheet written against the reference targets.
+    input.classList.add('noValue');
+  }
   input.disabled = meta.readOnly === true;
   // The cell holds the truth; the input only shows it. Toggling goes through
   // the grid so that it is recorded like any other edit.
   input.tabIndex = -1;
   td.appendChild(input);
 
-  const label = meta.label as { value?: string; position?: string } | undefined;
-  if (label?.value) {
+  const label = meta.label as Record<string, unknown> | undefined;
+  const caption = label ? checkboxLabel(label, context) : '';
+  if (label && caption !== '') {
     const text = td.ownerDocument.createElement('span');
     text.className = 'cm-checkbox-label';
-    text.textContent = label.value;
+    text.textContent = caption;
     if (label.position === 'before') {
       td.insertBefore(text, input);
     } else {

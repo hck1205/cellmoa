@@ -14,6 +14,8 @@ import {
   getValidator,
   renderers as builtinRenderers,
   asVerdict,
+  checkboxState,
+  checkboxTemplates,
 } from './cellTypes/index.js';
 import type { EditorInstance, ValidationResult } from './cellTypes/index.js';
 import { DataSource, WriteConflict, cellRef, columnLetters, normalizeAlter } from './dataSource.js';
@@ -2853,13 +2855,13 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
    */
   #toggleCheckbox(row: number, col: number): void {
     const meta = this.getCellMeta(row, col);
-    const checked = meta.checkedTemplate ?? true;
-    const unchecked = meta.uncheckedTemplate ?? false;
-    const value = this.getCell(row, col)?.value ?? null;
-    const isChecked =
-      value === checked ||
-      String(value ?? '').toLowerCase() === String(checked).toLowerCase();
-    this.setDataAtCell(row, col, String(isChecked ? unchecked : checked));
+    // The renderer's own reading, not a second copy of it. The two used to
+    // disagree — the renderer compared exactly and this compared case-blind, so
+    // `'YES'` against `checkedTemplate: 'yes'` drew unchecked and then
+    // unchecked itself when pressed.
+    const { checked, unchecked } = checkboxTemplates(meta);
+    const state = checkboxState(this.getCell(row, col)?.value ?? null, meta);
+    this.setDataAtCell(row, col, String(state === 'checked' ? unchecked : checked));
   }
 
   /** How many rows a page key moves. */

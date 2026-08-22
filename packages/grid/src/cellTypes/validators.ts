@@ -8,7 +8,7 @@
  */
 
 import type { GridSettings } from '../settings.js';
-import { optionsOf } from './options.js';
+import { isStrictList, optionsOf } from './options.js';
 import type { CellValidator } from './types.js';
 import { VALID, invalid } from './types.js';
 
@@ -46,8 +46,14 @@ export const numericValidator: CellValidator = (value, meta) => {
   return VALID;
 };
 
-/** Accepts a value that is on the list. */
-export function listValidator(source?: unknown): CellValidator {
+/**
+ * Accepts a value that is on the list, when the list is a closed one.
+ *
+ * The `type` decides what happens without a `strict` setting, and it is the
+ * same reading the editor takes — see `isStrictList`. A flexible list is not
+ * unvalidated: a value outside it is exactly what the type is for.
+ */
+export function listValidator(type: string, source?: unknown): CellValidator {
   return (value, meta) => {
     const empty = emptyCheck(value, meta);
     if (empty) {
@@ -56,13 +62,13 @@ export function listValidator(source?: unknown): CellValidator {
     if (value.startsWith('=')) {
       return VALID;
     }
+    if (!isStrictList(meta, type)) {
+      return VALID;
+    }
     const allowed = Array.isArray(source) ? source.map(String) : optionsOf(meta);
     if (allowed.length === 0) {
       // Nothing to check against is not a failure; a source given as a
       // function is resolved by the editor, not here.
-      return VALID;
-    }
-    if (meta.strict === false) {
       return VALID;
     }
     return allowed.includes(value)
@@ -71,9 +77,9 @@ export function listValidator(source?: unknown): CellValidator {
   };
 }
 
-export const autocompleteValidator: CellValidator = listValidator();
-export const dropdownValidator: CellValidator = listValidator();
-export const selectValidator: CellValidator = listValidator();
+export const autocompleteValidator: CellValidator = listValidator('autocomplete');
+export const dropdownValidator: CellValidator = listValidator('dropdown');
+export const selectValidator: CellValidator = listValidator('select');
 
 /** Accepts several values from the list, comma-separated. */
 export const multiSelectValidator: CellValidator = (value, meta) => {
@@ -122,7 +128,14 @@ export const dateValidator: CellValidator = (value, meta) => {
   return invalid(`${JSON.stringify(value)} is not a date`);
 };
 
-/** Accepts `h:mm`, `h:mm:ss`, and the same with an am/pm suffix. */
+/**
+ * Accepts `h:mm`, `h:mm:ss`, `h:mm:ss.SSS`, and the same with an am/pm suffix.
+ *
+ * The milliseconds are part of the format the reference stores times in, and
+ * the renderer formats them without complaint — a validator that refused what
+ * the grid was already displaying is the sort of disagreement nobody can act
+ * on, because the cell looks fine.
+ */
 export const timeValidator: CellValidator = (value, meta) => {
   const empty = emptyCheck(value, meta);
   if (empty) {
@@ -131,7 +144,7 @@ export const timeValidator: CellValidator = (value, meta) => {
   if (value.startsWith('=') || !Number.isNaN(Number(value))) {
     return VALID;
   }
-  return /^\d{1,2}:\d{2}(:\d{2})?(\s*[ap]m)?$/i.test(value.trim())
+  return /^\d{1,2}:\d{2}(:\d{2}(\.\d{1,3})?)?(\s*[ap]m)?$/i.test(value.trim())
     ? VALID
     : invalid(`${JSON.stringify(value)} is not a time`);
 };

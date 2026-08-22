@@ -32,3 +32,33 @@ export function optionsOf(meta: GridSettings): string[] {
   }
   return [];
 }
+
+/**
+ * Which list types close their list when the column has not said.
+ *
+ * Handsontable defines `dropdown` as `autocomplete` with `strict: true`
+ * already applied, and leaves `autocomplete` itself flexible — a list that
+ * suggests rather than constrains is the whole point of that type. A `select`
+ * is a native `<select>`, whose editor cannot produce a value that is off the
+ * list, so its validator has no reason to accept one either.
+ */
+const STRICT_BY_DEFAULT: Record<string, boolean> = {
+  autocomplete: false,
+  dropdown: true,
+  select: true,
+};
+
+/**
+ * Whether a list cell refuses a value that is not on its list.
+ *
+ * The editor and the validator have to give the same answer to this, and they
+ * did not. The editor forced `strict` on for every dropdown, so a
+ * `{type: 'dropdown', strict: false}` column had an editor that would not
+ * commit what its own validator was happy to accept; the validator checked the
+ * list whenever there was one, so a plain `{type: 'autocomplete', source: […]}`
+ * column marked every typed value invalid although its editor had offered to
+ * commit it. Both ask here now, so there is one answer rather than two.
+ */
+export function isStrictList(meta: GridSettings, type: string): boolean {
+  return typeof meta.strict === 'boolean' ? meta.strict : STRICT_BY_DEFAULT[type] === true;
+}

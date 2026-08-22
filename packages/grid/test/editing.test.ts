@@ -11,11 +11,15 @@ function key(grid: Grid, k: string, modifiers: Partial<KeyboardEventInit> = {}):
 }
 
 describe('the cell type registry', () => {
-  it('registers every type Handsontable ships', () => {
+  it('registers every type Handsontable ships, under every name it ships it as', () => {
+    // The reference registers `intl-date`, `intl-time` and `multiselect`, and
+    // `multiSelect` besides for the spelling it shipped with first. A name that
+    // does not resolve is not an error anyone sees — the column just falls back
+    // to the text renderer — so each documented spelling is pinned here.
     expect(cellTypeNames()).toEqual([
       'autocomplete', 'checkbox', 'date', 'dropdown', 'handsontable',
-      'intlDate', 'intlTime', 'multiSelect', 'numeric', 'password',
-      'select', 'text', 'time',
+      'intl-date', 'intl-time', 'intlDate', 'intlTime', 'multiSelect',
+      'multiselect', 'numeric', 'password', 'select', 'text', 'time',
     ]);
   });
 

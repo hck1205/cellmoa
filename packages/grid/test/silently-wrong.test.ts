@@ -255,3 +255,32 @@ describe('what the `cells` function can override', () => {
     expect(seen).toContain('name');
   });
 });
+
+describe('the checkbox toggle and the renderer', () => {
+  it('agree about what counts as checked', async () => {
+    // Two copies of the same comparison: the renderer compared exactly and the
+    // toggle compared case-blind, so `'YES'` against `checkedTemplate: 'yes'`
+    // drew unchecked and then unchecked itself when pressed.
+    const { grid } = await mountGrid({ startRows: 1, startCols: 1 });
+    grid.setCellMetaObject(0, 0, {
+      type: 'checkbox',
+      checkedTemplate: 'yes',
+      uncheckedTemplate: 'no',
+    });
+    grid.setDataAtCell(0, 0, 'YES');
+    grid.render();
+
+    const box = grid.getCellElement(0, 0)?.querySelector('.cm-checkbox') as HTMLInputElement;
+    expect(box.checked, 'the renderer reads it as checked').toBe(true);
+
+    box.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    expect(grid.getDataAtCell(0, 0), 'so pressing it unchecks').toBe('no');
+  });
+
+  it('type-checks the spellings the guide uses', async () => {
+    // `intl-date` resolved at run time but was a compile error, so a
+    // configuration copied from the guide did not build.
+    const grid = await makeGrid({ startRows: 1, startCols: 1, columns: [{ type: 'intl-date' }] });
+    expect(grid.getCellMeta(0, 0).type).toBe('intl-date');
+  });
+});
