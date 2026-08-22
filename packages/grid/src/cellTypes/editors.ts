@@ -7,7 +7,7 @@
  * whether it came from a keyboard or a file.
  */
 
-import { isStrictList, optionsOf } from './options.js';
+import { isStrictList, matchOptions, optionsOf } from './options.js';
 import type { CellEditor, EditorContext, EditorInstance } from './types.js';
 
 /**
@@ -239,8 +239,6 @@ function listEditor(type: string): CellEditor {
     context.parent.appendChild(wrapper);
 
     const all = optionsOf(context.meta);
-    const shouldFilter = context.meta.filter !== false;
-    const caseSensitive = context.meta.filteringCaseSensitive === true;
     // The list is trimmed to the cell's width by default, which truncates long
     // options; `trimDropdown: false` lets it grow to fit the longest one.
     if (context.meta.trimDropdown === false) {
@@ -257,25 +255,7 @@ function listEditor(type: string): CellEditor {
     let visible: string[] = [];
 
     const draw = (): void => {
-      const query = input.value;
-      visible = shouldFilter && query !== ''
-        ? all.filter((option) =>
-            caseSensitive
-              ? option.includes(query)
-              : option.toLowerCase().includes(query.toLowerCase()),
-          )
-        : all;
-      // `sortByRelevance` puts the options that start with what was typed first.
-      // Off, the list keeps the order the `source` gave, which is what a caller
-      // who ordered it deliberately expects.
-      if (context.meta.sortByRelevance !== false && query !== '') {
-        const needle = caseSensitive ? query : query.toLowerCase();
-        visible = [...visible].sort((a, b) => {
-          const rank = (option: string): number =>
-            (caseSensitive ? option : option.toLowerCase()).startsWith(needle) ? 0 : 1;
-          return rank(a) - rank(b);
-        });
-      }
+      visible = matchOptions(all, input.value, context.meta);
       list.replaceChildren();
       visible.forEach((option, index) => {
         const item = document.createElement('li');

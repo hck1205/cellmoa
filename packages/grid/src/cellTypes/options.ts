@@ -62,3 +62,37 @@ const STRICT_BY_DEFAULT: Record<string, boolean> = {
 export function isStrictList(meta: GridSettings, type: string): boolean {
   return typeof meta.strict === 'boolean' ? meta.strict : STRICT_BY_DEFAULT[type] === true;
 }
+
+/**
+ * The options a list editor shows for what has been typed so far.
+ *
+ * Pulled out of the editor because it is the part with rules — whether the
+ * match is case-sensitive, whether the list narrows at all, how the remaining
+ * options are ordered — and none of those rules need a DOM to be true. Inside
+ * the editor they could only be checked by building an element and reading its
+ * children back, which is why `sortByRelevance` and `filteringCaseSensitive`
+ * had no test of their own.
+ */
+export function matchOptions(all: string[], query: string, meta: GridSettings): string[] {
+  const caseSensitive = meta.filteringCaseSensitive === true;
+  const fold = (text: string): string => (caseSensitive ? text : text.toLowerCase());
+
+  // `filter: false` is a list that always shows everything; typing then only
+  // chooses what gets committed.
+  const narrowed =
+    meta.filter !== false && query !== ''
+      ? all.filter((option) => fold(option).includes(fold(query)))
+      : all;
+
+  if (meta.sortByRelevance === false || query === '') {
+    // The order the `source` gave, which is what a caller who ordered it
+    // deliberately is asking for.
+    return narrowed;
+  }
+  const needle = fold(query);
+  // A stable partition rather than a sort: options that start with what was
+  // typed come first, and everything keeps its original order within its half.
+  const starts = narrowed.filter((option) => fold(option).startsWith(needle));
+  const rest = narrowed.filter((option) => !fold(option).startsWith(needle));
+  return [...starts, ...rest];
+}

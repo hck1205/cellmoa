@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { getCellType, getRenderer, getValidator } from '../src/cellTypes/index.js';
+import { getCellType, getRenderer, getValidator, matchOptions } from '../src/cellTypes/index.js';
 import { mountGrid } from './helpers.js';
 
 /** Presses a key on the grid, which is where the editor's keys arrive. */
@@ -234,5 +234,48 @@ describe('the time validator', () => {
     expect((await validate('12:30:45.1', {})).valid).toBe(true);
     expect((await validate('12:30:45', {})).valid).toBe(true);
     expect((await validate('12:30:45.1234', {})).valid).toBe(false);
+  });
+});
+
+describe('which options a list offers for what was typed', () => {
+  // These rules could only be checked by building an editor and reading its
+  // `<li>` children back, so `sortByRelevance` and `filteringCaseSensitive`
+  // had no test of their own.
+  const all = ['Apple', 'Apricot', 'Banana', 'Grape', 'pineapple'];
+
+  it('narrows to what contains the query, ignoring case by default', () => {
+    // `Grape` and `pineapple` both contain "ap"; `Banana` does not.
+    expect(matchOptions(all, 'ap', {})).toEqual(['Apple', 'Apricot', 'Grape', 'pineapple']);
+  });
+
+  it('respects case when asked to', () => {
+    // Only the lower-case "ap" now — `Apple` and `Apricot` have a capital A.
+    expect(matchOptions(all, 'ap', { filteringCaseSensitive: true })).toEqual([
+      'Grape',
+      'pineapple',
+    ]);
+  });
+
+  it('puts what starts with the query first, keeping each half in source order', () => {
+    // `Grape` and `pineapple` merely contain it, so they follow the two that
+    // begin with it — and each half keeps the order the source gave.
+    expect(matchOptions(all, 'Ap', {})).toEqual(['Apple', 'Apricot', 'Grape', 'pineapple']);
+  });
+
+  it('keeps the source order when relevance is switched off', () => {
+    expect(matchOptions(all, 'ap', { sortByRelevance: false })).toEqual([
+      'Apple',
+      'Apricot',
+      'Grape',
+      'pineapple',
+    ]);
+  });
+
+  it('shows everything when filtering is off, whatever was typed', () => {
+    expect(matchOptions(all, 'zzz', { filter: false })).toEqual(all);
+  });
+
+  it('shows everything for an empty query', () => {
+    expect(matchOptions(all, '', {})).toEqual(all);
   });
 });

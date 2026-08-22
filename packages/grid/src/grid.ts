@@ -430,32 +430,32 @@ if ('data' in settings) {
 
   // The workbook, and reading and writing it.
 
-/** The engine behind the grid. */
+  /** The engine behind the grid. */
   get engine(): Engine {
     return this.#engine;
   }
 
-/** The data source, for plugins that need more than the grid exposes. */
+  /** The data source, for plugins that need more than the grid exposes. */
   get source(): DataSource {
     return this.#data;
   }
 
-/** The workbook's revision. */
+  /** The workbook's revision. */
   get revision(): number {
     return this.#data.revision;
   }
 
-/** How many rows the user can see, hidden ones included. */
+  /** How many rows the user can see, hidden ones included. */
   countRows(): number {
     return this.rowIndex.visibleLength;
   }
 
-/** How many columns the user can see. */
+  /** How many columns the user can see. */
   countCols(): number {
     return this.colIndex.visibleLength;
   }
 
-/** How many rows the data has, trimmed ones included. */
+  /** How many rows the data has, trimmed ones included. */
   countSourceRows(): number {
     return this.rowIndex.length;
   }
@@ -464,7 +464,7 @@ countSourceCols(): number {
     return this.colIndex.length;
   }
 
-/**
+  /**
    * The value a renderer should show, after the settings have had their say.
    *
    * `valueGetter` replaces the value; `valueFormatter` decides how it reads.
@@ -480,7 +480,7 @@ countSourceCols(): number {
     return shown === null || shown === undefined ? '' : String(shown);
   }
 
-/** The displayed text of a cell. */
+  /** The displayed text of a cell. */
   getDataAtCell(row: number, col: number): string {
     const physical = this.#physical(row, col);
     if (!physical) {
@@ -490,7 +490,7 @@ countSourceCols(): number {
     return this.#displayValue(row, col, this.#data.text(physical.row, physical.col));
   }
 
-/** Everything about a cell, or `null` when it holds nothing. */
+  /** Everything about a cell, or `null` when it holds nothing. */
   getCell(row: number, col: number): CellData | null {
     const physical = this.#physical(row, col);
     if (!physical) {
@@ -500,7 +500,7 @@ countSourceCols(): number {
     return this.#data.get(physical.row, physical.col);
   }
 
-/** What an editor should start with: the formula if there is one. */
+  /** What an editor should start with: the formula if there is one. */
   getSourceDataAtCell(row: number, col: number): string {
     const physical = this.#physical(row, col);
     if (!physical) {
@@ -510,7 +510,7 @@ countSourceCols(): number {
     return this.#data.editableValue(physical.row, physical.col);
   }
 
-/** Every visible cell, row by row. */
+  /** Every visible cell, row by row. */
   getData(): string[][] {
     const rows = this.countRows();
     const cols = this.countCols();
@@ -520,17 +520,17 @@ countSourceCols(): number {
     );
   }
 
-/** One row of visible cells. */
+  /** One row of visible cells. */
   getDataAtRow(row: number): string[] {
     return Array.from({ length: this.countCols() }, (_, col) => this.getDataAtCell(row, col));
   }
 
-/** One column of visible cells. */
+  /** One column of visible cells. */
   getDataAtCol(col: number): string[] {
     return Array.from({ length: this.countRows() }, (_, row) => this.getDataAtCell(row, col));
   }
 
-/** Every row's source values — formulas, not their results. */
+  /** Every row's source values — formulas, not their results. */
   getSourceData(): string[][] {
     return Array.from({ length: this.countRows() }, (_, row) => this.getSourceDataAtRow(row));
   }
@@ -561,7 +561,7 @@ getDataAtRowProp(row: number, prop: string | number): string {
     return col < 0 ? '' : this.getDataAtCell(row, col);
   }
 
-/** What the clipboard would take, which a `copyable: false` cell withholds. */
+  /** What the clipboard would take, which a `copyable: false` cell withholds. */
   getCopyableData(row: number, col: number): string {
     return this.getCellMeta(row, col)['copyable'] === false ? '' : this.getDataAtCell(row, col);
   }
@@ -572,7 +572,7 @@ getCopyableSourceData(row: number, col: number): string {
       : this.getSourceDataAtCell(row, col);
   }
 
-/**
+  /**
    * The one type a rectangle has, or `mixed`.
    *
    * `mixed` is the useful answer: a caller asking is deciding whether it can
@@ -593,7 +593,7 @@ getCopyableSourceData(row: number, col: number): string {
     return found ?? 'text';
   }
 
-/** The columns, as a shape — the nearest thing a workbook has to a schema. */
+  /** The columns, as a shape — the nearest thing a workbook has to a schema. */
   getSchema(): Record<string, null> {
     const schema: Record<string, null> = {};
     for (let col = 0; col < this.countCols(); col += 1) {
@@ -602,7 +602,7 @@ getCopyableSourceData(row: number, col: number): string {
     return schema;
   }
 
-/**
+  /**
    * Writes one cell.
    *
    * The value is typed as a user would type it: a leading `=` makes a formula,
@@ -612,7 +612,7 @@ getCopyableSourceData(row: number, col: number): string {
     this.setDataAtCells([[row, col, value]], source);
   }
 
-/**
+  /**
    * Writes several cells as one change.
    *
    * One call rather than several is not only faster: the engine recalculates
@@ -641,17 +641,7 @@ getCopyableSourceData(row: number, col: number): string {
       return;
     }
 
-    const allowed: Array<[number, number, string]> = [];
-    for (const change of before) {
-      if (change === null) {
-        continue;
-      }
-      const [row, prop, , newValue] = change;
-      const col = typeof prop === 'number' ? prop : this.propToCol(prop);
-      if (col >= 0) {
-        allowed.push([row, col, newValue === null || newValue === undefined ? '' : String(newValue)]);
-      }
-    }
+    const allowed = this.#survivors(before);
     if (allowed.length === 0) {
       return;
     }
@@ -661,19 +651,7 @@ getCopyableSourceData(row: number, col: number): string {
     // than dropping it.
     this.#growTo(allowed);
 
-    const edits: Edit[] = [];
-    for (const [row, col, value] of allowed) {
-      const meta = this.getCellMeta(row, col);
-      if (meta.readOnly) {
-        // A read-only cell refuses quietly, as Handsontable does: the paste
-        // that covered it should still land everywhere else.
-        continue;
-      }
-      const physical = this.#physical(row, col);
-      if (physical) {
-        edits.push({ row: physical.row, col: physical.col, input: value });
-      }
-    }
+    const edits = this.#writable(allowed);
     if (edits.length === 0) {
       return;
     }
@@ -697,7 +675,49 @@ getCopyableSourceData(row: number, col: number): string {
     this.render();
   }
 
-/** Writes without going through the editor's parsing and validation. */
+  /**
+   * The changes still standing after `beforeChange` had the array.
+   *
+   * A handler may have dropped an entry, rewritten its value, or named its
+   * column by property rather than index. The hook's array is the one that
+   * gets written, so all three have to be read back out of it here.
+   */
+  #survivors(changes: Array<CellChange | null>): Array<[number, number, string]> {
+    const allowed: Array<[number, number, string]> = [];
+    for (const change of changes) {
+      if (change === null) {
+        continue;
+      }
+      const [row, prop, , newValue] = change;
+      const col = typeof prop === 'number' ? prop : this.propToCol(prop);
+      if (col >= 0) {
+        allowed.push([row, col, newValue == null ? '' : String(newValue)]);
+      }
+    }
+    return allowed;
+  }
+
+  /**
+   * The edits the engine will take, in its own coordinates.
+   *
+   * A read-only cell refuses quietly, as the reference does: the paste that
+   * covered it should still land everywhere else.
+   */
+  #writable(changes: Array<[number, number, string]>): Edit[] {
+    const edits: Edit[] = [];
+    for (const [row, col, value] of changes) {
+      if (this.getCellMeta(row, col).readOnly) {
+        continue;
+      }
+      const physical = this.#physical(row, col);
+      if (physical) {
+        edits.push({ row: physical.row, col: physical.col, input: value });
+      }
+    }
+    return edits;
+  }
+
+  /** Writes without going through the editor's parsing and validation. */
   setSourceDataAtCell(row: number, col: number, value: string): void {
     this.setDataAtCell(row, col, value, 'loadData');
   }
@@ -709,7 +729,7 @@ setDataAtRowProp(row: number, prop: string | number, value: string): void {
     }
   }
 
-/**
+  /**
    * Fills a rectangle from a two-dimensional array, as a paste does.
    *
    * The source repeats to cover the target when the target is a whole multiple
@@ -746,7 +766,7 @@ setDataAtRowProp(row: number, prop: string | number, value: string): void {
     this.setDataAtCells(changes, source);
   }
 
-/** Clears the selected cells. */
+  /** Clears the selected cells. */
   emptySelectedCells(source: ChangeSource = 'edit'): void {
     const cells = this.#selection.cells();
     this.setDataAtCells(
@@ -755,7 +775,7 @@ setDataAtRowProp(row: number, prop: string | number, value: string): void {
     );
   }
 
-/** Sets the alignment class on a rectangle of cells. */
+  /** Sets the alignment class on a rectangle of cells. */
   setAlignment(
     range: { start: { row: number; col: number }; end: { row: number; col: number } },
     className: string,
@@ -779,7 +799,7 @@ setDataAtRowProp(row: number, prop: string | number, value: string): void {
     this.render();
   }
 
-/** Replaces everything with the given rows. */
+  /** Replaces everything with the given rows. */
   loadData(data: string[][]): void {
     if (this.hooks.allows('beforeLoadData', data) === false) {
       return;
@@ -788,7 +808,7 @@ setDataAtRowProp(row: number, prop: string | number, value: string): void {
     this.hooks.run('afterLoadData', undefined, data);
   }
 
-/**
+  /**
    * Writes rows over everything, clearing whatever they do not reach.
    *
    * The clearing is the part worth having in one place: a load that only wrote
@@ -809,7 +829,7 @@ setDataAtRowProp(row: number, prop: string | number, value: string): void {
     this.setDataAtCells(changes, source);
   }
 
-/** The same, but keeping the index maps — a sort survives it. */
+  /** The same, but keeping the index maps — a sort survives it. */
   updateData(data: string[][]): void {
     const changes: Array<[number, number, string]> = [];
     data.forEach((line, row) => {
@@ -821,7 +841,7 @@ setDataAtRowProp(row: number, prop: string | number, value: string): void {
     this.hooks.run('afterUpdateData', undefined, data);
   }
 
-/** Replaces part of a row, as `Array.prototype.splice` does. */
+  /** Replaces part of a row, as `Array.prototype.splice` does. */
   spliceRow(row: number, start: number, amount: number, ...values: string[]): void {
     const line = this.getSourceDataAtRow(row);
     const width = line.length;
@@ -842,7 +862,7 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
     );
   }
 
-/**
+  /**
    * Inserts or deletes rows or columns.
    *
    * The name and the action strings are Handsontable's, so ported code works
@@ -913,13 +933,13 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
     this.render();
   }
 
-/** Whether columns may be added or removed at all. */
+  /** Whether columns may be added or removed at all. */
   isColumnModificationAllowed(): boolean {
     const settings = this.getSettings();
     return settings.allowInsertColumn !== false || settings.allowRemoveColumn !== false;
   }
 
-/**
+  /**
    * Moves a formula's relative references by a distance.
    *
    * Copying a formula and moving it are different operations and only one of
@@ -936,7 +956,7 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
     return typeof response['formula'] === 'string' ? response['formula'] : formula;
   }
 
-/** The selection as a menu command wants it: plain corners. */
+  /** The selection as a menu command wants it: plain corners. */
   getMenuSelection(): Array<{ start: { row: number; col: number }; end: { row: number; col: number } }> {
     return this.selection.ranges.map((range) => ({
       start: { row: range.topRow, col: range.startCol },
@@ -948,17 +968,17 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
 
   // Undo, redo, and who made a change.
 
-/** Whether there is anything to undo. */
+  /** Whether there is anything to undo. */
   canUndo(): boolean {
     return this.#undoState().canUndo === true;
   }
 
-/** Whether there is anything to redo. */
+  /** Whether there is anything to redo. */
   canRedo(): boolean {
     return this.#undoState().canRedo === true;
   }
 
-/**
+  /**
    * Whether one kind of actor has anything left to take back.
    *
    * `kind` is matched against the actor's kind — `agent`, `human`, `script`,
@@ -969,7 +989,7 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
     return this.#lastChangeBy(kind) !== null;
   }
 
-/** Takes back the most recent change made by an agent, leaving yours alone. */
+  /** Takes back the most recent change made by an agent, leaving yours alone. */
   undoLastAgentChange(): void {
     const actor = this.#lastChangeBy('agent');
     if (actor !== null) {
@@ -981,7 +1001,7 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
     return this.#engine.call({ op: 'undo_state' });
   }
 
-/** The id of the actor whose last undoable change was of the given kind. */
+  /** The id of the actor whose last undoable change was of the given kind. */
   #lastChangeBy(kind: string): string | null {
     const next = this.#undoState()['nextUndo'] as
       | { actor?: { kind?: string; id?: string } }
@@ -990,7 +1010,7 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
     return next?.actor?.kind === kind ? (next.actor.id ?? null) : null;
   }
 
-/** Undoes the last change. */
+  /** Undoes the last change. */
   undo(): void {
     if (this.hooks.allows('beforeUndo') === false) {
       return;
@@ -1001,7 +1021,7 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
     this.render();
   }
 
-/** Re-applies the last undone change. */
+  /** Re-applies the last undone change. */
   redo(): void {
     if (this.hooks.allows('beforeRedo') === false) {
       return;
@@ -1012,7 +1032,7 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
     this.render();
   }
 
-/**
+  /**
    * Undoes only what one actor did.
    *
    * This has no counterpart in Handsontable, and it is the point of recording
@@ -1029,7 +1049,7 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
     this.render();
   }
 
-/** Puts back what `undoBy` took away, for the same actor. */
+  /** Puts back what `undoBy` took away, for the same actor. */
   redoBy(actor: string): void {
     if (this.hooks.allows('beforeRedo', actor) === false) {
       return;
@@ -1040,7 +1060,7 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
     this.render();
   }
 
-/** Who changed a cell, when, and why. */
+  /** Who changed a cell, when, and why. */
   getCellHistory(row: number, col: number): Array<Record<string, unknown>> {
     const physical = this.#physical(row, col);
     return physical ? this.#data.history(physical.row, physical.col) : [];
@@ -1050,7 +1070,7 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
 
   // A row or column that is there but not drawn.
 
-/**
+  /**
    * Whether a row is hidden — present in the data but not drawn.
    *
    * Hidden is not the same as trimmed: a hidden row still counts, still holds
@@ -1062,7 +1082,7 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
     return physical !== null && this.rowIndex.isHidden(physical);
   }
 
-/** The same for a column. */
+  /** The same for a column. */
   isColumnHidden(col: number): boolean {
     const physical = this.colIndex.toPhysical(col);
     return physical !== null && this.colIndex.isHidden(physical);
@@ -1072,7 +1092,7 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
 
   // How the grid looks, and which way it reads.
 
-/**
+  /**
    * The theme in force.
    *
    * `theme` may be given as a registered theme object or as a name; `themeName`
@@ -1091,7 +1111,7 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
     return null;
   }
 
-/**
+  /**
    * How much taller or shorter the theme's density makes a row.
    *
    * A multiplier over whatever the settings asked for, so a caller who set a
@@ -1101,7 +1121,7 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
     return DENSITY_SCALE[this.getTheme()?.density ?? 'default'];
   }
 
-/**
+  /**
    * The manager for the areas around the grid.
    *
    * A caller registers an element and says which side it belongs on; where it
@@ -1112,7 +1132,7 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
     return this.#view?.layout ?? null;
   }
 
-/**
+  /**
    * A phrase in the grid's language.
    *
    * `count` chooses between "Remove row" and "Remove rows": one command, one
@@ -1123,7 +1143,7 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
     return phrase(String(this.getSettings().language ?? DEFAULT_LANGUAGE), key, count);
   }
 
-/**
+  /**
    * The locale used for formatting.
    *
    * Separate from the language on purpose: someone reading an English
@@ -1135,7 +1155,7 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
     );
   }
 
-/** Whether the grid is laid out right-to-left. */
+  /** Whether the grid is laid out right-to-left. */
   isRtl(): boolean {
     const setting = this.getSettings().layoutDirection;
     if (setting === 'rtl' || setting === 'ltr') {
@@ -1564,7 +1584,7 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
 
 // How many bands of header there are, and how big they are.
 
-/**
+  /**
    * How deep the column header is.
    *
    * One row unless a plugin says otherwise, which is what `nestedHeaders`
@@ -1575,7 +1595,7 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
     return Math.max((this.hooks.run('modifyColHeaderLevels', 1) as number) ?? 1, 1);
   }
 
-/**
+  /**
    * The column header, as rows of cells.
    *
    * The plain case is one row of one-column cells. A plugin that wants a nested
@@ -1594,7 +1614,7 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
     return (levels as ColHeaderCell[][]) ?? [plain];
   }
 
-/**
+  /**
    * How wide the row-header area is, in pixels.
    *
    * An array configures one width per header *column*. This grid draws a single
@@ -1609,7 +1629,7 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
     return typeof setting === 'number' ? setting : DEFAULT_ROW_HEADER_WIDTH;
   }
 
-/** How tall one level of the column header is. */
+  /** How tall one level of the column header is. */
   getColHeaderHeight(level = 0): number {
     const setting = this.getSettings().columnHeaderHeight;
     const base = Array.isArray(setting)
@@ -1620,7 +1640,7 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
     return Math.round(base * this.densityScale());
   }
 
-/**
+  /**
    * How much room the headers actually take.
    *
    * `getRowHeaderWidth` and `getColHeaderHeight` answer "how big is one",

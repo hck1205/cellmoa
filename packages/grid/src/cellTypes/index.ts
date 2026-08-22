@@ -14,7 +14,7 @@ import type { CellEditor, CellRenderer, CellTypeDefinition, CellValidator } from
 export * from './types.js';
 export { editors, renderers, validators };
 export { checkboxState, checkboxTemplates } from './renderers.js';
-export { isStrictList, optionsOf } from './options.js';
+export { isStrictList, matchOptions, optionsOf } from './options.js';
 
 const cellTypes = new Map<string, CellTypeDefinition>();
 const rendererRegistry = new Map<string, CellRenderer>();
