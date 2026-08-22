@@ -1,6 +1,7 @@
 ---
 source: https://docs.visigrid.app/reference/cli/
-status: in-progress
+status: partial — exit codes, streams, --quiet and list-functions done;
+        `open` and `ai doctor` are not applicable (no GUI, no AI config)
 ---
 
 # CLI Reference

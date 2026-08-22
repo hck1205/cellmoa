@@ -1,6 +1,7 @@
 //! The commands themselves.
 
 use crate::args::Args;
+use crate::exit::{checked, ok, Fault, Outcome};
 use cellmoa_core::edit::Journal;
 use cellmoa_core::fingerprint::fingerprint;
 use cellmoa_core::model::{CellAddr, Workbook};
@@ -9,13 +10,42 @@ use cellmoa_core::value::Value;
 use cellmoa_engine::verify::{verify, Spec};
 use cellmoa_engine::{catalogue, Engine};
 use cellmoa_xlsx::Package;
-use std::process::ExitCode;
 
-/// Success, a failed check, and a usage error, in the form a shell reads.
-const OK: u8 = 0;
-const CHECK_FAILED: u8 = 1;
+/// Writes a line of data to stdout.
+///
+/// `println!` panics when the reader has gone away, which is what `| head -5`
+/// does the moment it has five lines. A tool documented as something you pipe
+/// cannot die that way, so a closed pipe is read as "the reader has what it
+/// wanted" and the process leaves quietly.
+macro_rules! out {
+    ($($arg:tt)*) => {{
+        use std::io::Write;
+        if writeln!(std::io::stdout(), $($arg)*).is_err() {
+            std::process::exit(0);
+        }
+    }};
+}
 
-type Outcome = Result<ExitCode, String>;
+/// As `out!`, without the newline, for text that already ends in one.
+macro_rules! out_raw {
+    ($($arg:tt)*) => {{
+        use std::io::Write;
+        if write!(std::io::stdout(), $($arg)*).is_err() {
+            std::process::exit(0);
+        }
+    }};
+}
+
+/// Prints a note on stderr unless `--quiet` asked for silence. Counts and
+/// summaries go here rather than to stdout, so that piping a command's output
+/// into another one does not feed it a summary line as data.
+macro_rules! note {
+    ($args:expr, $($arg:tt)*) => {
+        if !$args.has("quiet") {
+            eprintln!($($arg)*);
+        }
+    };
+}
 
 pub fn run(args: &Args) -> Outcome {
     match args.command.as_str() {
@@ -27,54 +57,84 @@ pub fn run(args: &Args) -> Outcome {
         "diff" => diff_command(args),
         "fingerprint" => fingerprint_command(args),
         "replay" => replay(args),
-        "functions" => functions(args),
-        other => Err(format!("unknown command `{other}`")),
+        // `functions` was the older name and still works; the documented
+        // spelling is the one that reads as a verb phrase.
+        "list-functions" | "functions" => list_functions(args),
+        other => Err(Fault::Usage(format!("unknown command `{other}`"))),
     }
 }
 
 /// Loads a workbook and hands back an engine with everything recalculated.
-fn open(args: &Args, path: &str) -> Result<Engine, String> {
-    let package = Package::open(path).map_err(|e| format!("{path}: {e}"))?;
+fn open(args: &Args, path: &str) -> Result<Engine, Fault> {
+    // A workbook that will not open and one that opens as nonsense are
+    // different problems for whoever is reading the exit code, so they get
+    // different codes rather than a shared "could not load".
+    let package = Package::open(path).map_err(|e| classify_open(path, &e))?;
     let mut engine = Engine::from_workbook(package.workbook);
     if let Some(seed) = args.value("seed") {
-        let seed: u64 = seed.parse().map_err(|_| format!("`--seed {seed}` is not a number"))?;
+        let seed: u64 =
+            seed.parse().map_err(|_| Fault::Usage(format!("`--seed {seed}` is not a number")))?;
         engine = engine.with_seed(seed);
     }
     if let Some(now) = args.value("now") {
-        let now: f64 = now.parse().map_err(|_| format!("`--now {now}` is not a number"))?;
+        let now: f64 =
+            now.parse().map_err(|_| Fault::Usage(format!("`--now {now}` is not a number")))?;
         engine = engine.with_now_serial(now);
     }
     engine.rebuild();
     Ok(engine)
 }
 
-fn positional<'a>(args: &'a Args, index: usize, what: &str) -> Result<&'a str, String> {
-    args.positional.get(index).map(String::as_str).ok_or_else(|| format!("expected {what}"))
+/// Decides whether a failure to open a workbook was the filesystem's doing or
+/// the file's. `Package::open` reports both, and the caller needs to tell them
+/// apart: a missing file is fixed by a different action than a corrupt one.
+fn classify_open(path: &str, error: &impl std::fmt::Display) -> Fault {
+    let message = format!("{path}: {error}");
+    let text = error.to_string().to_lowercase();
+    let filesystem = ["no such file", "permission denied", "is a directory", "os error"];
+    if filesystem.iter().any(|needle| text.contains(needle)) {
+        Fault::Io(message)
+    } else {
+        Fault::Parse(message)
+    }
+}
+
+fn positional<'a>(args: &'a Args, index: usize, what: &str) -> Result<&'a str, Fault> {
+    args.positional
+        .get(index)
+        .map(String::as_str)
+        .ok_or_else(|| Fault::Usage(format!("expected {what}")))
 }
 
 /// Resolves a sheet by name, or the first sheet if none was named.
-fn sheet_id(engine: &Engine, name: Option<&str>) -> Result<u32, String> {
+fn sheet_id(engine: &Engine, name: Option<&str>) -> Result<u32, Fault> {
     match name {
-        Some(name) => engine
-            .workbook()
-            .sheet_id_by_name(name)
-            .ok_or_else(|| format!("no sheet called {name:?}")),
+        Some(name) => engine.workbook().sheet_id_by_name(name).ok_or_else(|| {
+            let available: Vec<&str> =
+                engine.workbook().sheets().map(|s| s.name.as_str()).collect();
+            // Naming what is there turns "wrong sheet" from a guess into a
+            // correction the caller can make on the next run.
+            Fault::Usage(format!("no sheet called {name:?}; this workbook has {available:?}"))
+        }),
         None => engine
             .workbook()
             .sheets()
             .next()
             .map(|s| s.id)
-            .ok_or_else(|| "the workbook has no sheets".to_string()),
+            .ok_or_else(|| Fault::Parse("the workbook has no sheets".to_string())),
     }
 }
 
 fn calc(args: &Args) -> Outcome {
-    args.reject_unknown(&["out", "seed", "now", "json"]).map_err(|e| e.to_string())?;
+    args.reject_unknown(&["out", "seed", "now", "json", "quiet"])
+        .map_err(|e| Fault::Usage(e.to_string()))?;
     let path = positional(args, 0, "a workbook to recalculate")?;
     let engine = open(args, path)?;
 
     if let Some(out) = args.value("out") {
-        Package::new(engine.workbook().clone()).save(out).map_err(|e| format!("{out}: {e}"))?;
+        Package::new(engine.workbook().clone())
+            .save(out)
+            .map_err(|e| Fault::Io(format!("{out}: {e}")))?;
     }
 
     let errors: Vec<String> = engine
@@ -95,7 +155,7 @@ fn calc(args: &Args) -> Outcome {
 
     if args.has("json") {
         let digests = fingerprint(engine.workbook());
-        println!(
+        out!(
             "{}",
             serde_json::json!({
                 "sheets": engine.workbook().sheets().count(),
@@ -105,21 +165,25 @@ fn calc(args: &Args) -> Outcome {
             })
         );
     } else {
-        println!(
+        // Without --json there is no data to emit, only a report, and a
+        // report is a diagnostic.
+        note!(
+            args,
             "{} sheet(s), {} cell(s)",
             engine.workbook().sheets().count(),
             engine.workbook().sheets().map(|s| s.cell_count()).sum::<usize>()
         );
         for error in &errors {
-            println!("  {error}");
+            note!(args, "  {error}");
         }
     }
     // Cells left holding errors are a result, not a failure of the tool.
-    Ok(ExitCode::from(OK))
+    ok()
 }
 
 fn eval(args: &Args) -> Outcome {
-    args.reject_unknown(&["file", "sheet", "seed", "now"]).map_err(|e| e.to_string())?;
+    args.reject_unknown(&["file", "sheet", "seed", "now"])
+        .map_err(|e| Fault::Usage(e.to_string()))?;
     let formula = positional(args, 0, "a formula to evaluate")?;
 
     let engine = match args.value("file") {
@@ -131,34 +195,38 @@ fn eval(args: &Args) -> Outcome {
         }
     };
     let sheet = sheet_id(&engine, args.value("sheet"))?;
-    let value = engine.evaluate(sheet, formula).map_err(|e| format!("cannot evaluate: {e}"))?;
-    println!("{value}");
-    Ok(ExitCode::from(OK))
+    let value = engine
+        .evaluate(sheet, formula)
+        .map_err(|e| Fault::Parse(format!("cannot evaluate: {e}")))?;
+    out!("{value}");
+    ok()
 }
 
 fn get(args: &Args) -> Outcome {
-    args.reject_unknown(&["sheet", "seed", "now"]).map_err(|e| e.to_string())?;
+    args.reject_unknown(&["sheet", "seed", "now"]).map_err(|e| Fault::Usage(e.to_string()))?;
     let path = positional(args, 0, "a workbook")?;
     let target = positional(args, 1, "a cell or range")?;
     let engine = open(args, path)?;
 
     let (sheet_name, rest) = cellmoa_core::reference::parse_sheet_qualified(target);
     let sheet = sheet_id(&engine, sheet_name.as_deref().or(args.value("sheet")))?;
-    let range = RangeRef::parse_a1(rest).ok_or_else(|| format!("{target:?} is not a reference"))?;
+    let range = RangeRef::parse_a1(rest)
+        .ok_or_else(|| Fault::Usage(format!("{target:?} is not a reference")))?;
 
     for (col, row) in range.iter() {
         let value = engine.value(CellAddr::new(sheet, col, row));
         if range.cell_count() == 1 {
-            println!("{value}");
+            out!("{value}");
         } else {
-            println!("{}{}\t{value}", cellmoa_core::reference::col_to_letters(col), row + 1);
+            out!("{}{}\t{value}", cellmoa_core::reference::col_to_letters(col), row + 1);
         }
     }
-    Ok(ExitCode::from(OK))
+    ok()
 }
 
 fn export(args: &Args) -> Outcome {
-    args.reject_unknown(&["format", "sheet", "out", "seed", "now"]).map_err(|e| e.to_string())?;
+    args.reject_unknown(&["format", "sheet", "out", "seed", "now"])
+        .map_err(|e| Fault::Usage(e.to_string()))?;
     let path = positional(args, 0, "a workbook")?;
     let engine = open(args, path)?;
     let sheet = sheet_id(&engine, args.value("sheet"))?;
@@ -167,13 +235,13 @@ fn export(args: &Args) -> Outcome {
     let text = match args.value("format").unwrap_or("csv") {
         "csv" => export_csv(sheet),
         "json" => export_json(sheet),
-        other => return Err(format!("unknown format `{other}`; use csv or json")),
+        other => return Err(Fault::Format(format!("unknown format `{other}`; use csv or json"))),
     };
     match args.value("out") {
-        Some(out) => std::fs::write(out, text).map_err(|e| format!("{out}: {e}"))?,
-        None => print!("{text}"),
+        Some(out) => crate::exit::write(out, &text)?,
+        None => out_raw!("{text}"),
     }
-    Ok(ExitCode::from(OK))
+    ok()
 }
 
 fn export_csv(sheet: &cellmoa_core::model::Sheet) -> String {
@@ -222,25 +290,31 @@ fn export_json(sheet: &cellmoa_core::model::Sheet) -> String {
 }
 
 fn verify_command(args: &Args) -> Outcome {
-    args.reject_unknown(&["expect", "json", "seed", "now", "sheet"]).map_err(|e| e.to_string())?;
+    args.reject_unknown(&["expect", "json", "seed", "now", "sheet", "quiet"])
+        .map_err(|e| Fault::Usage(e.to_string()))?;
     let path = positional(args, 0, "a workbook")?;
-    let spec_path = args.value("expect").ok_or("`--expect <spec.json>` is required")?;
+    let spec_path = args
+        .value("expect")
+        .ok_or_else(|| Fault::Usage("`--expect <spec.json>` is required".to_string()))?;
 
-    let text = std::fs::read_to_string(spec_path).map_err(|e| format!("{spec_path}: {e}"))?;
-    let spec: Spec = serde_json::from_str(&text).map_err(|e| format!("{spec_path}: {e}"))?;
+    let text = crate::exit::read(spec_path)?;
+    let spec: Spec =
+        serde_json::from_str(&text).map_err(|e| Fault::Parse(format!("{spec_path}: {e}")))?;
     let engine = open(args, path)?;
     let report = verify(&engine, &spec);
 
     if args.has("json") {
-        println!("{}", serde_json::to_string_pretty(&report).map_err(|e| e.to_string())?);
+        out!("{}", json(&report)?);
     } else {
-        println!("{report}");
+        // The report is the whole point of the command, so it is the data.
+        out!("{report}");
     }
-    Ok(ExitCode::from(if report.passed() { OK } else { CHECK_FAILED }))
+    checked(report.passed())
 }
 
 fn diff_command(args: &Args) -> Outcome {
-    args.reject_unknown(&["json", "seed", "now"]).map_err(|e| e.to_string())?;
+    args.reject_unknown(&["json", "seed", "now", "quiet"])
+        .map_err(|e| Fault::Usage(e.to_string()))?;
     let before_path = positional(args, 0, "the earlier workbook")?;
     let after_path = positional(args, 1, "the later workbook")?;
 
@@ -249,18 +323,21 @@ fn diff_command(args: &Args) -> Outcome {
     let differences = cellmoa_diff::diff(before.workbook(), after.workbook());
 
     if args.has("json") {
-        println!("{}", serde_json::to_string_pretty(&differences).map_err(|e| e.to_string())?);
+        out!("{}", json(&differences)?);
     } else if differences.is_empty() {
-        println!("no differences");
+        // Nothing differed, so there is no data — only the news that there
+        // is none, which belongs on stderr with the other diagnostics.
+        note!(args, "no differences");
     } else {
-        print!("{differences}");
-        println!("{}", differences.summary());
+        out_raw!("{differences}");
+        note!(args, "{}", differences.summary());
     }
-    Ok(ExitCode::from(if differences.is_empty() { OK } else { CHECK_FAILED }))
+    checked(differences.is_empty())
 }
 
 fn fingerprint_command(args: &Args) -> Outcome {
-    args.reject_unknown(&["json", "seed", "now"]).map_err(|e| e.to_string())?;
+    args.reject_unknown(&["json", "seed", "now", "quiet"])
+        .map_err(|e| Fault::Usage(e.to_string()))?;
     let path = positional(args, 0, "a workbook")?;
     let engine = open(args, path)?;
     let digests = fingerprint(engine.workbook());
@@ -271,7 +348,7 @@ fn fingerprint_command(args: &Args) -> Outcome {
             .iter()
             .map(|s| serde_json::json!({ "name": s.name, "inputs": s.inputs, "values": s.values }))
             .collect();
-        println!(
+        out!(
             "{}",
             serde_json::json!({
                 "workbook": digests.workbook,
@@ -281,40 +358,43 @@ fn fingerprint_command(args: &Args) -> Outcome {
             })
         );
     } else {
-        println!("workbook  {}", digests.workbook);
-        println!("inputs    {}", digests.inputs);
-        println!("values    {}", digests.values);
+        out!("workbook  {}", digests.workbook);
+        out!("inputs    {}", digests.inputs);
+        out!("values    {}", digests.values);
         for sheet in &digests.sheets {
-            println!("  {:<20} {}", sheet.name, sheet.inputs);
+            out!("  {:<20} {}", sheet.name, sheet.inputs);
         }
     }
-    Ok(ExitCode::from(OK))
+    ok()
 }
 
 fn replay(args: &Args) -> Outcome {
-    args.reject_unknown(&["onto", "out", "json", "seed", "now"]).map_err(|e| e.to_string())?;
+    args.reject_unknown(&["onto", "out", "json", "seed", "now", "quiet"])
+        .map_err(|e| Fault::Usage(e.to_string()))?;
     let journal_path = positional(args, 0, "a journal")?;
-    let text = std::fs::read_to_string(journal_path).map_err(|e| format!("{journal_path}: {e}"))?;
+    let text = crate::exit::read(journal_path)?;
     let journal: Journal =
-        serde_json::from_str(&text).map_err(|e| format!("{journal_path}: {e}"))?;
+        serde_json::from_str(&text).map_err(|e| Fault::Parse(format!("{journal_path}: {e}")))?;
 
     // Replaying onto the wrong document would produce something plausible and
     // wrong, so the base is named explicitly or assumed empty.
     let base = match args.value("onto") {
-        Some(path) => Package::open(path).map_err(|e| format!("{path}: {e}"))?.workbook,
+        Some(path) => Package::open(path).map_err(|e| classify_open(path, &e))?.workbook,
         None => Workbook::new(),
     };
-    let workbook = journal.replay_onto(base).map_err(|e| e.to_string())?;
+    let workbook = journal.replay_onto(base).map_err(|e| Fault::Usage(e.to_string()))?;
 
     let mut engine = Engine::from_workbook(workbook);
     engine.rebuild();
     let digests = fingerprint(engine.workbook());
 
     if let Some(out) = args.value("out") {
-        Package::new(engine.workbook().clone()).save(out).map_err(|e| format!("{out}: {e}"))?;
+        Package::new(engine.workbook().clone())
+            .save(out)
+            .map_err(|e| Fault::Io(format!("{out}: {e}")))?;
     }
     if args.has("json") {
-        println!(
+        out!(
             "{}",
             serde_json::json!({
                 "commits": journal.commits.len(),
@@ -322,15 +402,22 @@ fn replay(args: &Args) -> Outcome {
             })
         );
     } else {
-        println!("replayed {} commit(s)", journal.commits.len());
-        println!("fingerprint {}", digests.workbook);
+        note!(args, "replayed {} commit(s)", journal.commits.len());
+        // The fingerprint is the answer the caller came for, so it is data
+        // even when the count beside it is not.
+        out!("{}", digests.workbook);
     }
-    Ok(ExitCode::from(OK))
+    ok()
 }
 
-fn functions(args: &Args) -> Outcome {
-    args.reject_unknown(&["json"]).map_err(|e| e.to_string())?;
-    let all = catalogue();
+/// Prints the built-in functions, one name per line, sorted — a list a shell
+/// can grep and count. The tally goes to stderr so that `| wc -l` returns the
+/// number of functions rather than the number of functions plus one.
+fn list_functions(args: &Args) -> Outcome {
+    args.reject_unknown(&["json", "quiet"]).map_err(|e| Fault::Usage(e.to_string()))?;
+    let mut all = catalogue();
+    all.sort_by(|a, b| a.name.cmp(b.name));
+
     if args.has("json") {
         let entries: Vec<serde_json::Value> = all
             .iter()
@@ -343,12 +430,18 @@ fn functions(args: &Args) -> Outcome {
                 })
             })
             .collect();
-        println!("{}", serde_json::json!({ "count": entries.len(), "functions": entries }));
+        out!("{}", serde_json::json!({ "count": entries.len(), "functions": entries }));
     } else {
         for function in &all {
-            println!("{}", function.name);
+            out!("{}", function.name);
         }
-        println!("{} function(s)", all.len());
+        note!(args, "{} function(s)", all.len());
     }
-    Ok(ExitCode::from(OK))
+    ok()
+}
+
+/// Serialises a report, turning a serialisation failure into a fault rather
+/// than a bare string.
+fn json<T: serde::Serialize>(value: &T) -> Result<String, Fault> {
+    serde_json::to_string_pretty(value).map_err(|e| Fault::Parse(e.to_string()))
 }

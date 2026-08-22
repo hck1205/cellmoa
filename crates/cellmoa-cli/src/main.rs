@@ -3,18 +3,29 @@
 //! Every capability of the engine is reachable from here, because that is what
 //! makes a spreadsheet something a pipeline can run: recalculate a workbook,
 //! check its results, compare two versions, fingerprint one, replay a journal.
-//! Exit codes are the contract — 0 for success, 1 for a failed check or a
-//! difference found, 2 for a usage or I/O problem — so a build can gate on the
-//! result without parsing any output.
+//!
+//! Two contracts hold across every command, because a pipeline depends on both:
+//!
+//! - **Exit codes.** 0 succeeded, 1 ran and the answer was no (a check failed,
+//!   a difference was found), and 2 through 5 name what went wrong — see
+//!   `exit::Fault`. A build can gate on the code without parsing any output.
+//! - **Streams.** stdout carries the data and nothing else; every count,
+//!   summary, warning and error goes to stderr. That is what makes
+//!   `cellmoa export … | cellmoa calc …` work: a trailing "3 sheet(s)" on
+//!   stdout would arrive as another row.
 
 mod args;
 mod commands;
+mod exit;
 
 use args::Args;
 use std::process::ExitCode;
 
 /// Options that take a value rather than standing alone.
 const VALUE_FLAGS: &[&str] = &["out", "expect", "sheet", "format", "seed", "now", "onto", "cell"];
+
+/// Short options and the long option each stands for.
+const ALIASES: args::Aliases<'static> = &[("q", "quiet"), ("o", "out"), ("f", "format")];
 
 const USAGE: &str = "\
 cellmoa — a spreadsheet engine for the command line
@@ -45,10 +56,22 @@ usage: cellmoa <command> [arguments]
   replay <journal.json> [--onto <file>] [--out <file>]
         Rebuild a workbook by replaying a recorded journal.
 
-  functions [--json]
-        List the built-in functions.
+  list-functions [--json]
+        List the built-in functions, one per line, sorted.
 
-Exit codes: 0 success, 1 check failed or difference found, 2 usage or I/O error.
+Common options:
+  -q, --quiet   Suppress the notes and summaries on stderr. stdout never
+                carried them, so it is unaffected.
+
+Exit codes:
+  0  success
+  1  it ran, and the answer was no: a check failed, a difference was found
+  2  the command line is wrong
+  3  a file would not open, read, or write
+  4  a file opened and its contents are not what they claim to be
+  5  the format asked for is not one this build handles
+
+stdout is the data. Counts, summaries, warnings and errors go to stderr.
 ";
 
 fn main() -> ExitCode {
@@ -62,19 +85,23 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
-    let args = match Args::parse(arguments, VALUE_FLAGS) {
+    let args = match Args::parse_with(arguments, VALUE_FLAGS, ALIASES) {
         Ok(args) => args,
-        Err(e) => return fail(&e.to_string()),
+        Err(e) => return fail(&exit::Fault::Usage(e.to_string())),
     };
 
     match commands::run(&args) {
         Ok(code) => code,
-        Err(message) => fail(&message),
+        Err(fault) => fail(&fault),
     }
 }
 
-fn fail(message: &str) -> ExitCode {
-    eprintln!("cellmoa: {message}");
-    eprintln!("try `cellmoa --help`");
-    ExitCode::from(2)
+fn fail(fault: &exit::Fault) -> ExitCode {
+    eprintln!("cellmoa: {fault}");
+    // Only a usage problem is one the help text can answer. Pointing at it
+    // for a missing file sends the reader somewhere that cannot help.
+    if fault.is_usage() {
+        eprintln!("try `cellmoa --help`");
+    }
+    ExitCode::from(fault.code())
 }

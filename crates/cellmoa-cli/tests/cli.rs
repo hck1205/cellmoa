@@ -1,8 +1,15 @@
 //! End-to-end tests of the command line.
 //!
 //! Exit codes are the part a pipeline depends on, so they are what these check:
-//! 0 for success, 1 for a check that failed or a difference found, 2 for a
-//! usage error. Getting those wrong turns a red build green.
+//! 0 for success, 1 for a check that failed or a difference found, and 2
+//! through 5 for the four kinds of failure — a wrong command line, a file that
+//! would not open, a file that opened as nonsense, an unsupported format.
+//! Getting those wrong turns a red build green.
+//!
+//! The other half of the contract is which stream a line goes to. stdout is
+//! the data; counts and summaries are diagnostics and belong on stderr. These
+//! tests assert the stream as well as the text, because a summary on stdout
+//! only shows up as a bug once someone pipes the command into another one.
 
 use cellmoa_core::model::{Cell, CellContent, Workbook};
 use cellmoa_core::value::Value;
@@ -41,6 +48,10 @@ fn cellmoa(arguments: &[&str]) -> Output {
 
 fn stdout(output: &Output) -> String {
     String::from_utf8_lossy(&output.stdout).to_string()
+}
+
+fn stderr(output: &Output) -> String {
+    String::from_utf8_lossy(&output.stderr).into_owned()
 }
 
 fn code(output: &Output) -> i32 {
@@ -91,9 +102,31 @@ fn a_typo_in_an_option_is_reported_rather_than_ignored() {
 }
 
 #[test]
-fn a_missing_file_is_a_usage_error_not_a_panic() {
+fn a_missing_file_is_an_io_error_not_a_panic_and_not_a_usage_error() {
+    // 3, not 2: the command line was fine, the filesystem was not. A build
+    // that retries on 2 (fix the invocation) would retry this forever.
     let output = cellmoa(&["calc", "/nonexistent/nowhere.xlsx"]);
-    assert_eq!(code(&output), 2);
+    assert_eq!(code(&output), 3, "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(stderr(&output).contains("nowhere.xlsx"), "the message names the file");
+    assert!(!stderr(&output).contains("--help"), "help cannot fix a missing file");
+}
+
+#[test]
+fn a_file_that_is_not_a_workbook_is_a_parse_error() {
+    let scratch = Scratch::new("notaworkbook");
+    let file = scratch.join("notes.xlsx");
+    std::fs::write(&file, b"this is not a zip archive").unwrap();
+    let output = cellmoa(&["calc", file.to_str().unwrap()]);
+    assert_eq!(code(&output), 4, "{}", String::from_utf8_lossy(&output.stderr));
+}
+
+#[test]
+fn an_unknown_export_format_is_a_format_error() {
+    let scratch = Scratch::new("badformat");
+    let file = scratch.join("book.xlsx");
+    write_workbook(&file, &[(0, 0, "1")]);
+    let output = cellmoa(&["export", file.to_str().unwrap(), "--format", "parquet"]);
+    assert_eq!(code(&output), 5, "{}", String::from_utf8_lossy(&output.stderr));
 }
 
 #[test]
@@ -191,7 +224,10 @@ fn diff_exits_one_when_the_workbooks_differ() {
 
     let output = cellmoa(&["diff", before.to_str().unwrap(), after.to_str().unwrap()]);
     assert_eq!(code(&output), 0);
-    assert!(stdout(&output).contains("no differences"));
+    // "no differences" is news about the data, not data: on stdout it would
+    // arrive as a row for whatever reads the pipe.
+    assert!(stderr(&output).contains("no differences"));
+    assert_eq!(stdout(&output), "", "stdout carries data or nothing");
 
     write_workbook(&after, &[(0, 0, "2")]);
     let output = cellmoa(&["diff", before.to_str().unwrap(), after.to_str().unwrap()]);
@@ -286,7 +322,7 @@ fn replay_rebuilds_a_workbook_from_a_journal() {
     let output =
         cellmoa(&["replay", journal.to_str().unwrap(), "--out", rebuilt.to_str().unwrap()]);
     assert_eq!(code(&output), 0, "{}", String::from_utf8_lossy(&output.stderr));
-    assert!(stdout(&output).contains("replayed 3 commit(s)"), "{}", stdout(&output));
+    assert!(stderr(&output).contains("replayed 3 commit(s)"), "{}", stderr(&output));
 
     // The formula was replayed and then recalculated.
     assert_eq!(stdout(&cellmoa(&["get", rebuilt.to_str().unwrap(), "B1"])).trim(), "42");
@@ -304,4 +340,79 @@ fn replaying_onto_the_wrong_workbook_is_refused() {
     let output = cellmoa(&["replay", journal.to_str().unwrap()]);
     assert_eq!(code(&output), 2);
     assert!(String::from_utf8_lossy(&output.stderr).contains("fingerprint"));
+}
+
+#[test]
+fn list_functions_puts_the_names_on_stdout_and_the_tally_on_stderr() {
+    // `cellmoa list-functions | wc -l` has to return the number of functions.
+    // With the tally on stdout it returned that number plus one, which is the
+    // kind of off-by-one nobody notices until a threshold check fires.
+    let output = cellmoa(&["list-functions"]);
+    assert_eq!(code(&output), 0);
+    let text = stdout(&output);
+    let names: Vec<&str> = text.lines().map(str::trim).collect();
+    assert!(names.len() > 100, "expected the catalogue, got {} lines", names.len());
+    assert!(names.iter().all(|line| !line.contains("function(s)")));
+    assert!(stderr(&output).contains(&format!("{} function(s)", names.len())));
+}
+
+#[test]
+fn list_functions_is_sorted_so_a_diff_of_two_runs_is_meaningful() {
+    let output = cellmoa(&["list-functions"]);
+    let names: Vec<String> = stdout(&output).lines().map(str::to_string).collect();
+    let mut sorted = names.clone();
+    sorted.sort();
+    assert_eq!(names, sorted);
+}
+
+#[test]
+fn functions_still_works_under_its_old_name() {
+    assert_eq!(stdout(&cellmoa(&["functions"])), stdout(&cellmoa(&["list-functions"])));
+}
+
+#[test]
+fn quiet_silences_stderr_without_touching_stdout() {
+    let output = cellmoa(&["list-functions"]);
+    let quiet = cellmoa(&["list-functions", "--quiet"]);
+    assert_eq!(stdout(&quiet), stdout(&output), "--quiet must not change the data");
+    assert_eq!(stderr(&quiet), "", "--quiet silences the notes");
+    assert_eq!(code(&quiet), 0);
+}
+
+#[test]
+fn the_short_form_of_quiet_is_understood() {
+    let quiet = cellmoa(&["list-functions", "-q"]);
+    assert_eq!(code(&quiet), 0, "{}", stderr(&quiet));
+    assert_eq!(stderr(&quiet), "");
+}
+
+#[test]
+fn an_unknown_short_option_is_rejected_rather_than_read_as_a_path() {
+    let output = cellmoa(&["list-functions", "-Z"]);
+    assert_eq!(code(&output), 2, "{}", stderr(&output));
+    assert!(stderr(&output).contains("-Z"));
+}
+
+#[test]
+fn a_reader_that_stops_early_does_not_crash_the_writer() {
+    // `cellmoa list-functions | head -5` closes the pipe after five lines.
+    // `println!` panics on that, which printed a backtrace and returned 101
+    // from a command that had done its job.
+    use std::io::Read;
+    use std::process::Stdio;
+    let mut child = Command::new(env!("CARGO_BIN_EXE_cellmoa"))
+        .arg("list-functions")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the binary should run");
+
+    let mut first = [0u8; 16];
+    child.stdout.as_mut().expect("piped").read_exact(&mut first).expect("some output");
+    drop(child.stdout.take());
+
+    let output = child.wait_with_output().expect("the child should finish");
+    assert!(output.status.success(), "closing the pipe early must not fail the command");
+    let complaints = String::from_utf8_lossy(&output.stderr);
+    assert!(!complaints.contains("panicked"), "{complaints}");
 }
