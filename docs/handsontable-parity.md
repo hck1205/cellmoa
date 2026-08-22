@@ -15,6 +15,11 @@ Handsontable 저장소(`handsontable/handsontable`)의 소스와 문서에서 �
 접근성, 액세서리·메뉴, 셀 기능, 셀 함수, 셀 타입, 컬럼, 데이터 관리, 다이얼로그,
 수식, 시작하기, 국제화, 내비게이션, 최적화, 행, 스타일링.
 
+> **2026-08 전수 감사.** 가이드 149쪽을 전부 읽고 코드에 대조했다.
+> 결과는 [`gap-audit.md`](./gap-audit.md)에 있다. 이 표의 ✅ 여섯 개가
+> 사실이 아니어서 고쳤다 — 드래그 UI가 없는 플러그인 넷, 발화되지 않는
+> 훅 158개, 미바인딩 단축키 25개. 표가 코드보다 앞서 나가면 표를 고친다.
+
 ## 상태 표기
 
 | 기호 | 의미 |
@@ -53,11 +58,11 @@ Handsontable 저장소(`handsontable/handsontable`)의 소스와 문서에서 �
 | `hiddenRows` | ✅ | |
 | `loading` | ✅ | 참조 카운트 — 먼저 끝난 작업이 나중 작업의 오버레이를 걷어가지 않음 |
 | `manualColumnFreeze` | ✅ | |
-| `manualColumnMove` | ✅ | |
-| `manualColumnResize` | ✅ | |
+| `manualColumnMove` | 🔨 | API만. 포인터 리스너 0개 — 드래그로 옮길 수 없다 |
+| `manualColumnResize` | 🔨 | API만. 드래그 핸들도 더블클릭 자동맞춤도 없다 |
 | `manualResize` | ✅ | Handsontable에서도 등록된 플러그인이 아니라 공유 유틸 디렉터리. 여기서는 공유 기반 클래스 + `manualResize: true` 축약 |
-| `manualRowMove` | ✅ | |
-| `manualRowResize` | ✅ | |
+| `manualRowMove` | 🔨 | API만. 포인터 리스너 0개 |
+| `manualRowResize` | 🔨 | API만. 드래그 핸들 없다 |
 | `mergeCells` | ✅ | 코너 셀만 값 유지, 나머지는 비움 |
 | `moveCells` | ✅ | 이동은 참조를 그대로 두고, 복사 드래그만 옮김 ➕ |
 | `multiColumnSorting` | ✅ | |
@@ -117,12 +122,12 @@ methods   146/146 present  (0 named by the reference and missing)
 | 영역 | 상태 | 비고 |
 |---|:--:|---|
 | 설정 계층 (global→table→column→cell) | ✅ | `MetaManager`, `cells` 함수 포함 |
-| 훅 253개 | ✅ | 이름 전량 등록, `before*` veto 지원 |
+| 훅 255개 | 🔨 | **97개만 발화 가능**. `node scripts/parity.mjs`가 센다 |
 | 인덱스 맵 (물리/시각/렌더) | ✅ | trim·hide·move·insert·remove |
 | 데이터 읽기/쓰기 | ✅ | 창 단위 캐시, revision 가드 |
 | 선택 (단일·범위·다중) | ✅ | |
 | 가상 스크롤 + 4-pane 고정 | ✅ | |
-| 키보드 (Handsontable 단축키표 전량) | ✅ | 이동·확장·엣지·Tab·Enter·Delete·undo |
+| 키보드 | 🔨 | 문서화된 60개 중 35개. **메뉴에는 키보드가 없다** |
 | 편집 (열기·커밋·취소·검증) | ✅ | allowInvalid, 비동기 검증기 |
 | 마우스 선택 (클릭·shift·ctrl) | ✅ | |
 | 행/열 크기 (기본값 + 오버라이드) | ✅ | |
