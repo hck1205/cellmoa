@@ -42,7 +42,7 @@ export {
 export type { CopyPasteSettings } from './copyPaste.js';
 
 export { MergeCells } from './mergeCells.js';
-export type { MergedArea } from './mergeCells.js';
+export type { MergeCellsSettings, MergedArea } from './mergeCells.js';
 export * from './undoRedo.js';
 export * from './search.js';
 export * from './columnSummary.js';

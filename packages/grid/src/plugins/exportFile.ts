@@ -6,33 +6,92 @@
  * `.xlsx` is built by the engine, because a workbook has formulas, styles and
  * defined names that only the engine knows about — rebuilding it in the browser
  * would quietly drop all of them.
+ *
+ * A CSV of values a spreadsheet will execute is the reason `sanitizeValues`
+ * exists. It is off by default because escaping changes what the file says,
+ * and a grid whose contents are its own is entitled to a faithful export; a
+ * grid holding anything a stranger typed should switch it on.
  */
 
 import { BasePlugin, registerPlugin } from './base.js';
+
+/**
+ * How a value that a spreadsheet might read as a formula is defanged.
+ *
+ * `true` applies the OWASP rules; a `RegExp` escapes the values it matches;
+ * a function returns whatever should be written instead.
+ */
+export type SanitizeValues = boolean | RegExp | ((value: string) => string);
 
 export interface ExportOptions {
   /** What goes between fields. A single character. */
   columnDelimiter?: string;
   /** What goes between rows. */
   rowDelimiter?: string;
-  /** Wrap every field in quotes, not just the ones that need it. */
+  /** Export rows a plugin is hiding, rather than leaving them out. */
   exportHiddenRows?: boolean;
   exportHiddenColumns?: boolean;
+  /** Put a row of column headers in front of the values. */
+  colHeaders?: boolean;
+  /**
+   * The name `colHeaders` had before the reference renamed it.
+   *
+   * Kept because it is what this grid asked for until now, and dropping it
+   * would take the headers off an existing caller's export without a word.
+   */
   columnHeaders?: boolean;
   rowHeaders?: boolean;
   /** The rectangle to export. Defaults to the whole table. */
   range?: [number, number, number, number];
-  /** The name offered in the save dialog, without an extension. */
+  /**
+   * The name offered in the save dialog, without an extension.
+   *
+   * `[YYYY]`, `[MM]` and `[DD]` are replaced with today's date.
+   */
   filename?: string;
+  /** The extension put after the filename. Defaults to the format's own. */
+  fileExtension?: string;
   mimeType?: string;
   /** Add a UTF-8 byte-order mark, which is what makes Excel read it as UTF-8. */
   bom?: boolean;
+  /** Defang values a spreadsheet would otherwise execute. Off by default. */
+  sanitizeValues?: SanitizeValues;
 }
 
-const DEFAULTS: Required<Pick<ExportOptions, 'columnDelimiter' | 'rowDelimiter'>> = {
+const DEFAULTS: Required<Pick<ExportOptions, 'columnDelimiter' | 'rowDelimiter' | 'filename'>> = {
   columnDelimiter: ',',
   rowDelimiter: '\r\n',
+  filename: 'Handsontable [YYYY]-[MM]-[DD]',
 };
+
+/**
+ * The lead characters a spreadsheet takes as the start of a formula.
+ *
+ * `=`, `+`, `-` and `@` are the four OWASP names. The tab and the carriage
+ * return are here because a spreadsheet trims them off the front of a field
+ * before deciding what the field is, which puts whatever follows back in the
+ * lead position. A line feed is not: it ends the field instead, and the
+ * quoting already deals with that.
+ */
+const FORMULA_LEAD = /^[=+\-@\t\r]/;
+
+/**
+ * Rewrites a value a spreadsheet would otherwise execute.
+ *
+ * The escape is a leading apostrophe, which every spreadsheet reads as "the
+ * rest of this cell is text" and does not itself show. Prefixing rather than
+ * stripping is deliberate: the value a CSV describes is still there to be
+ * read, it just stops being a program.
+ */
+export function sanitizeCsvValue(value: string, how: SanitizeValues): string {
+  if (typeof how === 'function') {
+    return how(value);
+  }
+  if (how instanceof RegExp) {
+    return how.test(value) ? `'${value}` : value;
+  }
+  return how && FORMULA_LEAD.test(value) ? `'${value}` : value;
+}
 
 /**
  * Quotes a CSV field when it needs it.
@@ -40,13 +99,34 @@ const DEFAULTS: Required<Pick<ExportOptions, 'columnDelimiter' | 'rowDelimiter'>
  * A field is quoted if it contains the delimiter, a quote or a line break, and
  * a quote inside is doubled. A leading or trailing space is quoted too, since
  * some readers strip it otherwise.
+ *
+ * Sanitizing quotes everything, as the reference does. Half a file quoted and
+ * half not is a file whose readers disagree about where a field begins, and
+ * the escaped values are exactly the ones that must not be read wrong.
  */
-export function escapeCsvValue(value: string, delimiter: string): string {
+export function escapeCsvValue(
+  value: string,
+  delimiter: string,
+  sanitize: SanitizeValues = false,
+): string {
+  if (value === '') {
+    return value;
+  }
+  const sanitized = sanitizeCsvValue(value, sanitize);
   const needsQuotes =
-    value.includes(delimiter) ||
-    /["\n\r]/.test(value) ||
-    value !== value.trim();
-  return needsQuotes ? `"${value.replace(/"/g, '""')}"` : value;
+    Boolean(sanitize) ||
+    sanitized.includes(delimiter) ||
+    /["\n\r]/.test(sanitized) ||
+    sanitized !== sanitized.trim();
+  return needsQuotes ? `"${sanitized.replace(/"/g, '""')}"` : sanitized;
+}
+
+/** Puts today's date where the filename asked for it. */
+export function applyFilenameDate(filename: string, today = new Date()): string {
+  return filename
+    .replace(/\[YYYY\]/g, String(today.getFullYear()))
+    .replace(/\[MM\]/g, String(today.getMonth() + 1).padStart(2, '0'))
+    .replace(/\[DD\]/g, String(today.getDate()).padStart(2, '0'));
 }
 
 export class ExportFile extends BasePlugin {
@@ -67,6 +147,8 @@ export class ExportFile extends BasePlugin {
     }
     const columnDelimiter = options.columnDelimiter ?? DEFAULTS.columnDelimiter;
     const rowDelimiter = options.rowDelimiter ?? DEFAULTS.rowDelimiter;
+    const sanitize = options.sanitizeValues ?? false;
+    const asField = (value: string): string => escapeCsvValue(value, columnDelimiter, sanitize);
     const [startRow, startCol, endRow, endCol] = options.range ?? [
       0,
       0,
@@ -75,7 +157,7 @@ export class ExportFile extends BasePlugin {
     ];
 
     const lines: string[] = [];
-    if (options.columnHeaders && this.grid.hasColHeaders()) {
+    if ((options.colHeaders ?? options.columnHeaders) && this.grid.hasColHeaders()) {
       const header: string[] = [];
       if (options.rowHeaders) {
         // The corner cell above the row headers is empty, as it is on screen.
@@ -85,7 +167,7 @@ export class ExportFile extends BasePlugin {
         if (this.#skipColumn(col, options)) {
           continue;
         }
-        header.push(escapeCsvValue(this.grid.getColHeader(col), columnDelimiter));
+        header.push(asField(this.grid.getColHeader(col)));
       }
       lines.push(header.join(columnDelimiter));
     }
@@ -96,18 +178,18 @@ export class ExportFile extends BasePlugin {
       }
       const values: string[] = [];
       if (options.rowHeaders) {
-        values.push(escapeCsvValue(this.grid.getRowHeader(row), columnDelimiter));
+        values.push(asField(this.grid.getRowHeader(row)));
       }
       for (let col = startCol; col <= endCol; col += 1) {
         if (this.#skipColumn(col, options)) {
           continue;
         }
-        values.push(escapeCsvValue(this.grid.getDataAtCell(row, col), columnDelimiter));
+        values.push(asField(this.grid.getDataAtCell(row, col)));
       }
       lines.push(values.join(columnDelimiter));
     }
     const body = lines.join(rowDelimiter);
-    return options.bom ? `﻿${body}` : body;
+    return options.bom ? `\uFEFF${body}` : body;
   }
 
   /** The workbook as an `.xlsx` file, built by the engine. */
@@ -136,7 +218,8 @@ export class ExportFile extends BasePlugin {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${options.filename ?? 'export'}.${format}`;
+    const extension = options.fileExtension ?? format;
+    link.download = `${applyFilenameDate(options.filename ?? DEFAULTS.filename)}.${extension}`;
     document.body.appendChild(link);
     link.click();
     link.remove();

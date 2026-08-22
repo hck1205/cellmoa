@@ -10,7 +10,9 @@
 import { BasePlugin, registerPlugin } from './base.js';
 
 export interface AutofillSettings {
+  /** Whether a fill that runs past the last row may grow the table. */
   autoInsertRow?: boolean;
+  /** Restricts a fill to one axis. Both are allowed when it is not given. */
   direction?: 'vertical' | 'horizontal';
 }
 
@@ -64,6 +66,31 @@ export function fillFrom(source: string[], length: number): Filled[] {
 export class Autofill extends BasePlugin {
   static override readonly pluginName: string = 'autofill';
 
+  /**
+   * The fill is configured through `fillHandle`, not through its plugin name.
+   *
+   * That is the setting that switches it on, so it has to be the one an
+   * `updateSettings` is watched for as well — otherwise a fill reconfigured at
+   * run time keeps the options it was built with.
+   */
+  static override get settingKeys(): string[] {
+    return ['fillHandle'];
+  }
+
+  /**
+   * The fill's options.
+   *
+   * A bare string is the shorthand for a direction, which is how the setting
+   * is most often written; `true` carries no options at all.
+   */
+  #options(): AutofillSettings {
+    const setting = this.grid.getSettings().fillHandle;
+    if (setting === 'vertical' || setting === 'horizontal') {
+      return { direction: setting };
+    }
+    return typeof setting === 'object' && setting !== null ? (setting as AutofillSettings) : {};
+  }
+
   override isEnabled(): boolean {
     const settings = this.grid.getSettings();
     return settings.fillHandle !== false && settings.fillHandle !== undefined;
@@ -84,26 +111,48 @@ export class Autofill extends BasePlugin {
     if (!source) {
       return;
     }
-    if (this.grid.hooks.allows('beforeAutofill', source.toArray(), target) === false) {
+    const reach = this.#reach(source, target);
+
+    // The array the hook is given is the one the fill reads from, so a handler
+    // may rewrite a value in place and have it land. It was built separately
+    // from the values that were actually used before, which meant every such
+    // edit was collected, ignored and thrown away — the defect `beforeChange`
+    // had. Returning `false` still refuses the fill outright.
+    const selection: string[][] = [];
+    for (let row = source.topRow; row <= source.bottomRow; row += 1) {
+      const line: string[] = [];
+      for (let col = source.startCol; col <= source.endCol; col += 1) {
+        // The formula rather than the result, so it can be shifted the way a
+        // copy would shift it.
+        line.push(this.grid.getSourceDataAtCell(row, col));
+      }
+      selection.push(line);
+    }
+    const answer = this.grid.hooks.run<unknown>(
+      'beforeAutofill',
+      selection,
+      source.toArray(),
+      target,
+    );
+    if (answer === false) {
       return;
     }
+    // Only an array replaces the values; a handler that answers anything else
+    // has said nothing about them, and reading a `true` as a fill would empty
+    // every cell it reached.
+    const data = Array.isArray(answer) ? (answer as string[][]) : selection;
     const changes: Array<[number, number, string]> = [];
 
-    const fillsDown = target.endRow > source.bottomRow;
-    const fillsUp = target.startRow < source.topRow;
-    const fillsRight = target.endCol > source.endCol;
-    const fillsLeft = target.startCol < source.startCol;
+    const fillsDown = reach.endRow > source.bottomRow;
+    const fillsUp = reach.startRow < source.topRow;
+    const fillsRight = reach.endCol > source.endCol;
+    const fillsLeft = reach.startCol < source.startCol;
 
     if (fillsDown || fillsUp) {
       for (let col = source.startCol; col <= source.endCol; col += 1) {
-        const values: string[] = [];
-        for (let row = source.topRow; row <= source.bottomRow; row += 1) {
-          // The formula rather than the result, so it can be shifted the way a
-          // copy would shift it.
-          values.push(this.grid.getSourceDataAtCell(row, col));
-        }
+        const values = data.map((line) => line[col - source.startCol] ?? '');
         if (fillsDown) {
-          fillFrom(values, target.endRow - source.bottomRow).forEach((filled, index) => {
+          fillFrom(values, reach.endRow - source.bottomRow).forEach((filled, index) => {
             changes.push([
               source.bottomRow + index + 1,
               col,
@@ -114,7 +163,7 @@ export class Autofill extends BasePlugin {
         if (fillsUp) {
           // Upward, the series runs backward, so the source is reversed and the
           // results are laid back down in reverse too.
-          fillFrom([...values].reverse(), source.topRow - target.startRow).forEach(
+          fillFrom([...values].reverse(), source.topRow - reach.startRow).forEach(
             (filled, index) => {
               changes.push([
                 source.topRow - index - 1,
@@ -128,12 +177,9 @@ export class Autofill extends BasePlugin {
     }
     if (fillsRight || fillsLeft) {
       for (let row = source.topRow; row <= source.bottomRow; row += 1) {
-        const values: string[] = [];
-        for (let col = source.startCol; col <= source.endCol; col += 1) {
-          values.push(this.grid.getSourceDataAtCell(row, col));
-        }
+        const values = data[row - source.topRow] ?? [];
         if (fillsRight) {
-          fillFrom(values, target.endCol - source.endCol).forEach((filled, index) => {
+          fillFrom(values, reach.endCol - source.endCol).forEach((filled, index) => {
             changes.push([
               row,
               source.endCol + index + 1,
@@ -142,7 +188,7 @@ export class Autofill extends BasePlugin {
           });
         }
         if (fillsLeft) {
-          fillFrom([...values].reverse(), source.startCol - target.startCol).forEach(
+          fillFrom([...values].reverse(), source.startCol - reach.startCol).forEach(
             (filled, index) => {
               changes.push([
                 row,
@@ -159,6 +205,36 @@ export class Autofill extends BasePlugin {
       this.grid.setDataAtCells(changes, 'autofill');
     }
     this.grid.hooks.run('afterAutofill', undefined, source.toArray(), target);
+  }
+
+  /**
+   * How far a drag is actually allowed to reach.
+   *
+   * `direction` is a restriction rather than a description: naming one axis
+   * says the other may not be filled at all, so a drag across it is pulled
+   * back to the selection instead of being obeyed. `autoInsertRow` decides
+   * what happens at the foot of the table — with it off the fill stops at the
+   * last row rather than growing one, which is the difference between a drag
+   * that ends and a drag that keeps making rows. A fill restricted to the
+   * horizontal has no row to insert either way, so it never grows the table.
+   */
+  #reach(
+    source: { topRow: number; bottomRow: number; startCol: number; endCol: number },
+    target: { startRow: number; endRow: number; startCol: number; endCol: number },
+  ): { startRow: number; endRow: number; startCol: number; endCol: number } {
+    const settings = this.#options();
+    const vertical = settings.direction !== 'horizontal';
+    const horizontal = settings.direction !== 'vertical';
+    const grows = settings.direction !== 'horizontal' && settings.autoInsertRow !== false;
+
+    return {
+      startRow: vertical ? target.startRow : source.topRow,
+      endRow: vertical
+        ? (grows ? target.endRow : Math.min(target.endRow, this.grid.countRows() - 1))
+        : source.bottomRow,
+      startCol: horizontal ? target.startCol : source.startCol,
+      endCol: horizontal ? target.endCol : source.endCol,
+    };
   }
 }
 

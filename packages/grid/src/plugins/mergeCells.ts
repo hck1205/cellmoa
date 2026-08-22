@@ -17,20 +17,41 @@ export interface MergedArea {
   colspan: number;
 }
 
+/** What the `mergeCells` setting may hold, when it is given as an object. */
+export interface MergeCellsSettings {
+  cells?: MergedArea[];
+  /**
+   * Accepted and without effect here.
+   *
+   * In Handsontable this turns off the way the rendered range is widened to
+   * take in a merge that crosses the viewport edge. This grid draws a merge as
+   * a spanning cell in the pane that owns its corner and never widens the range
+   * for one, so there is nothing to turn off — but a configuration written
+   * against the guide should not be rejected for saying so.
+   */
+  virtualized?: boolean;
+}
+
 export class MergeCells extends BasePlugin {
   static override readonly pluginName: string = 'mergeCells';
 
   #areas: MergedArea[] = [];
 
   override isEnabled(): boolean {
-    const settings = this.grid.getSettings().mergeCells;
-    return settings === true || Array.isArray(settings);
+    return this.switchedOn();
   }
 
   protected override onEnable(): void {
     const settings = this.grid.getSettings().mergeCells;
-    if (Array.isArray(settings)) {
-      this.#areas = (settings as MergedArea[]).map((area) => ({ ...area }));
+    const declared = Array.isArray(settings)
+      ? (settings as MergedArea[])
+      : (this.options<MergeCellsSettings>().cells ?? []);
+    // Through `merge` rather than straight into the list, because a merge
+    // declared in the settings clears the cells it covers exactly as one made
+    // by hand does — a value under a merge is a value nobody can see or reach,
+    // however the merge got there.
+    for (const area of declared) {
+      this.merge(area.row, area.col, area.row + area.rowspan - 1, area.col + area.colspan - 1);
     }
     this.addHook('afterRenderer', (_value: unknown, td: HTMLTableCellElement, row: number, col: number) => {
       const covering = this.getCoveringArea(row, col);

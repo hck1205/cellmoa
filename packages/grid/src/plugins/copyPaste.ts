@@ -9,11 +9,39 @@
 
 import { BasePlugin, registerPlugin } from './base.js';
 
+/**
+ * Where a paste puts what was already in the cells.
+ *
+ * `overwrite` writes over them. The two shift modes keep them: the block that
+ * was there moves down or to the right of what arrives, which is how a paste
+ * inserts rather than replaces.
+ */
+export type PasteMode = 'overwrite' | 'shift_down' | 'shift_right';
+
+/**
+ * What a copy takes.
+ *
+ * `with-column-group-headers` is the name the reference's own `copy()` uses
+ * for `with-all-column-headers`; the guide gives the latter. Both are here
+ * because code written against either has to land in the same place.
+ */
+export type CopyMode =
+  | 'cells-only'
+  | 'with-column-headers'
+  | 'with-all-column-headers'
+  | 'with-column-group-headers'
+  | 'column-headers-only';
+
 export interface CopyPasteSettings {
   columnsLimit?: number;
   rowsLimit?: number;
-  pasteMode?: 'overwrite' | 'shift_down' | 'shift_right';
+  pasteMode?: PasteMode;
+  /** Let a copy take the header row nearest the cells. */
   copyColumnHeaders?: boolean;
+  /** Let a copy take every header level above the cells. */
+  copyColumnGroupHeaders?: boolean;
+  /** Let a copy take the headers and none of the cells. */
+  copyColumnHeadersOnly?: boolean;
 }
 
 /**
@@ -107,6 +135,49 @@ export function toClipboardHtml(rows: string[][]): string {
 }
 
 /**
+ * Reads the rows back out of an HTML table.
+ *
+ * The clipboard's HTML flavour is what a paste should look at first: it says
+ * where every cell ends, so a value that itself contains a tab or a line break
+ * survives, where the plain flavour can only guess. Returns `null` when there
+ * is no table, which is the signal to fall back to the text.
+ *
+ * Parsed with `DOMParser` rather than into an element of this page. The markup
+ * came from wherever the user last copied from, and an inert document runs no
+ * script and fetches nothing while it is being read for its text.
+ */
+export function parseClipboardHtml(html: string): string[][] | null {
+  if (!/<table[\s>]/i.test(html)) {
+    return null;
+  }
+  const table = new DOMParser().parseFromString(html, 'text/html').querySelector('table');
+  if (!table) {
+    return null;
+  }
+  const rows: string[][] = [];
+  for (const line of Array.from(table.querySelectorAll('tr'))) {
+    rows.push(Array.from(line.querySelectorAll('th, td'), (cell) => cell.textContent ?? ''));
+  }
+  return rows.length > 0 ? rows : null;
+}
+
+/**
+ * The block a paste writes, repeated to cover a selection larger than it.
+ *
+ * `populateFromArray` does this itself for an ordinary paste. The shift modes
+ * have to do it up front, because what they append below or beside the block
+ * has to go after the last repetition rather than after the first.
+ */
+function repeatBlock(values: string[][], rows: number, cols: number): string[][] {
+  return Array.from({ length: rows }, (_, r) => {
+    const line = values[r % values.length] ?? [];
+    return Array.from({ length: cols }, (_, c) =>
+      line.length === 0 ? '' : (line[c % line.length] ?? ''),
+    );
+  });
+}
+
+/**
  * How far a paste reaches.
  *
  * A selection larger than the pasted block repeats it, which is how pasting one
@@ -135,6 +206,9 @@ interface CopyBounds {
   left: number;
   bottom: number;
   right: number;
+  /** How big the selection was before the limits clipped it. */
+  askedRows: number;
+  askedCols: number;
 }
 
 /** What a copy took out of the grid, kept so a paste can shift its formulas. */
@@ -198,6 +272,14 @@ export class CopyPaste extends BasePlugin {
    */
   #clipping: Clipping | null = null;
 
+  /**
+   * What the next copy takes, when `copy()` was the one that asked for it.
+   *
+   * A copy has to be answered by the browser's own `copy` event, so the mode
+   * cannot be passed to it directly: it is left here and consumed there.
+   */
+  #copyMode: CopyMode | null = null;
+
   override isEnabled(): boolean {
     return this.grid.getSettings().copyPaste !== false;
   }
@@ -225,19 +307,138 @@ export class CopyPaste extends BasePlugin {
     if (!range) {
       return null;
     }
-    const limits = this.options<CopyPasteSettings>();
+    const limits = this.#limits();
     return {
       top: range.topRow,
       left: range.startCol,
-      bottom: Math.min(range.bottomRow, range.topRow + (limits.rowsLimit ?? 1000) - 1),
-      right: Math.min(range.endCol, range.startCol + (limits.columnsLimit ?? 1000) - 1),
+      // The `Math.max` keeps a limit of zero from turning the rectangle inside
+      // out and copying a row above the one that was selected.
+      bottom: Math.min(range.bottomRow, Math.max(range.topRow + limits.rows - 1, range.topRow)),
+      right: Math.min(range.endCol, Math.max(range.startCol + limits.cols - 1, range.startCol)),
+      askedRows: range.bottomRow - range.topRow + 1,
+      askedCols: range.endCol - range.startCol + 1,
     };
   }
 
-  /** Whether a copy puts a row of column headers in front of the values. */
-  #copiesHeaders(): boolean {
-    const asked = this.options<CopyPasteSettings>().copyColumnHeaders === true;
-    return asked && this.grid.hasColHeaders();
+  /**
+   * How much of a selection may leave the grid.
+   *
+   * Both defaults became `Infinity` in the reference's 10.0, and this is why:
+   * a finite one stops a copy part-way through what was selected and says
+   * nothing about it, so the loss is only ever found in the paste.
+   */
+  #limits(): { rows: number; cols: number } {
+    const settings = this.options<CopyPasteSettings>();
+    return { rows: settings.rowsLimit ?? Infinity, cols: settings.columnsLimit ?? Infinity };
+  }
+
+  /**
+   * Says so when the limits cut a copy short.
+   *
+   * `afterCopyLimit` is the only warning there is that the clipboard holds
+   * less than was selected, which is why it has to run even though nothing in
+   * this grid listens to it. The four arguments are the reference's, in its
+   * order: a handler for this hook can only have been written against that.
+   */
+  #announceLimit(bounds: CopyBounds): void {
+    const rows = bounds.bottom - bounds.top + 1;
+    const cols = bounds.right - bounds.left + 1;
+    if (rows === bounds.askedRows && cols === bounds.askedCols) {
+      return;
+    }
+    const limits = this.#limits();
+    this.grid.hooks.run('afterCopyLimit', rows, cols, limits.rows, limits.cols);
+  }
+
+  /**
+   * The mode a copy uses when the caller did not name one.
+   *
+   * `copyColumnHeaders` has meant "every copy carries the headers" in this
+   * grid since it was written, so it keeps meaning that. In the reference the
+   * same setting only offers the menu item, and changing it here would take
+   * the header row off an existing caller's copy without a word.
+   */
+  #defaultMode(): CopyMode {
+    return this.options<CopyPasteSettings>().copyColumnHeaders === true
+      ? 'with-column-headers'
+      : 'cells-only';
+  }
+
+  /** Which header levels a mode asks for, if any. */
+  #headerLevels(mode: CopyMode): 'none' | 'bottom' | 'all' {
+    switch (mode) {
+      case 'with-column-headers':
+      case 'column-headers-only':
+        return 'bottom';
+      case 'with-all-column-headers':
+      case 'with-column-group-headers':
+        return 'all';
+      default:
+        return 'none';
+    }
+  }
+
+  /**
+   * The header rows a copy puts in front of the values.
+   *
+   * A group's label sits in the first column it spans and the rest of the span
+   * is blank, which is what a header cell reports for a column it does not
+   * begin. Repeating the label across the span would read, in a spreadsheet
+   * that the copy lands in, as one group per column rather than one group.
+   */
+  #headerRows(bounds: CopyBounds, which: 'bottom' | 'all'): string[][] {
+    if (!this.grid.hasColHeaders()) {
+      return [];
+    }
+    const levels = this.grid.getColHeaderRows(bounds.left, bounds.right);
+    const wanted = which === 'all' ? levels : levels.slice(-1);
+    const width = bounds.right - bounds.left + 1;
+    return wanted.map((cells) => {
+      const row: string[] = Array.from({ length: width }, () => '');
+      for (const cell of cells) {
+        row[cell.col - bounds.left] = cell.label;
+      }
+      return row;
+    });
+  }
+
+  /**
+   * Whether the settings offer a header-copy mode.
+   *
+   * The three predefined context-menu items are each switched on by one of the
+   * three settings, and the menu is the only thing that has to ask.
+   */
+  isHeaderModeAllowed(mode: CopyMode): boolean {
+    if (!this.grid.hasColHeaders()) {
+      return false;
+    }
+    const settings = this.options<CopyPasteSettings>();
+    switch (mode) {
+      case 'with-column-headers':
+        return settings.copyColumnHeaders === true;
+      case 'with-all-column-headers':
+      case 'with-column-group-headers':
+        return settings.copyColumnGroupHeaders === true;
+      case 'column-headers-only':
+        return settings.copyColumnHeadersOnly === true;
+      default:
+        return true;
+    }
+  }
+
+  /**
+   * Copies the selection, with as much of its column header as the mode asks.
+   *
+   * A page may only write to the clipboard while it is answering a `copy`
+   * event, so this cannot do the writing: it records what the next copy should
+   * take and asks the document for the event. Where `execCommand` is not there
+   * the mode still stands, which is what a caller reading `getCopyableText()`
+   * for itself relies on.
+   */
+  copy(mode: CopyMode = 'cells-only'): void {
+    this.#copyMode = mode;
+    const owner = this.grid.view?.root.ownerDocument ?? globalThis.document;
+    owner.execCommand?.('copy');
   }
 
   /** A rectangle read one cell at a time, blanking what may not be copied. */
@@ -254,20 +455,17 @@ export class CopyPaste extends BasePlugin {
   }
 
   /** The selected cells as a rectangle of values. */
-  getRangeData(): string[][] {
+  getRangeData(mode: CopyMode = this.#defaultMode()): string[][] {
     const bounds = this.#copyBounds();
     if (!bounds) {
       return [];
     }
-    const rows = this.#collect(bounds, (row, col) => this.grid.getDataAtCell(row, col));
-    if (this.#copiesHeaders()) {
-      const header: string[] = [];
-      for (let col = bounds.left; col <= bounds.right; col += 1) {
-        header.push(this.grid.getColHeader(col));
-      }
-      rows.unshift(header);
+    const which = this.#headerLevels(mode);
+    const headers = which === 'none' ? [] : this.#headerRows(bounds, which);
+    if (mode === 'column-headers-only') {
+      return headers;
     }
-    return rows;
+    return [...headers, ...this.#collect(bounds, (row, col) => this.grid.getDataAtCell(row, col))];
   }
 
   /**
@@ -291,13 +489,21 @@ export class CopyPaste extends BasePlugin {
   }
 
   /** The selected cells as clipboard text, for a caller doing its own copy. */
-  getCopyableText(): string {
-    return toClipboardText(this.getRangeData());
+  getCopyableText(mode: CopyMode = this.#defaultMode()): string {
+    return toClipboardText(this.getRangeData(mode));
   }
 
   /** Handles a copy or a cut. */
   onCopy(event: ClipboardEvent, isCut: boolean): void {
-    const rows = this.getRangeData();
+    // Whatever `copy()` asked for is spent here, so the next plain Ctrl+C is
+    // an ordinary copy again rather than a repeat of the last menu command.
+    const mode = this.#copyMode ?? this.#defaultMode();
+    this.#copyMode = null;
+    const bounds = this.#copyBounds();
+    if (bounds) {
+      this.#announceLimit(bounds);
+    }
+    const rows = this.getRangeData(mode);
     if (rows.length === 0) {
       return;
     }
@@ -317,7 +523,7 @@ export class CopyPaste extends BasePlugin {
     // no clipping costs this grid the formulas on a paste back into itself and
     // gains it the same block every other application is handed.
     this.#clipping =
-      range && !this.#copiesHeaders()
+      range && mode === 'cells-only'
         ? { row: range.topRow, col: range.startCol, source: this.getRangeSource(), text }
         : null;
 
@@ -327,19 +533,57 @@ export class CopyPaste extends BasePlugin {
     this.grid.hooks.run(isCut ? 'afterCut' : 'afterCopy', undefined, rows);
   }
 
-  /** Handles a paste. */
+  /**
+   * Handles a paste.
+   *
+   * The HTML flavour is read first and the plain text is the fallback, which
+   * is what keeps a paste out of a spreadsheet in the shape it left in: the
+   * markup says where every cell ends, so a value holding a tab or a line
+   * break of its own arrives as one cell rather than as several.
+   *
+   * The text is still carried alongside, because it is what identifies a paste
+   * of this grid's own copy and so what lets the formulas in it be shifted.
+   */
   onPaste(event: ClipboardEvent): void {
-    const text = event.clipboardData?.getData('text/plain');
-    if (!text) {
+    const text = event.clipboardData?.getData('text/plain') ?? '';
+    const values = this.#fromHtml(event.clipboardData?.getData('text/html') ?? '');
+    if (!values && !text) {
       return;
     }
     event.preventDefault();
-    this.paste(text);
+    this.#write(values ?? parseClipboardText(text), text);
+  }
+
+  /**
+   * The rows an HTML clipboard flavour describes, or `null` when it has none.
+   *
+   * The caller's `sanitizer` sees it first, as it sees every other piece of
+   * foreign markup this grid handles. A setting that covers all but one way in
+   * is worth nothing, and this is a way in.
+   */
+  #fromHtml(html: string): string[][] | null {
+    if (!html) {
+      return null;
+    }
+    const sanitizer = this.grid.getSettings().sanitizer;
+    return parseClipboardHtml(
+      typeof sanitizer === 'function' ? String(sanitizer(html, 'CopyPaste.paste')) : html,
+    );
   }
 
   /** Pastes clipboard text into the selection. */
   paste(text: string): void {
-    const values = parseClipboardText(text);
+    this.#write(parseClipboardText(text), text);
+  }
+
+  /**
+   * Writes a pasted rectangle.
+   *
+   * The clipboard text comes along even when the values were read from the
+   * HTML flavour, because it is what says whether this is a paste of this
+   * grid's own copy — and so whether the formulas in it may be shifted.
+   */
+  #write(values: string[][], text: string): void {
     if (values.length === 0) {
       return;
     }
@@ -353,15 +597,58 @@ export class CopyPaste extends BasePlugin {
     const shifted = this.#shiftClipping(text, range.topRow, range.startCol) ?? values;
     const prepared = this.#prepare(shifted, range.topRow, range.startCol);
     const extent = pasteExtent(prepared, range.rowCount, range.colCount);
+    const mode = this.options<CopyPasteSettings>().pasteMode ?? 'overwrite';
+    const block =
+      mode === 'overwrite' ? prepared : this.#shiftAside(prepared, range, extent, mode);
+    // The block already covers the whole target under the shift modes, so the
+    // corner is taken from it rather than from the extent, which describes
+    // only the part of it that was actually pasted.
+    const rows = mode === 'overwrite' ? extent.rows : block.length;
+    const cols = mode === 'overwrite' ? extent.cols : (block[0]?.length ?? extent.cols);
     this.grid.populateFromArray(
       range.topRow,
       range.startCol,
-      prepared,
-      range.topRow + extent.rows - 1,
-      range.startCol + extent.cols - 1,
+      block,
+      range.topRow + rows - 1,
+      range.startCol + cols - 1,
       'paste',
     );
     this.grid.hooks.run('afterPaste', undefined, values, range.toArray());
+  }
+
+  /**
+   * The pasted block with what was already there moved out of its way.
+   *
+   * Down or right, depending on the mode. Only the columns the paste covers
+   * move down, and only the rows it covers move right — a shift that reached
+   * the rest of the table would rearrange cells nobody pasted over.
+   */
+  #shiftAside(
+    values: string[][],
+    range: { topRow: number; startCol: number },
+    extent: { rows: number; cols: number },
+    mode: PasteMode,
+  ): string[][] {
+    const top = range.topRow;
+    const left = range.startCol;
+    const block = repeatBlock(values, extent.rows, extent.cols);
+    if (mode === 'shift_down') {
+      for (let row = top; row < this.grid.countRows(); row += 1) {
+        block.push(
+          Array.from({ length: extent.cols }, (_, c) =>
+            this.grid.getSourceDataAtCell(row, left + c),
+          ),
+        );
+      }
+      return block;
+    }
+    return block.map((line, r) => {
+      const pushed: string[] = [];
+      for (let col = left; col < this.grid.countCols(); col += 1) {
+        pushed.push(this.grid.getSourceDataAtCell(top + r, col));
+      }
+      return [...line, ...pushed];
+    });
   }
 
   /**

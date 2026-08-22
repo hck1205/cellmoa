@@ -7,6 +7,7 @@
  */
 
 import { BasePlugin, registerPlugin } from './base.js';
+import { OwnedIndexes } from './ownedIndexes.js';
 
 /** A value as it comes out of a cell. */
 export type FilterValue = string | number | boolean | null;
@@ -109,6 +110,8 @@ export class Filters extends BasePlugin {
   static override readonly pluginName: string = 'filters';
 
   #filters = new Map<number, ColumnFilter>();
+  /** The rows this filter is holding out of the visual space. */
+  readonly #excluded = new OwnedIndexes(() => this.grid.rowIndex, 'trim');
 
   override isEnabled(): boolean {
     return this.grid.getSettings().filters === true;
@@ -121,6 +124,8 @@ export class Filters extends BasePlugin {
 
   protected override onDisable(): void {
     this.clearConditions();
+    this.#excluded.clear();
+    this.grid.render();
   }
 
   /** Adds a condition to a column. */
@@ -177,26 +182,40 @@ export class Filters extends BasePlugin {
     if (this.grid.hooks.allows('beforeFilter', [...this.#filters.values()]) === false) {
       return;
     }
-    const map = this.grid.rowIndex;
-    map.untrim();
-
-    if (this.#filters.size > 0) {
-      const failing: number[] = [];
-      // The whole sheet is considered, not only what is visible: re-filtering
-      // must be able to bring a row back.
-      for (let physical = 0; physical < map.length; physical += 1) {
-        const visual = map.toVisual(physical);
-        if (visual === null) {
-          continue;
-        }
-        if (!this.#passes(visual)) {
-          failing.push(physical);
-        }
-      }
-      map.trim(failing);
-    }
+    this.applyConditions();
     this.grid.hooks.run('afterFilter', undefined, [...this.#filters.values()]);
     this.grid.render();
+  }
+
+  /**
+   * Judges every row again and trims the ones that fail, without announcing it.
+   *
+   * A plugin that has just given rows back — a pager releasing the rows outside
+   * its page so that they get judged too — needs the conditions applied to what
+   * it revealed, and it is already inside `afterFilter` when it asks. Firing the
+   * hooks a second time from there would report one filter as two.
+   */
+  applyConditions(): void {
+    const map = this.grid.rowIndex;
+    // Only this plugin's own rows come back. A row a pager or `trimRows` is
+    // holding is theirs to release, and clearing the whole trimmed set is what
+    // used to un-page a filtered grid while the pager still believed it had
+    // those rows.
+    this.#excluded.clear();
+    if (this.#filters.size === 0) {
+      return;
+    }
+    const failing: number[] = [];
+    for (let physical = 0; physical < map.length; physical += 1) {
+      const visual = map.toVisual(physical);
+      if (visual === null) {
+        continue;
+      }
+      if (!this.#passes(visual)) {
+        failing.push(physical);
+      }
+    }
+    this.#excluded.set(failing);
   }
 
   #passes(visualRow: number): boolean {

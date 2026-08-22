@@ -10,7 +10,13 @@ import { BasePlugin, registerPlugin } from './base.js';
 import { OwnedIndexes } from './ownedIndexes.js';
 import type { NestedHeaders } from './nestedHeaders.js';
 
-/** Which header cells may be collapsed, when the setting is a list. */
+/**
+ * Which header cells may be collapsed, when the setting is a list.
+ *
+ * `row` is counted upwards from the first table row, so the guide writes it
+ * negative: `-1` is the header row nearest the data and `-4` is the fourth one
+ * above it.
+ */
 export interface CollapsibleSpec {
   row: number;
   col: number;
@@ -93,11 +99,27 @@ export class CollapsibleColumns extends BasePlugin {
     }
     const settings = this.grid.getSettings().collapsibleColumns;
     if (Array.isArray(settings)) {
+      const depth = this.#headers()?.countLevels() ?? 0;
       return (settings as CollapsibleSpec[]).some(
-        (spec) => spec.row === level && spec.col === col && spec.collapsible !== false,
+        (spec) =>
+          this.#levelOf(spec, depth) === level && spec.col === col && spec.collapsible !== false,
       );
     }
     return settings === true;
+  }
+
+  /**
+   * Which level of the header stack a list entry names.
+   *
+   * The guide counts these upwards from the first table row, which is why they
+   * are negative — and why comparing one against a level index counted down
+   * from the top of the stack could never match, so the documented
+   * configuration collapsed nothing at all. A non-negative value is still read
+   * as that index down from the top, because that is the only form this plugin
+   * understood before and a grid configured against it should keep working.
+   */
+  #levelOf(spec: CollapsibleSpec, depth: number): number {
+    return spec.row < 0 ? depth + spec.row : spec.row;
   }
 
   isCollapsed(level: number, col: number): boolean {
@@ -128,6 +150,9 @@ export class CollapsibleColumns extends BasePlugin {
     if (!this.isCollapsible(level, col) || this.isCollapsed(level, col)) {
       return;
     }
+    if (this.grid.hooks.allows('beforeColumnCollapse', level, col) === false) {
+      return;
+    }
     this.#collapsed.add(`${level}:${col}`);
     this.#apply();
     this.grid.hooks.run('afterColumnCollapse', undefined, level, col);
@@ -135,9 +160,13 @@ export class CollapsibleColumns extends BasePlugin {
 
   /** Opens it again. */
   expand(level: number, col: number): void {
-    if (!this.#collapsed.delete(`${level}:${col}`)) {
+    if (!this.isCollapsed(level, col)) {
       return;
     }
+    if (this.grid.hooks.allows('beforeColumnExpand', level, col) === false) {
+      return;
+    }
+    this.#collapsed.delete(`${level}:${col}`);
     this.#apply();
     this.grid.hooks.run('afterColumnExpand', undefined, level, col);
   }
@@ -150,18 +179,25 @@ export class CollapsibleColumns extends BasePlugin {
     }
   }
 
-  /** Folds every group that can be folded. */
+  /**
+   * Folds every group that can be folded.
+   *
+   * One group at a time rather than in one sweep, so a listener that refuses a
+   * particular group is refused here too — a veto that held for a click on the
+   * control but not for "collapse all" would be no veto at all.
+   */
   collapseAll(): void {
     for (const group of this.getGroups()) {
-      this.#collapsed.add(`${group.level}:${group.col}`);
+      this.collapse(group.level, group.col);
     }
-    this.#apply();
   }
 
-  /** Opens all of them. */
+  /** Opens all of them, one at a time and for the same reason. */
   expandAll(): void {
-    this.#collapsed.clear();
-    this.#apply();
+    for (const key of [...this.#collapsed]) {
+      const [level, col] = key.split(':').map(Number) as [number, number];
+      this.expand(level, col);
+    }
   }
 
   /**

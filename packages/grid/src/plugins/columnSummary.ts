@@ -13,7 +13,17 @@ import { BasePlugin, registerPlugin } from './base.js';
 
 export type SummaryType = 'sum' | 'min' | 'max' | 'count' | 'average' | 'custom';
 
-/** One summary to keep up to date. */
+/**
+ * One summary to keep up to date.
+ *
+ * Two of Handsontable's options are deliberately absent, because writing a
+ * formula cannot express either of them. `forceNumeric` reads a non-numeric
+ * cell through `parseFloat`, so that `3c` counts as `3` — there is no spreadsheet
+ * function that means that. `suppressDataTypeErrors` decides whether a
+ * non-numeric value raises an error, and a formula's answer to that belongs to
+ * the engine evaluating it, not to the plugin writing it. Declaring either name
+ * here would promise something nothing reads.
+ */
 export interface SummarySpec {
   /** The column being summarised. */
   sourceColumn: number;
@@ -22,16 +32,22 @@ export interface SummarySpec {
   /** Which column the result goes in. Defaults to `sourceColumn`. */
   destinationColumn?: number;
   type?: SummaryType;
-  /** For `type: 'custom'`, the formula to write, with `{{range}}` substituted. */
-  customFunction?: string;
+  /**
+   * For `type: 'custom'`, the formula to write, with `{{range}}` substituted.
+   *
+   * Handsontable takes a function here and writes the number it returns. This
+   * plugin writes a formula instead, so that the total follows the values above
+   * it — and a function returning a number has no formula in it to write. The
+   * documented shape is accepted so that it can be refused by name rather than
+   * blowing up as a `TypeError` in the middle of a render.
+   */
+  customFunction?: string | ((endpoint: SummarySpec) => unknown);
   /** The rows to summarise, as `[start, end]` pairs or `[row]` singles. */
   ranges?: Array<[number, number] | [number]>;
   /** Read the destination row's position from the end of the data. */
   reversedRowCoords?: boolean;
-  /** Leave the destination out of its own range. Always true here. */
-  forceNumeric?: boolean;
+  /** `true` rounds to whole numbers; a number is a count of decimals, 0 to 100. */
   roundFloat?: number | boolean;
-  suppressDataTypeErrors?: boolean;
 }
 
 const FUNCTION_OF: Record<Exclude<SummaryType, 'custom'>, string> = {
@@ -115,12 +131,30 @@ export class ColumnSummary extends BasePlugin {
     }
     const range = parts.length > 0 ? parts.join(',') : `${column}1:${column}1`;
 
-    if (spec.type === 'custom' && spec.customFunction) {
+    if (spec.type === 'custom' && typeof spec.customFunction === 'string') {
       return `=${spec.customFunction.replace(/\{\{range\}\}/g, range)}`;
     }
     const name = FUNCTION_OF[(spec.type ?? 'sum') as Exclude<SummaryType, 'custom'>] ?? 'SUM';
     const call = `${name}(${range})`;
-    return typeof spec.roundFloat === 'number' ? `=ROUND(${call},${spec.roundFloat})` : `=${call}`;
+    const digits = this.#roundingDigits(spec.roundFloat);
+    return digits === null ? `=${call}` : `=ROUND(${call},${digits})`;
+  }
+
+  /**
+   * How many decimals a summary is rounded to, or `null` for none.
+   *
+   * `true` means whole numbers, and a count outside 0 to 100 is clamped rather
+   * than passed on: `ROUND` with a negative count rounds to tens and hundreds,
+   * which is not what someone who wrote `-2` was asking for.
+   */
+  #roundingDigits(roundFloat: number | boolean | undefined): number | null {
+    if (roundFloat === true) {
+      return 0;
+    }
+    if (typeof roundFloat !== 'number') {
+      return null;
+    }
+    return Math.min(Math.max(Math.trunc(roundFloat), 0), 100);
   }
 
   /** Splits `[from, to]` around a row that must be left out. */
@@ -144,7 +178,19 @@ export class ColumnSummary extends BasePlugin {
       typeof settings === 'function'
         ? ((settings as () => SummarySpec[])() ?? [])
         : ((settings as SummarySpec[]) ?? []);
-    return list.map((spec) => ({ ...spec }));
+    return list.map((spec) => {
+      if (typeof spec.customFunction === 'function') {
+        // Loudly, and where the settings were read, rather than as a
+        // `TypeError` thrown out of a render that cannot say what caused it.
+        throw new TypeError(
+          `columnSummary.customFunction must be a formula template such as ` +
+            `'SUMPRODUCT({{range}})'. This grid writes a formula into the ` +
+            `destination cell so the total follows the values above it, and a ` +
+            `function returning a number has no formula in it to write.`,
+        );
+      }
+      return { ...spec };
+    });
   }
 }
 

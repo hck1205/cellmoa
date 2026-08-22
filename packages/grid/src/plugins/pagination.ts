@@ -10,6 +10,7 @@
  */
 
 import { BasePlugin, registerPlugin } from './base.js';
+import type { Filters } from './filters.js';
 import { OwnedIndexes } from './ownedIndexes.js';
 
 export interface PaginationSettings {
@@ -55,13 +56,38 @@ export class Pagination extends BasePlugin {
     this.#page = Math.max(options.initialPage ?? 1, 1);
     this.#apply();
     this.#drawPager();
+    this.addHook('afterFilter', () => this.#repageAfterFilter());
+    // `trimRows` changes how many rows there are to page through, and a page
+    // worked out before the change is a page of the wrong rows.
+    this.addHook('afterTrimRow', () => this.#apply());
+    this.addHook('afterUntrimRow', () => this.#apply());
   }
 
   protected override onDisable(): void {
     this.#outside.clear();
+    this.#pager?.remove();
     this.grid.view?.layout.unregister('pagination', 'bottom');
     this.#pager = null;
     this.grid.render();
+  }
+
+  /**
+   * Re-pages what a filter has just left behind.
+   *
+   * A filter can only judge the rows in the visual space, and the rows outside
+   * the current page are not in it — so the ones on page two would arrive
+   * unfiltered the moment the reader turned to them. This gives every row back
+   * first, has the filter judge the whole sheet, and only then takes a page out
+   * of what survived. Neither plugin touches the other's rows to do it.
+   */
+  #repageAfterFilter(): void {
+    this.#outside.clear();
+    const filters = this.grid.getPlugin<Filters>('filters');
+    if (filters?.isPluginEnabled()) {
+      filters.applyConditions();
+    }
+    this.#page = Math.min(this.#page, this.countPages());
+    this.#apply();
   }
 
   /**
@@ -172,11 +198,11 @@ export class Pagination extends BasePlugin {
   }
 
   /**
-   * Draws the pager into the slot below the grid.
+   * Draws the pager, into the slot below the grid or wherever the page said.
    *
-   * Rebuilt rather than updated: it has four buttons and a label, and the cost
-   * of getting one of them out of step with the page is higher than the cost of
-   * making five elements.
+   * Rebuilt rather than updated: it has four buttons, a label and a chooser,
+   * and the cost of getting one of them out of step with the page is higher
+   * than the cost of making six elements.
    */
   #drawPager(): void {
     const view = this.grid.view;
@@ -189,6 +215,23 @@ export class Pagination extends BasePlugin {
     pager.className = 'cm-pagination';
     pager.setAttribute('role', 'navigation');
 
+    if (options.showPageSize !== false) {
+      const chooser = doc.createElement('select');
+      chooser.className = 'cm-pagination-size';
+      for (const size of options.pageSizeList ?? [10, 20, 50, 100]) {
+        const option = doc.createElement('option');
+        option.value = String(size);
+        option.textContent = String(size);
+        option.selected = size === this.#pageSize;
+        chooser.appendChild(option);
+      }
+      chooser.addEventListener('change', () => {
+        // `auto` is a size like any other to the reader, and the plugin already
+        // knows how to resolve it against the viewport.
+        this.setPageSize(chooser.value === 'auto' ? 'auto' : Number(chooser.value));
+      });
+      pager.appendChild(chooser);
+    }
     if (options.showCounter !== false) {
       const counter = doc.createElement('span');
       counter.className = 'cm-pagination-counter';
@@ -211,7 +254,15 @@ export class Pagination extends BasePlugin {
         pager.appendChild(button);
       }
     }
-    view.layout.register('pagination', pager, { side: 'bottom', weight: 100 });
+    // A container the page named is the page's to place; the layout slot is
+    // only where the pager goes when nobody said otherwise.
+    if (options.uiContainer) {
+      this.#pager?.remove();
+      view.layout.unregister('pagination', 'bottom');
+      options.uiContainer.appendChild(pager);
+    } else {
+      view.layout.register('pagination', pager, { side: 'bottom', weight: 100 });
+    }
     this.#pager = pager;
   }
 
