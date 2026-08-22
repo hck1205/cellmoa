@@ -93,7 +93,9 @@ export const Notification = () => (
             variant: 'error',
             duration: 0,
             position: 'top-end',
-            actions: [{ label: 'Retry', type: 'primary' }],
+            // The callback is required by Handsontable's type; taking the
+            // action is what dismisses the toast on both sides.
+            actions: [{ label: 'Retry', type: 'primary', callback: () => undefined }],
           });
           toast?.showMessage({
             message: 'Sorted by Region.',
@@ -112,7 +114,9 @@ export const Notification = () => (
             variant: 'error',
             duration: 0,
             position: 'top-end',
-            actions: [{ label: 'Retry', type: 'primary' }],
+            // The callback is required by Handsontable's type; taking the
+            // action is what dismisses the toast on both sides.
+            actions: [{ label: 'Retry', type: 'primary', callback: () => undefined }],
           });
           toast.showMessage({
             message: 'Sorted by Region.',
