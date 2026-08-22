@@ -11,9 +11,12 @@
 
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const DOCS = '/workspace/handsontable/handsontable/docs/content/guides';
-const STORIES = 'src/verification';
+// Resolved against this file, not the working directory: the script is run
+// from the repository root as often as from here.
+const STORIES = fileURLToPath(new URL('./src/verification', import.meta.url));
 
 /** Every page in the guide, by section. */
 function pages() {
