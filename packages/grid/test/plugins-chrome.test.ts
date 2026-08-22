@@ -321,3 +321,48 @@ describe('sizing plugins', () => {
     expect(grid.isPluginEnabled('manualColumnResize')).toBe(true);
   });
 });
+
+describe('HTML that reaches the DOM', () => {
+  it('runs the sanitizer for a dialog, not only for cells', async () => {
+    // The dialog assigned `innerHTML` outright, so a grid configured exactly as
+    // the security guide says still had one unguarded way in.
+    const seen: Array<[string, string]> = [];
+    const grid = await makeGrid({
+      dialog: true,
+      sanitizer: (content: string, source: string) => {
+        seen.push([content, source]);
+        return content.replace(/<script[\s\S]*?<\/script>/g, '');
+      },
+    });
+    (grid.getPlugin('dialog') as unknown as Dialog).show({
+      content: 'safe<script>steal()</script>',
+      contentType: 'html',
+    });
+
+    expect(seen).toEqual([['safe<script>steal()</script>', 'Dialog']]);
+    const box = grid.view!.overlay.querySelector('.cm-dialog');
+    expect(box?.innerHTML).toBe('safe');
+    expect(box?.querySelector('script')).toBeNull();
+  });
+
+  it('tells the sanitizer where the content is going', async () => {
+    const sources: string[] = [];
+    const grid = await makeGrid({
+      allowHtml: true,
+      sanitizer: (content: string, source: string) => {
+        sources.push(source);
+        return content;
+      },
+    });
+    grid.setDataAtCell(0, 0, '<b>bold</b>');
+    grid.render();
+    expect(sources).toContain('innerHTML');
+  });
+
+  it('writes plain text with no sanitizer configured, as it always did', async () => {
+    const grid = await makeGrid({ dialog: true });
+    (grid.getPlugin('dialog') as unknown as Dialog).show({ content: '<i>x</i>' });
+    const box = grid.view!.overlay.querySelector('.cm-dialog');
+    expect(box?.textContent).toContain('<i>x</i>');
+  });
+});

@@ -6,6 +6,7 @@
  * safe to call tens of thousands of times while a grid scrolls.
  */
 
+import { writeHtml } from '../sanitize.js';
 import type { CellRenderer, RenderContext } from './types.js';
 
 /** Applies what every renderer does, whatever the type. */
@@ -42,8 +43,7 @@ function write(td: HTMLTableCellElement, text: string, meta: RenderContext['meta
     td.textContent = text;
     return;
   }
-  const sanitizer = meta.sanitizer as ((html: string) => string) | undefined;
-  td.innerHTML = typeof sanitizer === 'function' ? String(sanitizer(text)) : text;
+  writeHtml(td, text, meta.sanitizer, 'innerHTML');
 }
 
 /** The default: whatever the engine says the cell shows. */

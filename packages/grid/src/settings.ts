@@ -423,6 +423,16 @@ export interface GridSettings {
    * while the renderer read `Intl` options, which made the documented usage a
    * compile error.
    */
+  /**
+   * Cleans HTML before it reaches the DOM.
+   *
+   * No sanitizer ships with this grid, as none ships with the reference since
+   * v18: a bundled one goes stale, and only the caller knows what their content
+   * may contain. `source` says where the content is going, so one function can
+   * be stricter about a paste than about a cell it rendered itself.
+   */
+  sanitizer?: (content: string, source: 'innerHTML' | 'CopyPaste.paste' | 'Dialog') => string;
+
   numericFormat?: Intl.NumberFormatOptions;
   /** `Intl.DateTimeFormatOptions`, for the same reason. */
   dateFormat?: Intl.DateTimeFormatOptions;

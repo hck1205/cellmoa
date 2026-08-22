@@ -7,6 +7,7 @@
  * dismiss is a trap.
  */
 
+import { writeHtml } from '../sanitize.js';
 import { BasePlugin, registerPlugin } from './base.js';
 
 export interface DialogOptions {
@@ -176,7 +177,10 @@ export class Dialog extends BasePlugin {
   #fill(box: HTMLElement, options: DialogOptions): void {
     const content = options.content ?? '';
     if (options.contentType === 'html') {
-      box.innerHTML = content;
+      // Through the same door the cell renderers use. This used to assign
+      // `innerHTML` outright, so a grid that supplied a sanitizer for its cells
+      // still had an unguarded way in.
+      writeHtml(box, content, this.grid.getSettings().sanitizer, 'Dialog');
     } else {
       box.textContent = content;
     }
