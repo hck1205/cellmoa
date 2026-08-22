@@ -533,3 +533,69 @@ describe('a paste too big to spread', () => {
     expect(grid.getDataAtCell(1, 2)).toBe('d');
   });
 });
+
+describe('what `beforeChange` can do to a batch', () => {
+  it('writes the value a handler put in place of the one that was typed', async () => {
+    const grid = await makeGrid({ startRows: 2, startCols: 2 });
+    grid.addHook('beforeChange', (changes: Array<[number, number, unknown, unknown]>) => {
+      changes[0]![3] = 'corrected';
+    });
+    grid.setDataAtCell(0, 0, 'typed');
+    expect(grid.getDataAtCell(0, 0)).toBe('corrected');
+  });
+
+  it('drops just the entry a handler set to null, and keeps the rest', async () => {
+    // This is the documented way to filter a paste: null out what you do not
+    // want and let everything else land.
+    const grid = await makeGrid({ startRows: 3, startCols: 1 });
+    grid.addHook('beforeChange', (changes: Array<unknown>) => {
+      changes[1] = null;
+    });
+    grid.setDataAtCells([
+      [0, 0, 'a'],
+      [1, 0, 'refused'],
+      [2, 0, 'c'],
+    ]);
+    expect(grid.getDataAtCell(0, 0)).toBe('a');
+    expect(grid.getDataAtCell(1, 0)).toBe('');
+    expect(grid.getDataAtCell(2, 0)).toBe('c');
+  });
+
+  it('still refuses the whole batch when a handler returns false', async () => {
+    const grid = await makeGrid({ startRows: 2, startCols: 1 });
+    grid.addHook('beforeChange', () => false);
+    grid.setDataAtCell(0, 0, 'nope');
+    expect(grid.getDataAtCell(0, 0)).toBe('');
+  });
+
+  it('reports to `afterChange` only what was written', async () => {
+    const grid = await makeGrid({ startRows: 3, startCols: 1 });
+    grid.addHook('beforeChange', (changes: Array<unknown>) => {
+      changes[0] = null;
+    });
+    let reported: unknown[] = [];
+    grid.addHook('afterChange', (changes: unknown[]) => {
+      reported = changes ?? [];
+    });
+    grid.setDataAtCells([
+      [0, 0, 'dropped'],
+      [1, 0, 'kept'],
+    ]);
+    expect(reported).toHaveLength(1);
+    expect((reported[0] as unknown[])[3]).toBe('kept');
+  });
+
+  it('does nothing at all when every entry is dropped', async () => {
+    const grid = await makeGrid({ startRows: 2, startCols: 1 });
+    let rendered = 0;
+    grid.addHook('afterChange', () => {
+      rendered += 1;
+    });
+    grid.addHook('beforeChange', (changes: Array<unknown>) => {
+      changes[0] = null;
+    });
+    grid.setDataAtCell(0, 0, 'gone');
+    expect(grid.getDataAtCell(0, 0)).toBe('');
+    expect(rendered).toBe(0);
+  });
+});

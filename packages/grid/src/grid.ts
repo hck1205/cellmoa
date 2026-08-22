@@ -622,7 +622,13 @@ getCopyableSourceData(row: number, col: number): string {
     if (this.#destroyed || changes.length === 0) {
       return;
     }
-    const before: CellChange[] = changes.map(([row, col, value]) => [
+    // The array handed to `beforeChange` is the one that gets written. A
+    // handler may edit an entry's new value in place, or set an entry to
+    // `null` to drop just that change — which is the documented way to filter
+    // a paste — and returning `false` still refuses the batch outright. It was
+    // a separate copy before, so every one of those edits was collected,
+    // ignored, and thrown away.
+    const before: Array<CellChange | null> = changes.map(([row, col, value]) => [
       row,
       col,
       this.getSourceDataAtCell(row, col),
@@ -632,13 +638,28 @@ getCopyableSourceData(row: number, col: number): string {
       return;
     }
 
+    const allowed: Array<[number, number, string]> = [];
+    for (const change of before) {
+      if (change === null) {
+        continue;
+      }
+      const [row, prop, , newValue] = change;
+      const col = typeof prop === 'number' ? prop : this.propToCol(prop);
+      if (col >= 0) {
+        allowed.push([row, col, newValue === null || newValue === undefined ? '' : String(newValue)]);
+      }
+    }
+    if (allowed.length === 0) {
+      return;
+    }
+
     // A spreadsheet lets you type into the empty rows below the data, so the
     // grid grows to cover a write that lands past its current extent rather
     // than dropping it.
-    this.#growTo(changes);
+    this.#growTo(allowed);
 
     const edits: Edit[] = [];
-    for (const [row, col, value] of changes) {
+    for (const [row, col, value] of allowed) {
       const meta = this.getCellMeta(row, col);
       if (meta.readOnly) {
         // A read-only cell refuses quietly, as Handsontable does: the paste
@@ -653,7 +674,7 @@ getCopyableSourceData(row: number, col: number): string {
     if (edits.length === 0) {
       return;
     }
-    this.#warnAboutSourceData(changes);
+    this.#warnAboutSourceData(allowed);
 
     try {
       this.#data.write(edits, undefined, source === 'edit' ? undefined : source);
@@ -665,7 +686,11 @@ getCopyableSourceData(row: number, col: number): string {
       throw error;
     }
     this.#syncDimensions();
-    this.hooks.run('afterChange', before, source);
+    this.hooks.run(
+      'afterChange',
+      before.filter((change): change is CellChange => change !== null),
+      source,
+    );
     this.render();
   }
 
