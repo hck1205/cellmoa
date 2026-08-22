@@ -1,6 +1,6 @@
 ---
 source: https://docs.visigrid.app/cli/calc/
-status: in-progress
+status: done — csv, tsv, json and lines read; xlsx and json-full not yet
 ---
 
 # vgrid calc

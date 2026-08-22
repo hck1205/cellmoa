@@ -46,6 +46,22 @@ fn cellmoa(arguments: &[&str]) -> Output {
         .expect("the binary should run")
 }
 
+/// Runs a command with `input` on its stdin, the way a pipeline would.
+fn piped(input: &str, arguments: &[&str]) -> Output {
+    use std::io::Write;
+    use std::process::Stdio;
+    let mut child = Command::new(env!("CARGO_BIN_EXE_cellmoa"))
+        .args(arguments)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the binary should run");
+    child.stdin.as_mut().expect("piped").write_all(input.as_bytes()).expect("write stdin");
+    drop(child.stdin.take());
+    child.wait_with_output().expect("the child should finish")
+}
+
 fn stdout(output: &Output) -> String {
     String::from_utf8_lossy(&output.stdout).to_string()
 }
@@ -415,4 +431,120 @@ fn a_reader_that_stops_early_does_not_crash_the_writer() {
     assert!(output.status.success(), "closing the pipe early must not fail the command");
     let complaints = String::from_utf8_lossy(&output.stderr);
     assert!(!complaints.contains("panicked"), "{complaints}");
+}
+
+// `calc <formula> --from <format>` — the form documented at
+// docs/visigrid/02-calc.md. Each example on that page is a test here, because
+// a worked example in a spec is a claim about behaviour.
+
+#[test]
+fn calc_sums_a_column_of_piped_lines() {
+    let output = piped("10\n20\n30\n", &["calc", "=SUM(A:A)", "--from", "lines"]);
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    assert_eq!(stdout(&output).trim(), "60");
+}
+
+#[test]
+fn calc_excludes_the_header_row_from_the_formula() {
+    // With the header left in, AVERAGE would divide by four and return 15.
+    // That is a wrong answer that looks like a right one.
+    let output =
+        piped("amount\n10\n20\n30\n", &["calc", "=AVERAGE(A:A)", "--from", "csv", "--headers"]);
+    assert_eq!(stdout(&output).trim(), "20", "{}", stderr(&output));
+}
+
+#[test]
+fn calc_counts_lines() {
+    let output = piped("alpha\nbeta\ngamma\n", &["calc", "=COUNTA(A:A)", "--from", "lines"]);
+    assert_eq!(stdout(&output).trim(), "3");
+}
+
+#[test]
+fn calc_reads_a_conditional_sum_across_columns() {
+    let data = "x,2000,5\ny,500,7\nz,3000,11\n";
+    let output = piped(data, &["calc", "=SUMIF(B:B, \">1000\", C:C)", "--from", "csv"]);
+    assert_eq!(stdout(&output).trim(), "16", "{}", stderr(&output));
+}
+
+#[test]
+fn calc_prints_an_error_token_on_stdout_and_the_reason_on_stderr() {
+    let output = piped("1\n", &["calc", "=1/0", "--from", "csv"]);
+    assert_eq!(code(&output), 1);
+    assert_eq!(stdout(&output).trim(), "#DIV/0!", "the token is the answer");
+    assert!(stderr(&output).contains("#DIV/0!"), "the reason is a diagnostic");
+}
+
+#[test]
+fn calc_refuses_to_print_a_corner_of_an_array_and_says_how_big_it_is() {
+    let output = piped("5\n15\n25\n", &["calc", "=FILTER(A:A, A:A>10)", "--from", "csv"]);
+    assert_eq!(code(&output), 1, "{}", stderr(&output));
+    assert_eq!(stdout(&output), "", "printing the first cell would look like the whole answer");
+    assert!(stderr(&output).contains("2 rows by 1 column"), "{}", stderr(&output));
+}
+
+#[test]
+fn calc_spills_an_array_as_csv() {
+    let output =
+        piped("5\n15\n25\n", &["calc", "=FILTER(A:A, A:A>10)", "--from", "csv", "--spill", "csv"]);
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    assert_eq!(stdout(&output), "15\n25\n");
+}
+
+#[test]
+fn calc_spills_an_array_as_json_without_trailing_zeros() {
+    let output =
+        piped("5\n15\n25\n", &["calc", "=FILTER(A:A, A:A>10)", "--from", "csv", "--spill", "json"]);
+    assert_eq!(stdout(&output).trim(), "[[15],[25]]", "{}", stderr(&output));
+}
+
+#[test]
+fn calc_prints_numbers_raw_with_no_locale_formatting() {
+    // The reader is a program. `$1,234.57` would be three fields and a lie.
+    let output = piped("1234.5678\n", &["calc", "=A1", "--from", "csv"]);
+    assert_eq!(stdout(&output).trim(), "1234.5678");
+}
+
+#[test]
+fn calc_loads_the_data_where_into_says() {
+    let output = piped("7\n", &["calc", "=C5", "--from", "csv", "--into", "C5"]);
+    assert_eq!(stdout(&output).trim(), "7", "{}", stderr(&output));
+}
+
+#[test]
+fn calc_reads_json_objects_using_their_keys_as_headers() {
+    let output = piped(
+        r#"[{"amount":10},{"amount":20}]"#,
+        &["calc", "=SUM(A:A)", "--from", "json", "--headers"],
+    );
+    assert_eq!(stdout(&output).trim(), "30", "{}", stderr(&output));
+}
+
+#[test]
+fn calc_honours_an_explicit_delimiter() {
+    let output = piped("1;2\n3;4\n", &["calc", "=SUM(B:B)", "--from", "csv", "--delimiter", ";"]);
+    assert_eq!(stdout(&output).trim(), "6", "{}", stderr(&output));
+}
+
+#[test]
+fn calc_without_from_still_recalculates_a_workbook() {
+    // The two forms share a name and are told apart by `--from`. Adding the
+    // new one must not have taken the old one away.
+    let scratch = Scratch::new("calcboth");
+    let file = scratch.join("book.xlsx");
+    write_workbook(&file, &[(0, 0, "1"), (1, 0, "=A1+1")]);
+    let output = cellmoa(&["calc", file.to_str().unwrap(), "--json"]);
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    assert!(stdout(&output).contains("\"cells\""), "{}", stdout(&output));
+}
+
+#[test]
+fn calc_rejects_a_format_it_cannot_read() {
+    let output = piped("1\n", &["calc", "=A1", "--from", "parquet"]);
+    assert_eq!(code(&output), 5, "{}", stderr(&output));
+}
+
+#[test]
+fn calc_rejects_an_into_that_is_not_a_cell() {
+    let output = piped("1\n", &["calc", "=A1", "--from", "csv", "--into", "sideways"]);
+    assert_eq!(code(&output), 2, "{}", stderr(&output));
 }

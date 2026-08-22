@@ -17,20 +17,47 @@
 mod args;
 mod commands;
 mod exit;
+mod tabular;
 
 use args::Args;
 use std::process::ExitCode;
 
 /// Options that take a value rather than standing alone.
-const VALUE_FLAGS: &[&str] = &["out", "expect", "sheet", "format", "seed", "now", "onto", "cell"];
+const VALUE_FLAGS: &[&str] = &[
+    "out",
+    "expect",
+    "sheet",
+    "format",
+    "seed",
+    "now",
+    "onto",
+    "cell",
+    "from",
+    "into",
+    "delimiter",
+    "spill",
+];
 
-/// Short options and the long option each stands for.
-const ALIASES: args::Aliases<'static> = &[("q", "quiet"), ("o", "out"), ("f", "format")];
+/// Short options, per command, because the same letter means different things
+/// in different places: `-f` is `--from` where data is being read and
+/// `--format` where it is being written. One global table would have to pick
+/// one, and would silently do the wrong thing for the other.
+fn aliases(command: &str) -> args::Aliases<'static> {
+    const COMMON: (&str, &str) = ("q", "quiet");
+    match command {
+        "calc" | "convert" => &[COMMON, ("f", "from"), ("t", "to"), ("o", "out")],
+        _ => &[COMMON, ("f", "format"), ("o", "out")],
+    }
+}
 
 const USAGE: &str = "\
 cellmoa — a spreadsheet engine for the command line
 
 usage: cellmoa <command> [arguments]
+
+  calc <formula> --from <csv|tsv|json|lines> [--headers] [--into <cell>]
+       [--delimiter <char>] [--spill <csv|json>]
+        Evaluate one formula against data piped in on stdin.
 
   calc <file> [--out <file>] [--seed <n>] [--now <serial>]
         Recalculate a workbook and report what it holds.
@@ -85,7 +112,8 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
-    let args = match Args::parse_with(arguments, VALUE_FLAGS, ALIASES) {
+    let aliases = aliases(&arguments[0]);
+    let args = match Args::parse_with(arguments, VALUE_FLAGS, aliases) {
         Ok(args) => args,
         Err(e) => return fail(&exit::Fault::Usage(e.to_string())),
     };

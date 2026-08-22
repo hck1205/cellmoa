@@ -4,6 +4,7 @@
 use crate::eval::{eval_to_value, EvalCtx};
 use crate::functions;
 use crate::graph::{Dep, DepGraph};
+use crate::operand::Array;
 use crate::resolve::{resolve, Resolved};
 use crate::structure::{Alter, AlterError};
 use cellmoa_core::edit::{Actor, CommitKind, Document, EditError, Op};
@@ -189,6 +190,24 @@ impl Engine {
         let mut ctx =
             EvalCtx::new(&self.doc.workbook, sheet, at).with_seed(self.seed).with_now(self.now);
         Ok(eval_to_value(&mut ctx, &expr))
+    }
+
+    /// Evaluates one formula and keeps the shape of the answer.
+    ///
+    /// `evaluate` collapses a result to a single value, which is right for a
+    /// cell — that is what a cell holds. But `FILTER(A:A, B:B>10)` has an
+    /// answer with a height, and a caller that means to spill it needs the
+    /// whole rectangle rather than its top-left corner.
+    pub fn evaluate_array(&self, sheet: SheetId, formula: &str) -> Result<Array, String> {
+        let expr = parse(formula).map_err(|e| e.to_string())?;
+        let at = CellRef::new(
+            cellmoa_core::reference::MAX_COLS - 1,
+            cellmoa_core::reference::MAX_ROWS - 1,
+        );
+        let mut ctx =
+            EvalCtx::new(&self.doc.workbook, sheet, at).with_seed(self.seed).with_now(self.now);
+        let operand = crate::eval::eval(&mut ctx, &expr);
+        Ok(operand.to_array(&self.doc.workbook))
     }
 
     /// Applies several edits as one commit, then recalculates once.

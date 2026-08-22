@@ -126,6 +126,13 @@ fn sheet_id(engine: &Engine, name: Option<&str>) -> Result<u32, Fault> {
 }
 
 fn calc(args: &Args) -> Outcome {
+    // Two commands share the name. `--from` says which: with it, the argument
+    // is a formula and the data arrives on stdin; without it, the argument is
+    // a workbook to recalculate. The flag is required for the stdin form, so
+    // there is nothing to guess.
+    if args.has("from") {
+        return calc_stdin(args);
+    }
     args.reject_unknown(&["out", "seed", "now", "json", "quiet"])
         .map_err(|e| Fault::Usage(e.to_string()))?;
     let path = positional(args, 0, "a workbook to recalculate")?;
@@ -179,6 +186,209 @@ fn calc(args: &Args) -> Outcome {
     }
     // Cells left holding errors are a result, not a failure of the tool.
     ok()
+}
+
+/// Evaluates one formula against data piped in.
+///
+/// The data is loaded into a throwaway sheet and the formula is evaluated
+/// against it, so `=SUM(A:A)` means what it means in a spreadsheet. Nothing is
+/// written anywhere; the answer goes to stdout and the exit code says whether
+/// it is an answer.
+fn calc_stdin(args: &Args) -> Outcome {
+    args.reject_unknown(&["from", "headers", "into", "delimiter", "spill", "seed", "now", "quiet"])
+        .map_err(|e| Fault::Usage(e.to_string()))?;
+    let formula = positional(args, 0, "a formula to evaluate")?;
+
+    let engine = load_stdin(args)?;
+    let sheet = sheet_id(&engine, None)?;
+
+    // Ask for the whole shape first: a scalar is a 1x1 rectangle, so one path
+    // handles both and the size is known before deciding what to print.
+    let array = engine
+        .evaluate_array(sheet, formula)
+        .map_err(|e| Fault::Parse(format!("cannot evaluate: {e}")))?;
+
+    if array.rows() == 1 && array.cols() == 1 {
+        let value = array.get(0, 0);
+        out!("{}", raw(&value));
+        if let Value::Error(e) = &value {
+            // The token is the answer, so it goes to stdout with everything
+            // else; the explanation is a diagnostic.
+            note!(args, "{formula} evaluated to {}", e.as_str());
+            return Ok(std::process::ExitCode::from(crate::exit::CHECK_FAILED));
+        }
+        return ok();
+    }
+
+    let Some(spill) = args.value("spill") else {
+        // Printing the top-left corner of a 40-row answer would look like a
+        // result rather than a truncation, so the size is named and nothing
+        // is printed. This is a 1 rather than a 2: the command line was
+        // right and the formula evaluated: it simply has an answer that does
+        // not fit on one line.
+        note!(
+            args,
+            "the result is {}; pass `--spill csv` or `--spill json` to write it",
+            shape(array.rows(), array.cols())
+        );
+        return Ok(std::process::ExitCode::from(crate::exit::CHECK_FAILED));
+    };
+
+    match spill {
+        "csv" => {
+            for row in 0..array.rows() {
+                let cells: Vec<String> =
+                    (0..array.cols()).map(|col| csv_field(&raw(&array.get(row, col)))).collect();
+                out!("{}", cells.join(","));
+            }
+        }
+        "json" => {
+            let rows: Vec<Vec<serde_json::Value>> = (0..array.rows())
+                .map(|row| (0..array.cols()).map(|col| as_json(&array.get(row, col))).collect())
+                .collect();
+            out!("{}", serde_json::json!(rows));
+        }
+        other => {
+            return Err(Fault::Format(format!("unknown spill format `{other}`; use csv or json")))
+        }
+    }
+    ok()
+}
+
+/// Reads stdin and loads it into a fresh single-sheet workbook.
+fn load_stdin(args: &Args) -> Result<Engine, Fault> {
+    use std::io::Read;
+    // `--from` is a switch until it is declared as taking a value, and a
+    // switch here would leave the format missing and the format name sitting
+    // in the positionals, where it would be read as the formula.
+    let named =
+        args.value("from").ok_or_else(|| Fault::Usage("`--from` needs a format".to_string()))?;
+    let format = crate::tabular::Format::parse(named)?;
+    let delimiter = match args.value("delimiter") {
+        Some(text) => Some(one_char(text)?),
+        None => None,
+    };
+
+    let mut text = String::new();
+    std::io::stdin().read_to_string(&mut text).map_err(|e| Fault::Io(format!("stdin: {e}")))?;
+    let table = crate::tabular::read(
+        &text,
+        crate::tabular::Reading { format, headers: args.has("headers"), delimiter },
+    )?;
+
+    let corner = match args.value("into") {
+        Some(cell) => cellmoa_core::reference::CellRef::parse_a1(cell)
+            .ok_or_else(|| Fault::Usage(format!("`--into {cell}` is not a cell reference")))?,
+        None => cellmoa_core::reference::CellRef::new(0, 0),
+    };
+
+    let mut engine = Engine::new();
+    let sheet = engine.add_sheet("Sheet1");
+    if let Some(seed) = args.value("seed") {
+        let seed: u64 =
+            seed.parse().map_err(|_| Fault::Usage(format!("`--seed {seed}` is not a number")))?;
+        engine = engine.with_seed(seed);
+    }
+    if let Some(now) = args.value("now") {
+        let now: f64 =
+            now.parse().map_err(|_| Fault::Usage(format!("`--now {now}` is not a number")))?;
+        engine = engine.with_now_serial(now);
+    }
+
+    let edits: Vec<(CellAddr, String)> = table
+        .rows
+        .iter()
+        .enumerate()
+        .flat_map(|(r, row)| {
+            row.iter().enumerate().map(move |(c, field)| {
+                let addr = CellAddr::new(sheet, corner.col + c as u32, corner.row + r as u32);
+                (addr, field.clone())
+            })
+        })
+        .collect();
+
+    for (addr, field) in edits {
+        // A field is loaded exactly as it arrived, so a leading `=` in the
+        // data becomes a formula the same way typing it would. That is the
+        // spreadsheet's rule, and departing from it here would make piped
+        // data behave differently from pasted data.
+        engine
+            .set(cellmoa_core::edit::Actor::system(), addr, &field)
+            .map_err(|e| Fault::Parse(format!("loading data: {e}")))?;
+    }
+    engine.rebuild();
+    Ok(engine)
+}
+
+fn one_char(text: &str) -> Result<char, Fault> {
+    let mut characters = text.chars();
+    match (characters.next(), characters.next()) {
+        (Some(c), None) => Ok(c),
+        // Named delimiters read better in a shell than an escaped tab does.
+        _ => match text {
+            "tab" => Ok('\t'),
+            "comma" => Ok(','),
+            "pipe" => Ok('|'),
+            "semicolon" => Ok(';'),
+            other => Err(Fault::Usage(format!(
+                "`--delimiter {other}` should be one character, or tab, comma, pipe or semicolon"
+            ))),
+        },
+    }
+}
+
+/// A value as text, with no locale formatting: `1234.5678`, not `$1,234.57`.
+/// Whatever reads this is a program, and a program wants the number.
+fn raw(value: &Value) -> String {
+    match value {
+        Value::Blank => String::new(),
+        Value::Number(n) => {
+            let mut text = format!("{n}");
+            if text == "-0" {
+                text = "0".to_string();
+            }
+            text
+        }
+        Value::Bool(b) => if *b { "TRUE" } else { "FALSE" }.to_string(),
+        Value::Text(s) => s.clone(),
+        Value::Error(e) => e.as_str().to_string(),
+    }
+}
+
+/// "3 rows by 1 column", counted rather than pluralised blindly.
+fn shape(rows: usize, cols: usize) -> String {
+    let plural = |n: usize, word: &str| {
+        if n == 1 {
+            format!("{n} {word}")
+        } else {
+            format!("{n} {word}s")
+        }
+    };
+    format!("{} by {}", plural(rows, "row"), plural(cols, "column"))
+}
+
+fn as_json(value: &Value) -> serde_json::Value {
+    match value {
+        Value::Blank => serde_json::Value::Null,
+        // A whole number is written without a fractional part, so `jq` and
+        // anything else downstream sees 15 rather than 15.0.
+        Value::Number(n) if n.fract() == 0.0 && n.abs() < 9.007_199_254_740_992e15 => {
+            serde_json::json!(*n as i64)
+        }
+        Value::Number(n) => serde_json::json!(n),
+        Value::Bool(b) => serde_json::json!(b),
+        Value::Text(s) => serde_json::json!(s),
+        Value::Error(e) => serde_json::json!(e.as_str()),
+    }
+}
+
+/// Quotes a field when it would otherwise be misread as structure.
+fn csv_field(value: &str) -> String {
+    if value.contains([',', '"', '\n', '\r']) {
+        format!("\"{}\"", value.replace('"', "\"\""))
+    } else {
+        value.to_string()
+    }
 }
 
 fn eval(args: &Args) -> Outcome {
