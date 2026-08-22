@@ -19,6 +19,11 @@ Handsontable 가이드 149쪽을 다섯 갈래로 나눠 전부 읽고, 각 주�
 
 ## 이미 고침
 
+0. **숨긴 행/열이 화면에 그대로 있었다** — `renderableLength` 계열을 아무도
+   읽지 않아 숨김이 내보내기와 수식에만 반영됐다.
+0. **`getSourceData*`가 시각 인덱스였다** — 가이드대로 저장하면 정렬된
+   순서에 잘린 행이 빠진 데이터가 저장됐다. 이제 물리 인덱스이고,
+   그리드 내부는 `getEditableValue`(시각)를 쓴다.
 1. **다이얼로그가 sanitizer를 건너뛰었다** — 실제 XSS 경로. HTML이 DOM에
    닿는 경로를 `sanitize.ts` 하나로 모으고, 문서대로 `(content, source)`
    시그니처로 맞췄다.
@@ -66,7 +71,6 @@ Shift+Alt+↓로 메뉴를 열 수 없고, 열린 뒤에도 화살표·Home/End�
 | multiSelect | 고른 것 저장 | 검색 후 커밋하면 **고른 것이 사라짐** | `editors.ts:412-416` |
 | `allowInvalid: false` | 에디터가 열린 채 남음 | 에디터를 닫고 입력을 버림 | `grid.ts:2199-2212` |
 | flexible autocomplete | 커스텀 값 허용 | 모든 커스텀 값을 invalid로 표시 | `validators.ts:65` |
-| `getSourceData*` | 물리 인덱스 | 시각 인덱스 — 저장하면 정렬된 순서에 잘린 행이 빠짐 | `grid.ts:501` |
 | 알림 옵션 | `variant`/`duration`/`position` | `type`/`timeout`을 읽음 — 심각한 오류가 4초 뒤 사라짐 | `notification.ts:66,97` |
 | `layoutDirection: 'inherit'` (기본값) | 문서 `dir` 상속 | 항상 LTR | `grid.ts:1101` |
 | 복사 한도 | 기본 `Infinity` (10.0부터) | 기본 1000, 초과분 조용히 잘림 | `copyPaste.ts:232` |

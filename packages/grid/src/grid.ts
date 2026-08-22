@@ -472,7 +472,7 @@ if ('data' in settings) {
     return this.rowIndex.length;
   }
 
-countSourceCols(): number {
+  countSourceCols(): number {
     return this.colIndex.length;
   }
 
@@ -514,6 +514,33 @@ countSourceCols(): number {
 
   /** What an editor should start with: the formula if there is one. */
   getSourceDataAtCell(row: number, col: number): string {
+    // Physical indexes, as the reference specifies — the dataset's own
+    // numbering, untouched by a sort or a trim. It used to translate from
+    // visual, so a caller who followed the guide and saved `getSourceData()`
+    // to a backend wrote the sorted view with the trimmed rows missing.
+    this.#ensure(row, row, col, col);
+    return this.#data.editableValue(row, col);
+  }
+
+  /**
+   * What an editor would start with: the formula if the cell holds one.
+   *
+   * Visual indexes, because this is the cell somebody is pointing at. Its
+   * physical twin is `getSourceDataAtCell`, which names the dataset rather
+   * than the view.
+   */
+  getEditableValue(row: number, col: number): string {
+    return this.#sourceAt(row, col);
+  }
+
+  /**
+   * The same value, named the way the grid names it on screen.
+   *
+   * Everything inside the grid works in visual space — a selection, a render,
+   * an edit — so this is what those ask, and the public method above is left
+   * meaning what the documentation says it means.
+   */
+  #sourceAt(row: number, col: number): string {
     const physical = this.#physical(row, col);
     if (!physical) {
       return '';
@@ -544,31 +571,33 @@ countSourceCols(): number {
 
   /** Every row's source values — formulas, not their results. */
   getSourceData(): string[][] {
-    return Array.from({ length: this.countRows() }, (_, row) => this.getSourceDataAtRow(row));
+    return Array.from({ length: this.countSourceRows() }, (_, row) =>
+      this.getSourceDataAtRow(row),
+    );
   }
 
-getSourceDataArray(): string[][] {
+  getSourceDataArray(): string[][] {
     return this.getSourceData();
   }
 
-getSourceDataAtRow(row: number): string[] {
-    return Array.from({ length: this.countCols() }, (_, col) =>
+  getSourceDataAtRow(row: number): string[] {
+    return Array.from({ length: this.countSourceCols() }, (_, col) =>
       this.getSourceDataAtCell(row, col),
     );
   }
 
-getSourceDataAtCol(col: number): string[] {
-    return Array.from({ length: this.countRows() }, (_, row) =>
+  getSourceDataAtCol(col: number): string[] {
+    return Array.from({ length: this.countSourceRows() }, (_, row) =>
       this.getSourceDataAtCell(row, col),
     );
   }
 
-getDataAtProp(prop: string | number): string[] {
+  getDataAtProp(prop: string | number): string[] {
     const col = this.propToCol(prop);
     return col < 0 ? [] : this.getDataAtCol(col);
   }
 
-getDataAtRowProp(row: number, prop: string | number): string {
+  getDataAtRowProp(row: number, prop: string | number): string {
     const col = this.propToCol(prop);
     return col < 0 ? '' : this.getDataAtCell(row, col);
   }
@@ -578,10 +607,10 @@ getDataAtRowProp(row: number, prop: string | number): string {
     return this.getCellMeta(row, col)['copyable'] === false ? '' : this.getDataAtCell(row, col);
   }
 
-getCopyableSourceData(row: number, col: number): string {
+  getCopyableSourceData(row: number, col: number): string {
     return this.getCellMeta(row, col)['copyable'] === false
       ? ''
-      : this.getSourceDataAtCell(row, col);
+      : this.#sourceAt(row, col);
   }
 
   /**
@@ -646,7 +675,7 @@ getCopyableSourceData(row: number, col: number): string {
     const before: Array<CellChange | null> = changes.map(([row, col, value]) => [
       row,
       col,
-      this.getSourceDataAtCell(row, col),
+      this.#sourceAt(row, col),
       value,
     ]);
     if (!this.hooks.allows('beforeChange', before, source)) {
@@ -731,10 +760,32 @@ getCopyableSourceData(row: number, col: number): string {
 
   /** Writes without going through the editor's parsing and validation. */
   setSourceDataAtCell(row: number, col: number, value: string): void {
-    this.setDataAtCell(row, col, value, 'loadData');
+    // Physical, to match the reader beside it. Going through `setDataAtCell`
+    // would translate from visual and write a different cell whenever the grid
+    // is sorted — which is exactly when a caller reaches for this method.
+    const visual = this.#visualOf(row, col);
+    if (visual) {
+      this.setDataAtCell(visual.row, visual.col, value, 'loadData');
+    }
   }
 
-setDataAtRowProp(row: number, prop: string | number, value: string): void {
+  /**
+   * Where a physical cell is drawn, or `null` when it is not drawn at all.
+   *
+   * A trimmed row has no visual index, and writing to it through the grid's
+   * own path is not possible — the caller is told nothing rather than having
+   * the write land somewhere else.
+   */
+  #visualOf(row: number, col: number): { row: number; col: number } | null {
+    const visualRow = this.rowIndex.toVisual(row);
+    const visualCol = this.colIndex.toVisual(col);
+    if (visualRow === null || visualCol === null) {
+      return null;
+    }
+    return { row: visualRow, col: visualCol };
+  }
+
+  setDataAtRowProp(row: number, prop: string | number, value: string): void {
     const col = this.propToCol(prop);
     if (col >= 0) {
       this.setDataAtCell(row, col, value);
@@ -864,7 +915,7 @@ setDataAtRowProp(row: number, prop: string | number, value: string): void {
     );
   }
 
-spliceCol(col: number, start: number, amount: number, ...values: string[]): void {
+  spliceCol(col: number, start: number, amount: number, ...values: string[]): void {
     const line = this.getSourceDataAtCol(col);
     const height = line.length;
     line.splice(start, amount, ...values);
@@ -1009,7 +1060,7 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
     }
   }
 
-#undoState(): Record<string, unknown> {
+  #undoState(): Record<string, unknown> {
     return this.#engine.call({ op: 'undo_state' });
   }
 
@@ -1259,7 +1310,7 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
    */
   isEmptyRow(row: number): boolean {
     for (let col = 0; col < this.countCols(); col += 1) {
-      if (this.getSourceDataAtCell(row, col) !== '') {
+      if (this.#sourceAt(row, col) !== '') {
         return false;
       }
     }
@@ -1268,7 +1319,7 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
 
   isEmptyCol(col: number): boolean {
     for (let row = 0; row < this.countRows(); row += 1) {
-      if (this.getSourceDataAtCell(row, col) !== '') {
+      if (this.#sourceAt(row, col) !== '') {
         return false;
       }
     }
@@ -1666,7 +1717,7 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
     return this.hasRowHeaders() ? this.getRowHeaderWidth() : 0;
   }
 
-#drawnHeaderHeight(): number {
+  #drawnHeaderHeight(): number {
     if (!this.hasColHeaders()) {
       return 0;
     }
@@ -1782,7 +1833,7 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
   async #validateAll(cells: Coords[], callback?: (valid: boolean) => void): Promise<boolean> {
     let allValid = true;
     for (const { row, col } of cells) {
-      const { valid } = await this.validateCell(row, col, this.getSourceDataAtCell(row, col));
+      const { valid } = await this.validateCell(row, col, this.#sourceAt(row, col));
       if (valid) {
         this.#invalid.delete(row, col);
       } else {
@@ -2284,7 +2335,7 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
       }
     }
     const rect = this.#editorRect(target.row, target.col);
-    const value = initial ?? this.getSourceDataAtCell(target.row, target.col);
+    const value = initial ?? this.#sourceAt(target.row, target.col);
 
     this.#editing = target;
     this.#editor = editor({

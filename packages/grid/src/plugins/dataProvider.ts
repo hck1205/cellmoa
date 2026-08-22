@@ -414,7 +414,7 @@ export class DataProvider extends BasePlugin {
       const { valid, reason } = await this.grid.validateCell(
         row,
         col,
-        this.grid.getSourceDataAtCell(row, col),
+        this.grid.getEditableValue(row, col),
       );
       if (!valid) {
         return new Error(

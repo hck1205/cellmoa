@@ -327,7 +327,7 @@ export class CopyPaste extends BasePlugin {
     if (!bounds) {
       return [];
     }
-    return this.#collect(bounds, (row, col) => this.grid.getSourceDataAtCell(row, col));
+    return this.#collect(bounds, (row, col) => this.grid.getEditableValue(row, col));
   }
 
   /** The selected cells as clipboard text, for a caller doing its own copy. */
@@ -478,7 +478,7 @@ export class CopyPaste extends BasePlugin {
       for (let row = top; row < this.grid.countRows(); row += 1) {
         block.push(
           Array.from({ length: extent.cols }, (_, c) =>
-            this.grid.getSourceDataAtCell(row, left + c),
+            this.grid.getEditableValue(row, left + c),
           ),
         );
       }
@@ -487,7 +487,7 @@ export class CopyPaste extends BasePlugin {
     return block.map((line, r) => {
       const pushed: string[] = [];
       for (let col = left; col < this.grid.countCols(); col += 1) {
-        pushed.push(this.grid.getSourceDataAtCell(top + r, col));
+        pushed.push(this.grid.getEditableValue(top + r, col));
       }
       return [...line, ...pushed];
     });
@@ -509,13 +509,13 @@ export class CopyPaste extends BasePlugin {
       const row = top + r;
       if (this.grid.getCellMeta(row, left)['skipRowOnPaste'] === true) {
         // Keep the row's own values, so the block below it stays in place.
-        return line.map((_, c) => this.grid.getSourceDataAtCell(row, left + c));
+        return line.map((_, c) => this.grid.getEditableValue(row, left + c));
       }
       return line.map((value, c) => {
         const col = left + c;
         const meta = this.grid.getCellMeta(row, col);
         if (meta['skipColumnOnPaste'] === true) {
-          return this.grid.getSourceDataAtCell(row, col);
+          return this.grid.getEditableValue(row, col);
         }
         let text = trim ? value.trim() : value;
         if (parse) {

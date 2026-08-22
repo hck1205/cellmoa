@@ -124,7 +124,7 @@ export class Autofill extends BasePlugin {
       for (let col = source.startCol; col <= source.endCol; col += 1) {
         // The formula rather than the result, so it can be shifted the way a
         // copy would shift it.
-        line.push(this.grid.getSourceDataAtCell(row, col));
+        line.push(this.grid.getEditableValue(row, col));
       }
       selection.push(line);
     }

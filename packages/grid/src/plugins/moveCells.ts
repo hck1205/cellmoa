@@ -65,7 +65,7 @@ export class MoveCells extends BasePlugin {
     for (let r = source.startRow; r <= source.endRow; r += 1) {
       const line: string[] = [];
       for (let c = source.startCol; c <= source.endCol; c += 1) {
-        line.push(this.grid.getSourceDataAtCell(r, c));
+        line.push(this.grid.getEditableValue(r, c));
       }
       carried.push(line);
     }
