@@ -18,7 +18,7 @@
  * guide's own sidebar lists them, which puts the two export pages last.
  */
 
-import type { Dialog, ExportFile, Notification as CmNotification } from '@cellmoa/grid';
+import type { ExportFile, Notification as CmNotification } from '@cellmoa/grid';
 import { registerRenderer as registerCellmoaRenderer } from '@cellmoa/grid';
 import { registerRenderer as registerHotRenderer } from 'handsontable/renderers';
 import { registerLanguageDictionary, jaJP } from 'handsontable/i18n';

@@ -49,8 +49,15 @@ function stories() {
     }
     const section = file.replace('.stories.tsx', '');
     const text = readFileSync(join(STORIES, file), 'utf8');
-    // Both shapes the files use: a component, and a `const x = helper(...)`.
-    const names = [...text.matchAll(/^export const (\w+)/gm)].map((m) => m[1]);
+    // Every shape a story is written in. Counting only `export const` reported
+    // a file written with `export function` as empty — a checker that says a
+    // page is missing when it is there is as useless as one that says it is
+    // there when it is missing, and this one was doing the first quietly.
+    const names = [
+      ...text.matchAll(/^export (?:const|function|async function|class) (\w+)/gm),
+    ]
+      .map((m) => m[1])
+      .filter((name) => name !== 'default');
     bySection.set(section, names);
   }
   return bySection;

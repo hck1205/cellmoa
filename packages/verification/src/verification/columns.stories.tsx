@@ -16,19 +16,19 @@
  * wrapper's prop reference, and this library ships one package with no wrapper.
  */
 
-import { Compare, NotAFeature, OnlyReference, block } from '../Compare.js';
+import { Compare, NotAFeature, OnlyReference, block } from "../Compare.js";
 
-export default { title: 'Verification/Columns' };
+export default { title: "Verification/Columns" };
 
 const coord = (row: number, col: number) => `${row}, ${col}`;
 
 const staff = [
-  ['Ana García', 'Engineering', 'Senior Engineer', '2021-04-12'],
-  ['James Okafor', 'Marketing', 'Product Manager', '2022-08-30'],
-  ['Li Wei', 'Engineering', 'Staff Engineer', '2019-02-18'],
-  ['Sofia Rossi', 'Sales', 'Account Executive', '2023-01-09'],
-  ['Diego Fernández', 'Design', 'UX Designer', '2020-11-23'],
-  ['Amara Singh', 'Engineering', 'Engineering Manager', '2018-06-05'],
+  ["Ana García", "Engineering", "Senior Engineer", "2021-04-12"],
+  ["James Okafor", "Marketing", "Product Manager", "2022-08-30"],
+  ["Li Wei", "Engineering", "Staff Engineer", "2019-02-18"],
+  ["Sofia Rossi", "Sales", "Account Executive", "2023-01-09"],
+  ["Diego Fernández", "Design", "UX Designer", "2020-11-23"],
+  ["Amara Singh", "Engineering", "Engineering Manager", "2018-06-05"],
 ];
 
 export function AddingAndRemovingColumns() {
@@ -37,9 +37,9 @@ export function AddingAndRemovingColumns() {
       height={260}
       settings={{
         height: 260,
-        colHeaders: ['Name', 'Department', 'Title', 'Hire date'],
+        colHeaders: ["Name", "Department", "Title", "Hire date"],
         rowHeaders: true,
-        contextMenu: ['col_left', 'col_right', 'remove_col'],
+        contextMenu: ["col_left", "col_right", "remove_col"],
         minSpareCols: 1,
       }}
       data={staff}
@@ -61,18 +61,18 @@ export function ColumnFilter() {
       height={320}
       settings={{
         height: 320,
-        colHeaders: ['Model', 'Price', 'Sell date', 'In stock'],
+        colHeaders: ["Model", "Price", "Sell date", "In stock"],
         rowHeaders: true,
         filters: true,
         dropdownMenu: true,
       }}
       data={[
-        ['Trail Helmet', '1298.14', '2025-08-31', 'true'],
-        ['Windbreaker Jacket', '178.90', '2025-05-10', 'false'],
-        ['Cycling Cap', '288.10', '2025-09-15', 'true'],
-        ['HL Mountain Frame', '94.49', '2025-01-17', 'false'],
-        ['Racing Socks', '430.38', '2025-05-10', 'true'],
-        ['Aero Bottle', '1571.13', '2025-05-24', 'true'],
+        ["Trail Helmet", "1298.14", "2025-08-31", "true"],
+        ["Windbreaker Jacket", "178.90", "2025-05-10", "false"],
+        ["Cycling Cap", "288.10", "2025-09-15", "true"],
+        ["HL Mountain Frame", "94.49", "2025-01-17", "false"],
+        ["Racing Socks", "430.38", "2025-05-10", "true"],
+        ["Aero Bottle", "1571.13", "2025-05-24", "true"],
       ]}
       note={`Open the arrow on any header on the right: a condition list, a value list with
         checkboxes, an operator choice and an action bar. None of it exists here. The
@@ -93,7 +93,7 @@ export function ColumnFreezing() {
       height={320}
       settings={{
         height: 320,
-        width: '100%',
+        width: "100%",
         colWidths: 100,
         rowHeaders: true,
         colHeaders: true,
@@ -124,17 +124,17 @@ export function ColumnGroups() {
         rowHeaders: true,
         colWidths: 60,
         nestedHeaders: [
-          ['A', { label: 'B', colspan: 8 }, 'C'],
-          ['D', { label: 'E', colspan: 4 }, { label: 'F', colspan: 4 }, 'G'],
+          ["A", { label: "B", colspan: 8 }, "C"],
+          ["D", { label: "E", colspan: 4 }, { label: "F", colspan: 4 }, "G"],
           [
-            'H',
-            { label: 'I', colspan: 2 },
-            { label: 'J', colspan: 2 },
-            { label: 'K', colspan: 2 },
-            { label: 'L', colspan: 2 },
-            'M',
+            "H",
+            { label: "I", colspan: 2 },
+            { label: "J", colspan: 2 },
+            { label: "K", colspan: 2 },
+            { label: "L", colspan: 2 },
+            "M",
           ],
-          ['N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W'],
+          ["N", "O", "P", "Q", "R", "S", "T", "U", "V", "W"],
         ],
         collapsibleColumns: [
           { row: -4, col: 1, collapsible: true },
@@ -168,19 +168,19 @@ export function ColumnHeaders() {
         columnHeaderHeight: 50,
         colWidths: [70, 140, 140, 120, 120],
         columns: [
-          { title: 'ID' },
-          { title: 'Full name' },
-          { title: 'Position' },
-          { title: 'Country' },
-          { title: 'Start date' },
+          { title: "ID" },
+          { title: "Full name" },
+          { title: "Position" },
+          { title: "Country" },
+          { title: "Start date" },
         ],
       }}
       data={[
-        ['1', 'Ana García', 'Product Manager', 'Spain', '2022-03-14'],
-        ['2', 'James Okafor', 'Senior Engineer', 'Nigeria', '2021-07-02'],
-        ['3', 'Li Wei', 'Data Analyst', 'China', '2023-01-19'],
-        ['4', 'Sofia Rossi', 'UX Designer', 'Italy', '2020-11-30'],
-        ['5', 'Mateo Fernández', 'Engineering Lead', 'Argentina', '2019-05-08'],
+        ["1", "Ana García", "Product Manager", "Spain", "2022-03-14"],
+        ["2", "James Okafor", "Senior Engineer", "Nigeria", "2021-07-02"],
+        ["3", "Li Wei", "Data Analyst", "China", "2023-01-19"],
+        ["4", "Sofia Rossi", "UX Designer", "Italy", "2020-11-30"],
+        ["5", "Mateo Fernández", "Engineering Lead", "Argentina", "2019-05-08"],
       ]}
       note={`There is no colHeaders setting here at all: the labels come from the title
         property inside columns, which is the third of the page's four routes to a heading
@@ -224,7 +224,7 @@ export function ColumnMoving() {
       height={320}
       settings={{
         height: 320,
-        width: '100%',
+        width: "100%",
         colWidths: 100,
         rowHeaders: true,
         colHeaders: true,
@@ -248,27 +248,52 @@ export function ColumnSummary() {
       height={260}
       settings={{
         height: 260,
-        colHeaders: ['sum', 'min', 'max', 'count', 'average'],
+        colHeaders: ["sum", "min", "max", "count", "average"],
         rowHeaders: true,
         columnSummary: [
-          { sourceColumn: 0, type: 'sum', destinationRow: 3, ranges: [[0, 2]] },
-          { sourceColumn: 1, type: 'min', destinationRow: 3, ranges: [[0, 2]] },
-          { sourceColumn: 2, type: 'max', destinationRow: 3, ranges: [[0, 2]] },
-          { sourceColumn: 3, type: 'count', destinationRow: 3, ranges: [[0, 2]] },
+          {
+            sourceColumn: 0,
+            type: "sum",
+            destinationRow: 3,
+            destinationColumn: 0,
+            ranges: [[0, 2]],
+          },
+          {
+            sourceColumn: 1,
+            type: "min",
+            destinationRow: 3,
+            destinationColumn: 1,
+            ranges: [[0, 2]],
+          },
+          {
+            sourceColumn: 2,
+            type: "max",
+            destinationRow: 3,
+            destinationColumn: 2,
+            ranges: [[0, 2]],
+          },
+          {
+            sourceColumn: 3,
+            type: "count",
+            destinationRow: 3,
+            destinationColumn: 3,
+            ranges: [[0, 2]],
+          },
           {
             sourceColumn: 4,
-            type: 'average',
+            type: "average",
             destinationRow: 3,
+            destinationColumn: 4,
             roundFloat: 2,
             ranges: [[0, 2]],
           },
         ],
       }}
       data={[
-        ['1', '2', '3', '4', '5'],
-        ['6', '7', '8', '9', '12.345'],
-        ['11', '12', '13', '', '15'],
-        ['', '', '', '', ''],
+        ["1", "2", "3", "4", "5"],
+        ["6", "7", "8", "9", "12.345"],
+        ["11", "12", "13", "", "15"],
+        ["", "", "", "", ""],
       ]}
       note={`Row 4 is the destination row and should read 18, 2, 13, 2 and 10.78 in both.
         The two get there differently, and that is recorded rather than being a finding:
@@ -280,7 +305,9 @@ export function ColumnSummary() {
         JavaScript function; a function is refused by name at settings time rather than
         throwing mid-render. If row 4 is blank on the left, the plugin wrote its formulas
         when it was enabled, before the data reached the workbook, and the load cleared
-        them.`}
+        them. Every endpoint here names a destinationColumn because the reference
+        throws without one; this library infers it from sourceColumn, which is a
+        difference in strictness rather than in result.`}
     />
   );
 }
@@ -291,7 +318,7 @@ export function ColumnVirtualization() {
       height={320}
       settings={{
         height: 320,
-        width: '100%',
+        width: "100%",
         colWidths: 100,
         rowHeaders: true,
         colHeaders: true,
@@ -316,11 +343,11 @@ export function ColumnWidths() {
       height={260}
       settings={{
         height: 260,
-        width: '100%',
+        width: "100%",
         colHeaders: true,
         rowHeaders: true,
         colWidths: [50, 100, 200, 400],
-        stretchH: 'last',
+        stretchH: "last",
         manualColumnResize: true,
       }}
       data={block(5, 4)}

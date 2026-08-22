@@ -12,6 +12,7 @@
  * and the half it skips is not obvious from looking at it.
  */
 
+import type Handsontable from 'handsontable';
 import { Compare, NotAFeature, block } from '../Compare.js';
 import type { DataProvider, TrimRows } from '@cellmoa/grid';
 
@@ -22,7 +23,6 @@ export default { title: 'Verification/Getting started' };
 export const Introduction = () => (
   <NotAFeature
     page="Introduction"
-    path=""
     why="A landing page: which framework to pick, and links to sandboxes. There is no configuration on it and nothing to draw twice."
   />
 );
@@ -39,7 +39,7 @@ export const Installation = () => (
   <NotAFeature
     page="Installation"
     path="installation"
-    why="`npm install`, a `<script>` tag, and which stylesheet to import. Two things about cellmoa differ and neither is visible in a grid. It ships one package with four subpaths and no per-plugin entry points, so there is no equivalent of the reference's modular build — `src/plugins/index.ts` registers every plugin as a side effect and the package does not declare `sideEffects: false`, which means a bundler cannot drop any of it. And a cellmoa grid needs a calculation engine before it can exist: `Engine.load(fetch(wasmUrl))` is awaited and the result passed as `engine`, because formulas are built in rather than added by a plugin."
+    why="`npm install`, a `<script>` tag, and which stylesheet to import. Two things about cellmoa differ and neither is visible in a grid. It ships one package with five subpaths — the module, two stylesheets, the themes and the WebAssembly file — and no per-plugin entry points, so there is no equivalent of the reference's modular build — `src/plugins/index.ts` registers every plugin as a side effect and the package does not declare `sideEffects: false`, which means a bundler cannot drop any of it. And a cellmoa grid needs a calculation engine before it can exist: `Engine.load(fetch(wasmUrl))` is awaited and the result passed as `engine`, because formulas are built in rather than added by a plugin."
   />
 );
 
@@ -175,7 +175,7 @@ export const ServerSideData = () => (
 
 export const MigrateToServerSideData = () => (
   <Compare
-    note="The page is a seven-point checklist for moving off a static `data` array. Six of the seven hold here: stable `rowId`, `fetchRows` replacing `loadData`, the three CRUD callbacks, dropping `afterChange` as a save hook, and enabling `filters`. Point four is the one to read carefully. It says to set `pagination` so `fetchRows` receives the page — and cellmoa reads `pagination.pageSize` once when the provider starts and never again. `Pagination.setPage` in this library trims the loaded rows client-side; it does not call `DataProvider.setPage`, which nothing in the source calls. So the first page is genuinely server-driven and every page after it is a slice of the first page's rows. Click through to page 2 in both: the reference fetches five more rows, cellmoa shows an empty page."
+    note="The page is a seven-point checklist for moving off a static `data` array. Six of the seven hold here: stable `rowId`, `fetchRows` replacing `loadData`, the three CRUD callbacks, dropping `afterChange` as a save hook, and enabling `filters`. Point four is the one to read carefully. It says to set `pagination` so `fetchRows` receives the page — and cellmoa reads `pagination.pageSize` once when the provider starts and never again. `Pagination.setPage` in this library trims the loaded rows client-side; it does not call `DataProvider.setPage`, which nothing in the source calls. Look at the two pagers first: the server holds 23 rows at five to a page, so the reference offers five pages, while cellmoa's pager counts only the rows it has and offers one. There is no page two to click. The first page is genuinely server-driven and there is nothing after it."
     settings={{
       colHeaders: ['id', 'sku', 'qty'],
       rowHeaders: true,
@@ -297,7 +297,7 @@ export const SavingData = () => (
         });
       },
       handsontable: (hot) => {
-        hot.addHook('afterChange', (changes, source) => {
+        hot.addHook('afterChange', (changes: Handsontable.CellChange[] | null, source: string) => {
           if (!changes || source === 'saved') {
             return;
           }
@@ -349,7 +349,7 @@ export const EventsAndHooks = () => (
         });
       },
       handsontable: (hot) => {
-        hot.addHook('beforeChange', (changes) => {
+        hot.addHook('beforeChange', (changes: Array<Handsontable.CellChange | null>) => {
           changes.forEach((change, index) => {
             if (!change) {
               return;
@@ -361,7 +361,7 @@ export const EventsAndHooks = () => (
             }
           });
         });
-        hot.addHook('afterChange', (changes, source) => {
+        hot.addHook('afterChange', (changes: Handsontable.CellChange[] | null, source: string) => {
           if (!changes || source === 'hook') {
             return;
           }
