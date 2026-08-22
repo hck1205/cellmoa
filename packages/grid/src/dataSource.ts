@@ -25,8 +25,66 @@ export interface Actor {
   id: string;
 }
 
-/** A structural change to the sheet. */
+/**
+ * A structural change to the sheet, as the engine performs it.
+ *
+ * Four actions, because inserting above and inserting below differ only in
+ * which index you hand over. The names a caller writes are the reference's,
+ * and `normalizeAlter` turns those into these.
+ */
 export type AlterAction = 'insert_row' | 'remove_row' | 'insert_col' | 'remove_col';
+
+/**
+ * The action names a caller writes.
+ *
+ * The reference replaced `insert_row` with `insert_row_above` / `_below` and
+ * `insert_col` with `insert_col_start` / `_end` in v13, and every code sample
+ * written since uses the new spelling. Both are accepted: the old ones are
+ * still what a v12 configuration says, and neither should silently do nothing.
+ */
+export type AlterRequest =
+  | AlterAction
+  | 'insert_row_above'
+  | 'insert_row_below'
+  | 'insert_col_start'
+  | 'insert_col_end';
+
+/** How far past the given index an action lands. */
+export interface NormalizedAlter {
+  action: AlterAction;
+  /** `1` for the "below"/"end" spellings, which insert after the index. */
+  offset: number;
+}
+
+/**
+ * Turns a caller's action name into the engine's, and says where it lands.
+ *
+ * `insert_row_below` is `insert_row` one row further down — the offset is the
+ * whole difference, and keeping it here means the two spellings cannot drift
+ * into meaning different things.
+ */
+export function normalizeAlter(action: AlterRequest): NormalizedAlter | null {
+  switch (action) {
+    case 'insert_row':
+    case 'insert_row_above':
+      return { action: 'insert_row', offset: 0 };
+    case 'insert_row_below':
+      return { action: 'insert_row', offset: 1 };
+    case 'insert_col':
+    case 'insert_col_start':
+      return { action: 'insert_col', offset: 0 };
+    case 'insert_col_end':
+      return { action: 'insert_col', offset: 1 };
+    case 'remove_row':
+      return { action: 'remove_row', offset: 0 };
+    case 'remove_col':
+      return { action: 'remove_col', offset: 0 };
+    default:
+      // An unknown name is a caller's mistake, and doing nothing about it is
+      // how it stays a mistake. `alter` reports it rather than returning.
+      return null;
+  }
+}
 
 /** What the engine says about a sheet. */
 export interface SheetInfo {

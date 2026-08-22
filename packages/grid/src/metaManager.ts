@@ -18,6 +18,15 @@ import type { GridSettings } from './settings.js';
  * are worth caching between renders.
  */
 export class MetaManager {
+  /**
+   * How a column's name is looked up, when the grid knows one.
+   *
+   * Handed in rather than imported: the manager resolves settings and has no
+   * business knowing what a header says, but `cells` is documented to receive
+   * the name and cannot be given one otherwise.
+   */
+  #propOf: ((col: number) => string | number) | undefined;
+
   #global: GridSettings;
   #table: GridSettings = {};
   #columns = new Map<number, GridSettings>();
@@ -132,18 +141,33 @@ export class MetaManager {
     if (column) {
       Object.assign(resolved, column);
     }
-    // The `cells` function is consulted after the column so that it can
-    // override a column-wide decision for one row.
-    if (typeof this.#table.cells === 'function') {
-      Object.assign(resolved, this.#table.cells(row, col) ?? {});
-    }
     const cell = this.#cells.get(row, col);
     if (cell) {
       Object.assign(resolved, cell);
     }
+    // Last, over everything — including `cell:[…]` and `setCellMeta`. The
+    // reference states this three times on one page ("any options modified
+    // through `cells` overwrite all other options"), and it is the whole reason
+    // the function exists: it is the one layer that can look at a row's data
+    // before deciding. Running it before the per-cell map, as this used to,
+    // meant conditional formatting worked until a cell also had explicit meta,
+    // and then quietly stopped for that cell alone.
+    if (typeof this.#table.cells === 'function') {
+      // `prop` is the column's name, which is what an array-of-objects source
+      // is keyed by. It was never passed, so a `cells` written against the
+      // documented signature always saw `undefined`.
+      const prop = this.#propOf?.(col);
+      Object.assign(resolved, this.#table.cells(row, col, prop) ?? {});
+    }
 
     this.#cache.set(row, col, resolved);
     return resolved;
+  }
+
+  /** Tells the manager how to name a column, for `cells`'s third argument. */
+  namesColumnsBy(propOf: (col: number) => string | number): void {
+    this.#propOf = propOf;
+    this.invalidate();
   }
 
   /** The settings in force for a column, without consulting any row. */

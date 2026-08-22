@@ -16,8 +16,8 @@ import {
   asVerdict,
 } from './cellTypes/index.js';
 import type { EditorInstance, ValidationResult } from './cellTypes/index.js';
-import { DataSource, WriteConflict, cellRef, columnLetters } from './dataSource.js';
-import type { AlterAction } from './dataSource.js';
+import { DataSource, WriteConflict, cellRef, columnLetters, normalizeAlter } from './dataSource.js';
+import type { AlterRequest } from './dataSource.js';
 import type { Edit } from './dataSource.js';
 import type { Engine } from './engine.js';
 import { Hooks } from './hooks.js';
@@ -228,6 +228,7 @@ export class Grid {
       (this.getSettings().selectionMode as SelectionMode) ?? 'multiple',
     );
 
+    this.#meta.namesColumnsBy((col) => this.colToProp(col));
     this.#registerSettingHooks(settings);
     this.#selection.setNavigableHeaders(this.getSettings().navigableHeaders === true);
     this.#syncDimensions(true);
@@ -851,10 +852,20 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
    * property of the visual space and has to survive rows being inserted under
    * it.
    */
-  alter(action: AlterAction, index?: number, amount = 1, source: ChangeSource = 'alter'): void {
+  alter(request: AlterRequest, index?: number, amount = 1, source: ChangeSource = 'alter'): void {
+    const normalized = normalizeAlter(request);
+    if (!normalized) {
+      console.warn(
+        `[cellmoa] alter: \`${String(request)}\` is not an action. ` +
+          'Expected insert_row_above, insert_row_below, insert_col_start, ' +
+          'insert_col_end, remove_row or remove_col.',
+      );
+      return;
+    }
+    const action = normalized.action;
     const rows = action === 'insert_row' || action === 'remove_row';
     const map = rows ? this.rowIndex : this.colIndex;
-    const at = index ?? (rows ? this.countRows() : this.countCols());
+    const at = (index ?? (rows ? this.countRows() : this.countCols())) + normalized.offset;
     const removing = action === 'remove_row' || action === 'remove_col';
 
     // The same guards the menu reads. A command hidden from the menu that an
@@ -1124,7 +1135,46 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
 
 /** Whether the grid is laid out right-to-left. */
   isRtl(): boolean {
-    return this.getSettings().layoutDirection === 'rtl';
+    const setting = this.getSettings().layoutDirection;
+    if (setting === 'rtl' || setting === 'ltr') {
+      return setting === 'rtl';
+    }
+    // `inherit` is the default, and it used to mean "left to right" — so an
+    // Arabic page that set `dir` on `<html>` and configured nothing, which is
+    // exactly what the guide tells it to do, got a silently mis-laid-out grid.
+    // The direction is inherited from wherever it was last set above the
+    // container, which is what a computed style already resolves.
+    return this.#inheritedDirection() === 'rtl';
+  }
+
+  /**
+   * The direction the page gives the container.
+   *
+   * Computed style is the whole answer where it is available, because CSS has
+   * already walked the tree. jsdom and a detached container are the cases where
+   * it is not, and there the `dir` attribute is walked by hand rather than
+   * quietly falling back to left-to-right.
+   */
+  #inheritedDirection(): 'ltr' | 'rtl' {
+    // The container, never the grid's own root: the root carries the `dir` the
+    // grid put there, so asking it what direction it inherits is asking it to
+    // repeat the answer it was given. The container is the element the caller
+    // handed over, and nothing here writes to it.
+    const element: HTMLElement | null = this.#container;
+    const view = element?.ownerDocument?.defaultView;
+    if (element && view) {
+      const computed = view.getComputedStyle(element).direction;
+      if (computed === 'rtl' || computed === 'ltr') {
+        return computed;
+      }
+    }
+    for (let node: HTMLElement | null = element; node; node = node.parentElement) {
+      const dir = node.getAttribute?.('dir')?.toLowerCase();
+      if (dir === 'rtl' || dir === 'ltr') {
+        return dir;
+      }
+    }
+    return 'ltr';
   }
 
   // --- counting ------------------------------------------------------------
@@ -2481,6 +2531,19 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
     if (typeof meta.validator === 'function') {
       return meta.validator as (value: string, meta: GridSettings) => ValidationResult;
     }
+    // A pattern is a validator too, and the reference documents it as one of
+    // the two shapes. It used to fall through to the *type's* validator, so
+    // `{ validator: /^\d+$/ }` on a text column ran `textValidator` and
+    // accepted everything — a rule that reads as enforced and is not.
+    if (meta.validator instanceof RegExp) {
+      const pattern = meta.validator;
+      return (value: string): ValidationResult =>
+        // A fresh test each time: a `g` flag would otherwise carry `lastIndex`
+        // from the previous cell and fail every other one.
+        new RegExp(pattern.source, pattern.flags.replace('g', '')).test(value)
+          ? { valid: true }
+          : { valid: false, reason: `does not match ${String(pattern)}` };
+    }
     if (typeof meta.validator === 'string') {
       return getValidator(meta.validator);
     }
@@ -2826,6 +2889,23 @@ spliceCol(col: number, start: number, amount: number, ...values: string[]): void
         return;
       }
       const mouseEvent = event as MouseEvent;
+      // Clicking the box is the gesture the type exists for, and it did
+      // nothing: the input is drawn with `tabIndex = -1` and nothing listened.
+      // The cell is selected first, so the click reads as a click on that cell
+      // either way, and the toggle goes through `setDataAtCell` like any edit —
+      // validated, undoable, and reported to `afterChange`.
+      if ((event.target as HTMLElement | null)?.classList?.contains('cm-checkbox')) {
+        this.#selection.setCell(coords);
+        this.#afterSelection();
+        if (this.getCellMeta(coords.row, coords.col).readOnly !== true) {
+          this.#toggleCheckbox(coords.row, coords.col);
+        }
+        // The box's own checked state is the renderer's to decide, not the
+        // browser's: letting the default through would tick a box the grid may
+        // have refused to change.
+        event.preventDefault();
+        return;
+      }
       if (mouseEvent.shiftKey) {
         this.#selection.extendTo(coords);
       } else if (mouseEvent.ctrlKey || mouseEvent.metaKey) {
