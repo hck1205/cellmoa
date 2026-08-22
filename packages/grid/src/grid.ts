@@ -250,12 +250,17 @@ export class Grid {
     this.#bindKeyboard();
     this.#bindPointer();
     this.#injectCoreCss();
+    // The data goes in before the plugins are built, because a plugin that
+    // does its work once — a column summary, the first page, an initial sort —
+    // reads the grid as it finds it. Built first, they all found an empty
+    // sheet: `pagination: { pageSize: 3 }` with eight rows of `data` showed
+    // six, and a summary of three numbers came out blank.
+    this.#loadInitialData();
     this.#createPlugins();
     this.#watchVisibility();
     this.#checkLicense();
     this.#checkFormulasSetting();
     this.#checkDataBinding();
-    this.#loadInitialData();
     this.hooks.run('afterInit', undefined);
   }
 

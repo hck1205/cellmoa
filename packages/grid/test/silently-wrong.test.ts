@@ -335,3 +335,38 @@ describe('clicking a column header', () => {
     expect(grid.getSelectedLast()).toBeUndefined();
   });
 });
+
+describe('a plugin that does its work once, and data given in the settings', () => {
+  it('pages the data it was given, not the empty sheet it was built on', async () => {
+    // `#createPlugins()` ran before `#loadInitialData()`, so every plugin whose
+    // whole job happens in `onEnable` — the first page, a summary, an initial
+    // sort — read a grid with no rows in it. The documented declarative
+    // configuration came up wrong and corrected itself on the first click.
+    const grid = await makeGrid({
+      colHeaders: true,
+      pagination: { pageSize: 3 },
+      data: [['1'], ['2'], ['3'], ['4'], ['5'], ['6'], ['7'], ['8']],
+    });
+    expect(grid.countRows()).toBe(3);
+  });
+
+  it('totals the data it was given', async () => {
+    const grid = await makeGrid({
+      colHeaders: true,
+      data: [['1'], ['2'], ['3']],
+      columnSummary: [
+        { sourceColumn: 0, type: 'sum', destinationRow: 3, destinationColumn: 0 },
+      ],
+    });
+    expect(grid.getDataAtCell(3, 0)).toBe('6');
+  });
+
+  it('applies an initial sort to the data it was given', async () => {
+    const grid = await makeGrid({
+      colHeaders: true,
+      data: [['pear'], ['apple'], ['fig']],
+      columnSorting: { initialConfig: { column: 0, sortOrder: 'asc' } },
+    });
+    expect(grid.getDataAtCell(0, 0)).toBe('apple');
+  });
+});

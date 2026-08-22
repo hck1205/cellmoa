@@ -19,6 +19,10 @@ Handsontable 가이드 149쪽을 다섯 갈래로 나눠 전부 읽고, 각 주�
 
 ## 이미 고침
 
+0. **선언적 설정이 동작하지 않았다** — 플러그인이 데이터보다 먼저 만들어져서,
+   `onEnable`에서 한 번에 일을 끝내는 플러그인은 전부 빈 시트를 봤다.
+   `pagination: { pageSize: 3 }`에 8행을 주면 6행이 보였고 합계는 비어 있었다.
+   Ladle 스토리를 쓰다가 나왔다.
 0. **숨긴 행/열이 화면에 그대로 있었다** — `renderableLength` 계열을 아무도
    읽지 않아 숨김이 내보내기와 수식에만 반영됐다.
 0. **`getSourceData*`가 시각 인덱스였다** — 가이드대로 저장하면 정렬된
@@ -74,7 +78,6 @@ Shift+Alt+↓로 메뉴를 열 수 없고, 열린 뒤에도 화살표·Home/End�
 | 알림 옵션 | `variant`/`duration`/`position` | `type`/`timeout`을 읽음 — 심각한 오류가 4초 뒤 사라짐 | `notification.ts:66,97` |
 | `layoutDirection: 'inherit'` (기본값) | 문서 `dir` 상속 | 항상 LTR | `grid.ts:1101` |
 | 복사 한도 | 기본 `Infinity` (10.0부터) | 기본 1000, 초과분 조용히 잘림 | `copyPaste.ts:232` |
-| `alter()` | `insert_row_above` 등 | 13.0에서 제거된 철자만 받음 | `dataSource.ts:29` |
 | `filters.filter()` | 자기 것만 | `untrim()` 무인자 — 다른 플러그인의 trim까지 날림 | `filters.ts:178` |
 | `cells` 함수 | 다른 모든 옵션을 덮어씀 | `cell`/`setCellMeta`에 짐 | `metaManager.ts:136` |
 | `collapsibleColumns` 배열형 | `row: -4` 위쪽 계산 | 음수는 절대 매칭 안 됨 | `collapsibleColumns.ts:96` |
@@ -84,11 +87,14 @@ Shift+Alt+↓로 메뉴를 열 수 없고, 열린 뒤에도 화살표·Home/End�
 
 ## 이름만 있는 설정 (선언되고 아무도 안 읽음)
 
-`hiddenRows.indicators`, `hiddenRows.copyPasteEnabled`, `pagination.uiContainer`,
-`pagination.showPageSize`, `columnSorting.indicator`, `columnSummary.forceNumeric`,
+`hiddenRows.copyPasteEnabled`, `columnSummary.forceNumeric`,
 `columnSummary.suppressDataTypeErrors`, `dragToScroll.interval/rampDistance`,
-`copyPaste.pasteMode`, `autofill.direction`, `autofill.autoInsertRow`,
-`comments.style`, `comments.displayDelay`, `dialog.animation`.
+`comments.style`, `comments.displayDelay`.
+
+지운 것들은 그 뒤에 고쳐졌다 — `indicators`, `uiContainer`, `showPageSize`,
+`columnSorting.indicator`, `pasteMode`, `autofill.direction`/`autoInsertRow`,
+`dialog.animation`, 그리고 `alter()`의 v13 철자. 고쳐진 것을 목록에 남겨두는
+것은 이 문서가 잡으려는 실패를 반대 방향으로 저지르는 것이다.
 
 `PHRASE` 키 11개(`ok`, `cancel`, 테두리 6종, `readOnlyComment`,
 `copyWithHeaders`, `copyHeadersOnly`)도 21개 언어에 번역이 다 있고 읽는 곳이
