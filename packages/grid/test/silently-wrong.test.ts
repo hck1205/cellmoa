@@ -370,3 +370,39 @@ describe('a plugin that does its work once, and data given in the settings', () 
     expect(grid.getDataAtCell(0, 0)).toBe('apple');
   });
 });
+
+describe('the settings a cell type brings with it', () => {
+  it('does not let a masked value be copied', async () => {
+    // The reference's password type carries `copyable: false`; ours carried
+    // nothing, because a type could hold only a renderer, an editor and a
+    // validator. A mask that copies in the clear is not a mask.
+    const grid = await makeGrid({ startRows: 1, startCols: 1, columns: [{ type: 'password' }] });
+    grid.setDataAtCell(0, 0, 'secret');
+    expect(grid.getCellMeta(0, 0).copyable).toBe(false);
+    expect(grid.getCopyableData(0, 0)).toBe('');
+  });
+
+  it('makes a dropdown strict and unfiltered without being told', async () => {
+    const grid = await makeGrid({
+      startRows: 1,
+      startCols: 1,
+      columns: [{ type: 'dropdown', source: ['red', 'green'] }],
+    });
+    expect(grid.getCellMeta(0, 0).strict).toBe(true);
+    expect(grid.getCellMeta(0, 0).filter).toBe(false);
+  });
+
+  it('is a default, so a caller who says otherwise wins', async () => {
+    const grid = await makeGrid({
+      startRows: 1,
+      startCols: 1,
+      columns: [{ type: 'password', copyable: true }],
+    });
+    expect(grid.getCellMeta(0, 0).copyable).toBe(true);
+  });
+
+  it('leaves a type with nothing to carry exactly as it was', async () => {
+    const grid = await makeGrid({ startRows: 1, startCols: 1, columns: [{ type: 'text' }] });
+    expect(grid.getCellMeta(0, 0).copyable).not.toBe(false);
+  });
+});

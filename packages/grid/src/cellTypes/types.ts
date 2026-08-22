@@ -76,6 +76,19 @@ export interface CellTypeDefinition {
   renderer: CellRenderer;
   editor: CellEditor | null;
   validator: CellValidator | null;
+  /**
+   * Settings the type brings with it.
+   *
+   * A `password` column is not copyable and a `dropdown` is strict, and in both
+   * cases that is a property of the *type* rather than something every caller
+   * should have to remember. They are defaults: any layer that says otherwise
+   * wins, so `{ type: 'password', copyable: true }` is still copyable.
+   *
+   * Without this the editor had to patch `strict` into the settings as it went
+   * past, which is how the editor and the validator came to disagree about what
+   * strict meant.
+   */
+  meta?: GridSettings;
 }
 
 /** Shorthand for a value that passed. */

@@ -116,6 +116,11 @@ registerCellType('dropdown', {
   renderer: renderers.dropdownRenderer,
   editor: editors.dropdownEditor,
   validator: validators.dropdownValidator,
+  // A dropdown is an autocomplete that refuses what is not on the list and
+  // does not narrow as you type. Carrying that here rather than patching it
+  // into the settings on the way past is what keeps the editor and the
+  // validator reading the same answer.
+  meta: { strict: true, filter: false },
 });
 registerCellType('autocomplete', {
   renderer: renderers.autocompleteRenderer,
@@ -138,6 +143,8 @@ registerCellType('password', {
   renderer: renderers.passwordRenderer,
   editor: editors.passwordEditor,
   validator: validators.textValidator,
+  // A masked cell that copies in the clear is a mask that does not hold.
+  meta: { copyable: false },
 });
 registerCellType('handsontable', {
   // A grid inside a cell: the value is text, and the editor is a list.

@@ -15,6 +15,7 @@
   --cm-selected-bg: rgba(52, 120, 246, 0.1);
   --cm-current-border: #3478f6;
   --cm-error-fg: #c0392b;
+  --cm-invalid-bg: #ffe6e6;
   --cm-readonly-fg: #999;
   --cm-agent-marker: #7a5af8;
   --cm-comment-bg: #fffbe6;
@@ -97,6 +98,53 @@
 
 .cm-grid .htDimmed {
   color: var(--cm-readonly-fg);
+}
+
+/*
+ * A cell whose value was refused.
+ *
+ * The class was put on the cell and no rule ever read it, so a rejected value
+ * looked exactly like an accepted one — validation that runs, marks, and shows
+ * nothing. `!important` because the mark has to survive the selection
+ * background, which is the case where it matters most.
+ */
+.cm-grid .htInvalid {
+  background-color: var(--cm-invalid-bg) !important;
+}
+
+/*
+ * Alignment, which `setAlignment` and the context menu apply by class name.
+ *
+ * These are the reference's own class names, and they were being written onto
+ * the cell with nothing to read them — so choosing "center" from the menu
+ * changed the markup and not the text.
+ */
+.cm-grid .htLeft {
+  text-align: left;
+}
+
+.cm-grid .htCenter {
+  text-align: center;
+}
+
+.cm-grid .htRight {
+  text-align: right;
+}
+
+.cm-grid .htJustify {
+  text-align: justify;
+}
+
+.cm-grid .htTop {
+  vertical-align: top;
+}
+
+.cm-grid .htMiddle {
+  vertical-align: middle;
+}
+
+.cm-grid .htBottom {
+  vertical-align: bottom;
 }
 
 .cm-grid .cm-selected {

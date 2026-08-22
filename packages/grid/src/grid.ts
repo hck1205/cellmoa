@@ -14,6 +14,7 @@ import {
   getValidator,
   renderers as builtinRenderers,
   asVerdict,
+  getCellType,
   checkboxState,
   checkboxTemplates,
 } from './cellTypes/index.js';
@@ -233,6 +234,7 @@ export class Grid {
     );
 
     this.#meta.namesColumnsBy((col) => this.colToProp(col));
+    this.#meta.typesCarryMeta((type) => getCellType(type)?.meta);
     // A hidden row takes no room, which is the only way the renderer can know
     // about hiding at all: it walks these sizes and nothing else.
     this.#rowSizes.hides(

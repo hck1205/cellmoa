@@ -26,6 +26,8 @@ export class MetaManager {
    * the name and cannot be given one otherwise.
    */
   #propOf: ((col: number) => string | number) | undefined;
+  /** How a type's own settings are looked up. See `#typeMeta`. */
+  #metaOfType: ((type: string) => GridSettings | undefined) | undefined;
 
   #global: GridSettings;
   #table: GridSettings = {};
@@ -131,7 +133,7 @@ export class MetaManager {
     if (cached) {
       return cached;
     }
-    const resolved: GridSettings = { ...this.#global, ...this.#table };
+    const resolved: GridSettings = { ...this.#global, ...this.#typeMeta(row, col), ...this.#table };
 
     const columns = this.#table.columns;
     if (typeof columns === 'function') {
@@ -162,6 +164,33 @@ export class MetaManager {
 
     this.#cache.set(row, col, resolved);
     return resolved;
+  }
+
+  /**
+   * What the cell's type brings with it, if anything.
+   *
+   * Sits just above the global defaults so that every other layer can override
+   * it — a type's settings are defaults, not decrees. Finding the type means
+   * resolving the layers once without it, which is why this runs a cheap pass
+   * of its own rather than being folded into the one below.
+   */
+  #typeMeta(row: number, col: number): GridSettings {
+    if (!this.#metaOfType) {
+      return {};
+    }
+    const named =
+      this.#cells.get(row, col)?.type ??
+      this.#columns.get(col)?.type ??
+      (typeof this.#table.columns === 'function' ? this.#table.columns(col)?.type : undefined) ??
+      this.#table.type ??
+      this.#global.type;
+    return typeof named === 'string' ? (this.#metaOfType(named) ?? {}) : {};
+  }
+
+  /** Tells the manager where a type's own settings come from. */
+  typesCarryMeta(metaOfType: (type: string) => GridSettings | undefined): void {
+    this.#metaOfType = metaOfType;
+    this.invalidate();
   }
 
   /** Tells the manager how to name a column, for `cells`'s third argument. */

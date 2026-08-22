@@ -31,6 +31,13 @@ Handsontable 가이드 149쪽을 다섯 갈래로 나눠 전부 읽고, 각 주�
 1. **다이얼로그가 sanitizer를 건너뛰었다** — 실제 XSS 경로. HTML이 DOM에
    닿는 경로를 `sanitize.ts` 하나로 모으고, 문서대로 `(content, source)`
    시그니처로 맞췄다.
+1. **CSV 내보내기에 수식 인젝션 방어가 없었다** — `sanitizeValues`와
+   `FORMULA_LEAD`로 막는다.
+1. **문서화된 클래스 7종에 CSS가 없었다** — `htInvalid`·`htCenter` 등을
+   셀에 붙이면서 읽는 규칙이 하나도 없었다. 검증은 돌고 표시는 안 됐고,
+   정렬은 클래스만 바뀌고 글자는 그대로였다. Ladle 스토리를 쓰다가 나왔다.
+1. **셀 타입이 자기 설정을 가질 수 없었다** — 그래서 `password`가 평문으로
+   복사됐다. 참조의 `PasswordCellType`은 `copyable: false`를 지니고 다닌다.
 2. **`beforeChange`가 받은 배열이 버려졌다** — 항목 수정도 `null`로 부분
    취소도 무시되고 있었다. Handsontable 앱에서 가장 많이 쓰는 검증 훅이다.
 3. **훅 158개가 발화 불가능** — `scripts/parity.mjs`가 이제 센다.
@@ -82,7 +89,6 @@ Shift+Alt+↓로 메뉴를 열 수 없고, 열린 뒤에도 화살표·Home/End�
 | `cells` 함수 | 다른 모든 옵션을 덮어씀 | `cell`/`setCellMeta`에 짐 | `metaManager.ts:136` |
 | `collapsibleColumns` 배열형 | `row: -4` 위쪽 계산 | 음수는 절대 매칭 안 됨 | `collapsibleColumns.ts:96` |
 | `nestedRows` | `__children` 데이터 | `__children`이 소스에 없음 | `nestedRows.ts:35` |
-| CSV 내보내기 | `sanitizeValues` | 없음 — `=cmd\|'/c calc'!A1`이 살아서 나감 | `exportFile.ts:44` |
 | 배열 수식 | `SEQUENCE`/`SORT`/`FILTER` | 전부 `#VALUE!` — 스필 없음 | `operand.rs:190` |
 
 ## 이름만 있는 설정 (선언되고 아무도 안 읽음)
@@ -96,9 +102,12 @@ Shift+Alt+↓로 메뉴를 열 수 없고, 열린 뒤에도 화살표·Home/End�
 `dialog.animation`, 그리고 `alter()`의 v13 철자. 고쳐진 것을 목록에 남겨두는
 것은 이 문서가 잡으려는 실패를 반대 방향으로 저지르는 것이다.
 
-`PHRASE` 키 11개(`ok`, `cancel`, 테두리 6종, `readOnlyComment`,
-`copyWithHeaders`, `copyHeadersOnly`)도 21개 언어에 번역이 다 있고 읽는 곳이
-없다. `EmptyDataState:*` 7종도 마찬가지 — 플러그인이 영어를 하드코딩한다.
+`PHRASE` 키 8개(`ok`, `cancel`, 테두리 6종)는 21개 언어에 번역이 다 있고
+읽는 곳이 없다 — 필터 패널과 테두리 메뉴가 없기 때문이고, 그 둘이 생기면
+읽힌다.
+
+`EmptyDataState:*` 7종, `Loading:title`, `copyWithHeaders`/`copyHeadersOnly`/
+`copyWithGroupHeaders`는 그 뒤에 연결됐다.
 
 ## 접근성
 
