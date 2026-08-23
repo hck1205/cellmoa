@@ -108,7 +108,7 @@ pub(super) fn reconcile(args: &Args) -> Outcome {
 
     let text = match args.value("out").unwrap_or("json") {
         "json" => as_json_report(&result, &settings, args),
-        "csv" => as_csv_report(&result),
+        "csv" => as_csv_report(&result)?,
         other => {
             return Err(Fault::Format(format!("`--out {other}` should be json or csv")));
         }
@@ -281,7 +281,7 @@ fn as_json_report(result: &Reconciliation, settings: &Settings<'_>, args: &Args)
     )
 }
 
-fn as_csv_report(result: &Reconciliation) -> String {
+fn as_csv_report(result: &Reconciliation) -> Result<String, Fault> {
     let mut table = Table {
         headers: Some(
             ["status", "key", "column", "left", "right", "delta", "within_tolerance"]
@@ -337,7 +337,7 @@ fn write_exports(
             .ok_or_else(|| Fault::Usage(format!("`--export {spec}` should be STATUS:PATH")))?;
         let status = Status::parse(status.trim())?;
         let table = export_table(result, left, right, status, side);
-        crate::exit::write(path.trim(), &crate::tabular::write(&table, Format::Csv, None))?;
+        crate::exit::write(path.trim(), &crate::tabular::write(&table, Format::Csv, None)?)?;
     }
     Ok(())
 }
@@ -445,5 +445,5 @@ fn save_ambiguous(
             .collect();
         table.rows.push(vec![outcome.key.clone(), keys.len().to_string(), keys.join("|")]);
     }
-    crate::exit::write(path, &crate::tabular::write(&table, Format::Csv, None))
+    crate::exit::write(path, &crate::tabular::write(&table, Format::Csv, None)?)
 }

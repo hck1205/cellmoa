@@ -18,6 +18,7 @@ mod args;
 mod commands;
 mod exit;
 mod input;
+mod peek;
 mod recon;
 mod reshape;
 mod tabular;
@@ -62,6 +63,10 @@ const VALUE_FLAGS: &[&str] = &[
     "header-row",
     "header_row",
     "stdin-format",
+    "max-rows",
+    "max_rows",
+    "width-scan-rows",
+    "width_scan_rows",
 ];
 
 /// Short options, per command, because the same letter means different things
@@ -86,6 +91,10 @@ usage: cellmoa <command> [arguments]
        [--out json|csv] [--output <file>] [--export STATUS:PATH]
        [--no-fail] [--strict-exit] [--summary stderr|json|none]
         Reconcile two data files by a key column. Either side may be `-`.
+
+  peek <file> [--shape] [--plain] [--headers] [--max-rows <n>] [--force]
+       [--sheet <name|index>] [--delimiter <char>] [--width-scan-rows <n>]
+        Look at a file without opening it in anything. Never writes.
 
   calc <formula> --from <csv|tsv|json|lines> [--headers] [--into <cell>]
        [--delimiter <char>] [--spill <csv|json>]

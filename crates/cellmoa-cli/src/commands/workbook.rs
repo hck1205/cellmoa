@@ -56,7 +56,7 @@ pub(super) fn export(args: &Args) -> Outcome {
     let sheet = engine.workbook().sheet(sheet).expect("resolved above");
 
     let text = match args.value("format").unwrap_or("csv") {
-        "csv" => crate::tabular::write(&sheet_as_table(sheet), crate::tabular::Format::Csv, None),
+        "csv" => crate::tabular::write(&sheet_as_table(sheet), crate::tabular::Format::Csv, None)?,
         "json" => export_json(sheet),
         other => return Err(Fault::Format(format!("unknown format `{other}`; use csv or json"))),
     };

@@ -50,7 +50,7 @@ pub(super) fn convert(args: &Args) -> Outcome {
     let selected = args.values("select");
     crate::reshape::select(&mut table, &selected)?;
 
-    let text = crate::tabular::write(&table, to, delimiter);
+    let text = crate::tabular::write(&table, to, delimiter)?;
     match args.value("out") {
         Some(path) => crate::exit::write(path, &text)?,
         None => out_raw!("{text}"),
@@ -130,7 +130,7 @@ pub(super) fn calc_stdin(args: &Args) -> Outcome {
                     })
                     .collect(),
             };
-            out_raw!("{}", crate::tabular::write(&table, format, None));
+            out_raw!("{}", crate::tabular::write(&table, format, None)?);
         }
         _ => return Err(Fault::Format(format!("cannot spill as `{spill}`; use csv or json"))),
     }

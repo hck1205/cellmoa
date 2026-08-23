@@ -1,6 +1,10 @@
 ---
 source: https://docs.visigrid.app/cli/peek/
-status: queued
+status: partial — --shape and --plain do everything the page describes for
+        csv, tsv, txt and xlsx, with the caps and the read-only contract. The
+        interactive TUI is not built: it needs a terminal-control dependency
+        and cannot be verified in a headless environment, so `peek <file>`
+        prints the plain table and says so. ODS and .sheet are not read
 ---
 
 # vgrid peek
