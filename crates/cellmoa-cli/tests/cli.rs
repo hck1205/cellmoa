@@ -57,7 +57,16 @@ fn piped(input: &str, arguments: &[&str]) -> Output {
         .stderr(Stdio::piped())
         .spawn()
         .expect("the binary should run");
-    child.stdin.as_mut().expect("piped").write_all(input.as_bytes()).expect("write stdin");
+    // A command that rejects its arguments exits without reading stdin, and
+    // the write then fails with EPIPE. That is the child behaving correctly,
+    // not the test failing, so a broken pipe is ignored here — treating it as
+    // an error made every such test flaky under a parallel run.
+    let written = child.stdin.as_mut().expect("piped").write_all(input.as_bytes());
+    match written {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => {}
+        Err(e) => panic!("writing to stdin: {e}"),
+    }
     drop(child.stdin.take());
     child.wait_with_output().expect("the child should finish")
 }
@@ -835,4 +844,23 @@ fn convert_output_can_be_piped_into_calc() {
     // is what this test is for, and it works: the filtered CSV arrived with
     // no summary line mixed into it.
     assert_eq!(stdout(&summed).trim(), "-500");
+}
+
+#[test]
+fn every_command_renders_a_number_the_same_way() {
+    // `calc` had its own number formatting and answered 0.30000000000000004
+    // where `get` and `export`, over the identical value, answered 0.3. One
+    // tool giving two answers for one number is worse than either answer.
+    let scratch = Scratch::new("onenumber");
+    let file = scratch.join("book.xlsx");
+    write_workbook(&file, &[(0, 0, "0.1"), (1, 0, "0.2"), (2, 0, "=A1+B1")]);
+
+    let via_get = stdout(&cellmoa(&["get", file.to_str().unwrap(), "C1"]));
+    let via_calc = stdout(&piped("0.1\n0.2\n", &["calc", "=SUM(A:A)", "-f", "csv"]));
+    assert_eq!(via_get.trim(), "0.3");
+    assert_eq!(via_calc.trim(), via_get.trim());
+
+    let via_export = stdout(&cellmoa(&["export", file.to_str().unwrap(), "--format", "csv"]));
+    assert!(via_export.contains("0.3"), "{via_export}");
+    assert!(!via_export.contains("0.30000000000000004"), "{via_export}");
 }

@@ -214,13 +214,9 @@ fn convert(args: &Args) -> Outcome {
     let to =
         args.value("to").ok_or_else(|| Fault::Usage("`--to <format>` is required".to_string()))?;
     let to = crate::tabular::Format::parse(to)?;
-    let delimiter = match args.value("delimiter") {
-        Some(text) => Some(one_char(text)?),
-        None => None,
-    };
-    let headers = args.has("headers");
+    let delimiter = crate::input::delimiter(args)?;
 
-    let mut table = read_input(args, headers, delimiter)?;
+    let mut table = crate::input::table(args, args.positional.first().map(String::as_str))?;
 
     // Rename first: everything downstream refers to columns by name, and the
     // names the caller has in mind are the ones they just assigned.
@@ -252,45 +248,6 @@ fn convert(args: &Args) -> Outcome {
     ok()
 }
 
-/// Reads the input named on the command line, or stdin when none was.
-fn read_input(
-    args: &Args,
-    headers: bool,
-    delimiter: Option<char>,
-) -> Result<crate::tabular::Table, Fault> {
-    use crate::tabular::{Format, Reading};
-    let path = args.positional.first().map(String::as_str).filter(|p| *p != "-");
-
-    // From a file the extension usually says what the format is; from a pipe
-    // there is nothing to go on, so `--from` is required rather than guessed.
-    let format = match args.value("from") {
-        Some(named) => Format::parse(named)?,
-        None => match path {
-            Some(path) => Format::from_extension(path).ok_or_else(|| {
-                Fault::Usage(format!(
-                    "cannot tell the format of {path:?} from its name; pass `--from`"
-                ))
-            })?,
-            None => {
-                return Err(Fault::Usage("reading from stdin needs `--from <format>`".to_string()))
-            }
-        },
-    };
-
-    let text = match path {
-        Some(path) => crate::exit::read(path)?,
-        None => {
-            use std::io::Read;
-            let mut text = String::new();
-            std::io::stdin()
-                .read_to_string(&mut text)
-                .map_err(|e| Fault::Io(format!("stdin: {e}")))?;
-            text
-        }
-    };
-    crate::tabular::read(&text, Reading { format, headers, delimiter })
-}
-
 /// Evaluates one formula against data piped in./// Evaluates one formula against data piped in.
 ///
 /// The data is loaded into a throwaway sheet and the formula is evaluated
@@ -313,7 +270,7 @@ fn calc_stdin(args: &Args) -> Outcome {
 
     if array.rows() == 1 && array.cols() == 1 {
         let value = array.get(0, 0);
-        out!("{}", raw(&value));
+        out!("{value}");
         if let Value::Error(e) = &value {
             // The token is the answer, so it goes to stdout with everything
             // else; the explanation is a diagnostic.
@@ -337,47 +294,37 @@ fn calc_stdin(args: &Args) -> Outcome {
         return Ok(std::process::ExitCode::from(crate::exit::CHECK_FAILED));
     };
 
-    match spill {
-        "csv" => {
-            for row in 0..array.rows() {
-                let cells: Vec<String> =
-                    (0..array.cols()).map(|col| csv_field(&raw(&array.get(row, col)))).collect();
-                out!("{}", cells.join(","));
-            }
-        }
-        "json" => {
+    let format = crate::tabular::Format::parse(spill)?;
+    match format {
+        crate::tabular::Format::Json => {
+            // JSON keeps the values typed: an array of numbers read back as
+            // strings would have to be parsed again on the far side of the pipe.
             let rows: Vec<Vec<serde_json::Value>> = (0..array.rows())
                 .map(|row| (0..array.cols()).map(|col| as_json(&array.get(row, col))).collect())
                 .collect();
             out!("{}", serde_json::json!(rows));
         }
-        other => {
-            return Err(Fault::Format(format!("unknown spill format `{other}`; use csv or json")))
+        crate::tabular::Format::Csv => {
+            let table = crate::tabular::Table {
+                headers: None,
+                rows: (0..array.rows())
+                    .map(|row| {
+                        (0..array.cols()).map(|col| array.get(row, col).to_string()).collect()
+                    })
+                    .collect(),
+            };
+            out_raw!("{}", crate::tabular::write(&table, format, None));
         }
+        _ => return Err(Fault::Format(format!("cannot spill as `{spill}`; use csv or json"))),
     }
     ok()
 }
 
 /// Reads stdin and loads it into a fresh single-sheet workbook.
 fn load_stdin(args: &Args) -> Result<Engine, Fault> {
-    use std::io::Read;
-    // `--from` is a switch until it is declared as taking a value, and a
-    // switch here would leave the format missing and the format name sitting
-    // in the positionals, where it would be read as the formula.
-    let named =
-        args.value("from").ok_or_else(|| Fault::Usage("`--from` needs a format".to_string()))?;
-    let format = crate::tabular::Format::parse(named)?;
-    let delimiter = match args.value("delimiter") {
-        Some(text) => Some(one_char(text)?),
-        None => None,
-    };
-
-    let mut text = String::new();
-    std::io::stdin().read_to_string(&mut text).map_err(|e| Fault::Io(format!("stdin: {e}")))?;
-    let table = crate::tabular::read(
-        &text,
-        crate::tabular::Reading { format, headers: args.has("headers"), delimiter },
-    )?;
+    // Stdin only, on purpose: this form takes a formula as its argument, so
+    // there is no room for a path without making one of the two ambiguous.
+    let table = crate::input::table(args, None)?;
 
     let corner = match args.value("into") {
         Some(cell) => cellmoa_core::reference::CellRef::parse_a1(cell)
@@ -423,41 +370,6 @@ fn load_stdin(args: &Args) -> Result<Engine, Fault> {
     Ok(engine)
 }
 
-fn one_char(text: &str) -> Result<char, Fault> {
-    let mut characters = text.chars();
-    match (characters.next(), characters.next()) {
-        (Some(c), None) => Ok(c),
-        // Named delimiters read better in a shell than an escaped tab does.
-        _ => match text {
-            "tab" => Ok('\t'),
-            "comma" => Ok(','),
-            "pipe" => Ok('|'),
-            "semicolon" => Ok(';'),
-            other => Err(Fault::Usage(format!(
-                "`--delimiter {other}` should be one character, or tab, comma, pipe or semicolon"
-            ))),
-        },
-    }
-}
-
-/// A value as text, with no locale formatting: `1234.5678`, not `$1,234.57`.
-/// Whatever reads this is a program, and a program wants the number.
-fn raw(value: &Value) -> String {
-    match value {
-        Value::Blank => String::new(),
-        Value::Number(n) => {
-            let mut text = format!("{n}");
-            if text == "-0" {
-                text = "0".to_string();
-            }
-            text
-        }
-        Value::Bool(b) => if *b { "TRUE" } else { "FALSE" }.to_string(),
-        Value::Text(s) => s.clone(),
-        Value::Error(e) => e.as_str().to_string(),
-    }
-}
-
 /// "3 rows by 1 column", counted rather than pluralised blindly.
 fn shape(rows: usize, cols: usize) -> String {
     let plural = |n: usize, word: &str| {
@@ -482,15 +394,6 @@ fn as_json(value: &Value) -> serde_json::Value {
         Value::Bool(b) => serde_json::json!(b),
         Value::Text(s) => serde_json::json!(s),
         Value::Error(e) => serde_json::json!(e.as_str()),
-    }
-}
-
-/// Quotes a field when it would otherwise be misread as structure.
-fn csv_field(value: &str) -> String {
-    if value.contains([',', '"', '\n', '\r']) {
-        format!("\"{}\"", value.replace('"', "\"\""))
-    } else {
-        value.to_string()
     }
 }
 
@@ -546,7 +449,7 @@ fn export(args: &Args) -> Outcome {
     let sheet = engine.workbook().sheet(sheet).expect("resolved above");
 
     let text = match args.value("format").unwrap_or("csv") {
-        "csv" => export_csv(sheet),
+        "csv" => crate::tabular::write(&sheet_as_table(sheet), crate::tabular::Format::Csv, None),
         "json" => export_json(sheet),
         other => return Err(Fault::Format(format!("unknown format `{other}`; use csv or json"))),
     };
@@ -557,27 +460,18 @@ fn export(args: &Args) -> Outcome {
     ok()
 }
 
-fn export_csv(sheet: &cellmoa_core::model::Sheet) -> String {
-    let Some(used) = sheet.used_range() else { return String::new() };
-    let mut out = String::new();
-    for row in used.start.row..=used.end.row {
-        for col in used.start.col..=used.end.col {
-            if col > used.start.col {
-                out.push(',');
-            }
-            let value = sheet.value(col, row).to_string();
-            // Quote whenever the value could otherwise be misread as structure.
-            if value.contains([',', '"', '\n', '\r']) {
-                out.push('"');
-                out.push_str(&value.replace('"', "\"\""));
-                out.push('"');
-            } else {
-                out.push_str(&value);
-            }
-        }
-        out.push('\n');
-    }
-    out
+/// Reads a sheet's used range as a rectangle of display text, so the one CSV
+/// writer in this crate can render it. There was a second CSV writer here
+/// with its own quoting rules, and the two had already drifted over how a
+/// number is written.
+fn sheet_as_table(sheet: &cellmoa_core::model::Sheet) -> crate::tabular::Table {
+    let Some(used) = sheet.used_range() else { return crate::tabular::Table::default() };
+    let rows = (used.start.row..=used.end.row)
+        .map(|row| {
+            (used.start.col..=used.end.col).map(|col| sheet.value(col, row).to_string()).collect()
+        })
+        .collect();
+    crate::tabular::Table { headers: None, rows }
 }
 
 fn export_json(sheet: &cellmoa_core::model::Sheet) -> String {
@@ -589,13 +483,7 @@ fn export_json(sheet: &cellmoa_core::model::Sheet) -> String {
             if let Some(formula) = cell.content.as_formula() {
                 entry["formula"] = serde_json::Value::String(format!("={formula}"));
             }
-            entry["value"] = match &cell.value {
-                Value::Blank => serde_json::Value::Null,
-                Value::Number(n) => serde_json::json!(n),
-                Value::Bool(b) => serde_json::json!(b),
-                Value::Text(s) => serde_json::json!(s),
-                Value::Error(e) => serde_json::json!(e.as_str()),
-            };
+            entry["value"] = as_json(&cell.value);
             entry
         })
         .collect();

@@ -17,6 +17,7 @@
 mod args;
 mod commands;
 mod exit;
+mod input;
 mod reshape;
 mod tabular;
 
