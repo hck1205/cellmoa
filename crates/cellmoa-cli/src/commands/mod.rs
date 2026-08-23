@@ -53,10 +53,12 @@ macro_rules! note {
 
 mod catalogue;
 mod pipeline;
+mod reconcile;
 mod workbook;
 
 use catalogue::list_functions;
 use pipeline::{calc_stdin, convert};
+use reconcile::reconcile;
 use workbook::{diff_command, eval, export, fingerprint_command, get, replay, verify_command};
 
 pub fn run(args: &Args) -> Outcome {
@@ -67,6 +69,10 @@ pub fn run(args: &Args) -> Outcome {
         "get" => get(args),
         "export" => export(args),
         "verify" => verify_command(args),
+        // Two commands share the name. `--key` decides: with it, two data
+        // files are reconciled row by row; without it, two workbooks are
+        // compared cell by cell.
+        "diff" if args.has("key") => reconcile(args),
         "diff" => diff_command(args),
         "fingerprint" => fingerprint_command(args),
         "replay" => replay(args),

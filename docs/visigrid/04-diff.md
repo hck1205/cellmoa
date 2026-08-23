@@ -1,6 +1,8 @@
 ---
 source: https://docs.visigrid.app/cli/diff/
-status: queued
+status: partial — key matching (exact and contains), transforms, tolerance,
+        compare, exports, ambiguity and stdin all done. --header-row and
+        --summary json are accepted but not yet honoured
 ---
 
 # vgrid diff

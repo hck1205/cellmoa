@@ -15,7 +15,7 @@ use crate::exit::Fault;
 use crate::tabular::Table;
 
 /// A column named on the command line, resolved against real headers.
-fn resolve(headers: &[String], wanted: &str) -> Result<usize, Fault> {
+pub fn resolve(headers: &[String], wanted: &str) -> Result<usize, Fault> {
     let wanted = wanted.trim();
     let matches: Vec<usize> = headers
         .iter()
@@ -38,7 +38,7 @@ fn resolve(headers: &[String], wanted: &str) -> Result<usize, Fault> {
     }
 }
 
-fn listed(headers: &[String]) -> String {
+pub fn listed(headers: &[String]) -> String {
     if headers.is_empty() {
         return "no columns".to_string();
     }
@@ -210,7 +210,7 @@ fn unquote(text: &str) -> String {
 
 /// Reads a number, forgiving the punctuation money is written with: `$1,200.00`
 /// is 1200, and `(500)` is -500 as it is on a statement.
-fn number(text: &str) -> Option<f64> {
+pub fn number(text: &str) -> Option<f64> {
     let text = text.trim();
     let (text, negated) = match text.strip_prefix('(').and_then(|t| t.strip_suffix(')')) {
         Some(inner) => (inner, true),

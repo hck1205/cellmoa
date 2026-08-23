@@ -251,37 +251,31 @@ pub fn write(table: &Table, format: Format, delimiter: Option<char>) -> String {
 
 /// Writes JSON with the columns in the order they appear.
 ///
-/// Built by hand rather than through `serde_json::Value`, whose object is a
-/// sorted map: an `--select 'Status,Amount'` came back out as `Amount` then
-/// `Status`, which contradicts the flag that asked for an order. Only the
-/// scalars go through serde, which is what gets the escaping right.
+/// The order is not decoration: `--select 'Status,Amount'` asks for one. This
+/// relies on serde_json's `preserve_order`, which the workspace turns on for
+/// exactly this reason — without it an object is a sorted map and the flag's
+/// answer comes back alphabetised.
 fn write_json(table: &Table) -> String {
-    let quote = |text: &str| serde_json::to_string(text).unwrap_or_else(|_| "\"\"".to_string());
-    let mut out = String::from("[\n");
-    for (index, row) in table.rows.iter().enumerate() {
-        if index > 0 {
-            out.push_str(",\n");
-        }
-        match &table.headers {
-            Some(headers) => {
-                out.push_str("  {\n");
-                for (column, name) in headers.iter().enumerate() {
-                    if column > 0 {
-                        out.push_str(",\n");
-                    }
-                    let cell = row.get(column).map(String::as_str).unwrap_or("");
-                    out.push_str(&format!("    {}: {}", quote(name), quote(cell)));
-                }
-                out.push_str("\n  }");
-            }
-            None => {
-                let cells: Vec<String> = row.iter().map(|c| quote(c)).collect();
-                out.push_str(&format!("  [{}]", cells.join(", ")));
-            }
-        }
-    }
-    out.push_str("\n]\n");
-    out
+    let rows: Vec<serde_json::Value> = table
+        .rows
+        .iter()
+        .map(|row| match &table.headers {
+            Some(headers) => serde_json::Value::Object(
+                headers
+                    .iter()
+                    .enumerate()
+                    .map(|(index, name)| {
+                        let cell = row.get(index).cloned().unwrap_or_default();
+                        (name.clone(), serde_json::Value::String(cell))
+                    })
+                    .collect(),
+            ),
+            None => serde_json::Value::Array(
+                row.iter().map(|c| serde_json::Value::String(c.clone())).collect(),
+            ),
+        })
+        .collect();
+    format!("{}\n", serde_json::to_string_pretty(&rows).unwrap_or_default())
 }
 
 /// Quotes a field when leaving it bare would change the shape of the output.

@@ -1,6 +1,7 @@
 ---
 source: https://docs.visigrid.app/cli/agents/
-status: queued — depends on convert/diff/sheet-inspect landing first
+status: partial — the two-pass reconciliation playbook runs end to end and
+        is a test. The peek and sheet-inspect halves are still queued
 ---
 
 # Working with AI Agents

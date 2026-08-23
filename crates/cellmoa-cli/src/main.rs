@@ -18,6 +18,7 @@ mod args;
 mod commands;
 mod exit;
 mod input;
+mod recon;
 mod reshape;
 mod tabular;
 
@@ -42,6 +43,25 @@ const VALUE_FLAGS: &[&str] = &[
     "where",
     "select",
     "rename",
+    "key",
+    "match",
+    "key-transform",
+    "key_transform",
+    "compare",
+    "tolerance",
+    "on-duplicate",
+    "on_duplicate",
+    "on-ambiguous",
+    "on_ambiguous",
+    "save-ambiguous",
+    "contains-column",
+    "output",
+    "summary",
+    "export",
+    "export-side",
+    "header-row",
+    "header_row",
+    "stdin-format",
 ];
 
 /// Short options, per command, because the same letter means different things
@@ -60,6 +80,12 @@ const USAGE: &str = "\
 cellmoa — a spreadsheet engine for the command line
 
 usage: cellmoa <command> [arguments]
+
+  diff <left> <right> --key <column> [--match exact|contains] [--tolerance <n>]
+       [--key-transform none|trim|digits|alnum] [--compare col,...]
+       [--out json|csv] [--output <file>] [--export STATUS:PATH]
+       [--no-fail] [--strict-exit] [--summary stderr|json|none]
+        Reconcile two data files by a key column. Either side may be `-`.
 
   calc <formula> --from <csv|tsv|json|lines> [--headers] [--into <cell>]
        [--delimiter <char>] [--spill <csv|json>]
