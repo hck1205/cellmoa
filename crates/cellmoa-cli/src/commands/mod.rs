@@ -52,12 +52,14 @@ macro_rules! note {
 }
 
 mod catalogue;
+mod fill;
 mod inspect;
 mod pipeline;
 mod reconcile;
 mod workbook;
 
 use catalogue::list_functions;
+use fill::fill;
 use inspect::peek_command;
 use pipeline::{calc_stdin, convert};
 use reconcile::reconcile;
@@ -68,6 +70,7 @@ pub fn run(args: &Args) -> Outcome {
         "calc" => calc(args),
         "convert" => convert(args),
         "peek" => peek_command(args),
+        "fill" => fill(args),
         "eval" => eval(args),
         "get" => get(args),
         "export" => export(args),

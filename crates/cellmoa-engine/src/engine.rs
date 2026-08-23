@@ -252,6 +252,33 @@ impl Engine {
         Ok(())
     }
 
+    /// Writes literal cell contents as one commit, then recalculates once.
+    ///
+    /// [`Engine::apply`] takes text and reads it the way a person typing into
+    /// a cell would, so a leading `=` becomes a formula. That is right for
+    /// typing and wrong for loading: data arriving from a file was not typed
+    /// by anyone here, and reinterpreting it lets whoever wrote the file
+    /// decide what the document computes. This takes values that have already
+    /// been decided and stores them as they are.
+    pub fn apply_contents(
+        &mut self,
+        actor: Actor,
+        edits: Vec<(CellAddr, CellContent)>,
+        expected_revision: Option<u64>,
+    ) -> Result<(), EditError> {
+        let ops: Vec<Op> = edits
+            .iter()
+            .map(|(addr, content)| Op::SetCell { addr: *addr, content: content.clone() })
+            .collect();
+        self.doc.apply(actor, ops, expected_revision)?;
+        let touched: Vec<CellAddr> = edits.iter().map(|(addr, _)| *addr).collect();
+        for &addr in &touched {
+            self.refresh_cell(addr);
+        }
+        self.recalculate_from(touched);
+        Ok(())
+    }
+
     /// Inserts or deletes rows or columns, as one commit.
     ///
     /// The whole workbook is rebuilt afterwards rather than recalculated from

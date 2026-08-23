@@ -59,7 +59,16 @@ impl fmt::Display for Fault {
 
 /// Reading a file, with the path in the message and the right class attached.
 pub fn read(path: &str) -> Result<String, Fault> {
-    std::fs::read_to_string(path).map_err(|e| Fault::Io(format!("{path}: {e}")))
+    std::fs::read_to_string(path).map_err(|e| {
+        let message = format!("{path}: {e}");
+        // "stream did not contain valid UTF-8" is not the filesystem failing.
+        // The file opened and read fine; its contents are not what they were
+        // taken to be, which is a 4 and not a 3.
+        match e.kind() {
+            std::io::ErrorKind::InvalidData => Fault::Parse(message),
+            _ => Fault::Io(message),
+        }
+    })
 }
 
 /// Writing a file, likewise.
@@ -102,6 +111,17 @@ mod tests {
     fn only_a_usage_fault_points_at_the_help_text() {
         assert!(Fault::Usage("bad flag".into()).is_usage());
         assert!(!Fault::Io("no such file".into()).is_usage());
+    }
+
+    #[test]
+    fn a_file_that_is_not_text_is_a_parse_fault_not_an_io_one() {
+        // It opened and read; what came back was not text. Fixing that means
+        // looking at the file, not at the disk.
+        let path = std::env::temp_dir().join(format!("cellmoa-notutf8-{}", std::process::id()));
+        std::fs::write(&path, [0xff, 0xfe, 0x00]).unwrap();
+        let fault = read(path.to_str().unwrap()).unwrap_err();
+        assert_eq!(fault.code(), 4, "{fault}");
+        let _ = std::fs::remove_file(&path);
     }
 
     #[test]

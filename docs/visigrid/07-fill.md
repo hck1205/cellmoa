@@ -1,6 +1,8 @@
 ---
 source: https://docs.visigrid.app/cli/fill/
-status: queued
+status: done, with one substitution — the template and output are .xlsx
+        rather than .sheet, which cellmoa does not have. --clear empties the
+        data cells and keeps formulas, so a template survives being filled
 ---
 
 # vgrid fill

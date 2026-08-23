@@ -21,6 +21,7 @@ mod input;
 mod peek;
 mod recon;
 mod reshape;
+mod strict;
 mod tabular;
 
 use args::Args;
@@ -67,6 +68,8 @@ const VALUE_FLAGS: &[&str] = &[
     "max_rows",
     "width-scan-rows",
     "width_scan_rows",
+    "csv",
+    "target",
 ];
 
 /// Short options, per command, because the same letter means different things
@@ -91,6 +94,11 @@ usage: cellmoa <command> [arguments]
        [--out json|csv] [--output <file>] [--export STATUS:PATH]
        [--no-fail] [--strict-exit] [--summary stderr|json|none]
         Reconcile two data files by a key column. Either side may be `-`.
+
+  fill <template> --csv <file> --target <cell> --out <file> [--headers]
+       [--clear] [--delimiter <char>] [--json]
+        Load a CSV into a template and save the result. Nothing in the CSV
+        can become a formula.
 
   peek <file> [--shape] [--plain] [--headers] [--max-rows <n>] [--force]
        [--sheet <name|index>] [--delimiter <char>] [--width-scan-rows <n>]
