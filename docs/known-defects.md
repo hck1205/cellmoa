@@ -121,3 +121,28 @@ Reproduce:
 
     printf '$1,200.00\n-500\n' | cellmoa calc "=SUM(A:A)" -f csv   # -500
     printf '1200\n-500\n'      | cellmoa calc "=SUM(A:A)" -f csv   # 700
+
+## `dateFormat` and `numericFormat` take Intl options, not the reference's strings
+
+Handsontable spells these the way its dependencies do: `dateFormat: 'YYYY-MM-DD'`
+is a moment format string and `numericFormat: { pattern: '0,0.00' }` is a
+numbro pattern. cellmoa reads both as Intl descriptors —
+`{ year: 'numeric', month: '2-digit', day: '2-digit' }` and
+`{ minimumFractionDigits: 2 }` — because the engine already carries Intl and
+neither moment nor numbro is worth a dependency.
+
+The cost is that a configuration copied from the reference does not fail. Both
+options are accepted at settings time, so the grid draws, and the cell simply
+renders unformatted — which reads as "the format option does nothing here"
+rather than as "that spelling is a different library's".
+
+Found while converting `Verification/Getting started/Demo` from a prose page
+into a real side-by-side: the TypeScript types rejected the reference's own
+documented spelling, which is how it surfaced at all. The story now passes both
+spellings through to both grids so the difference is on screen.
+
+Closing it means either accepting both shapes — sniffing a string as moment and
+an object with `pattern` as numbro, and translating what is translatable — or
+rejecting the foreign spelling loudly at settings time. The first is a real
+translation layer with its own wrong answers at the edges; the second breaks
+configurations that currently load. Neither is a change to make quietly.

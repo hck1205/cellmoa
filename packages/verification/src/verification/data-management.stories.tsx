@@ -2,9 +2,9 @@
  * Two people editing the same sheet.
  */
 
-import { Compare, block } from '../Compare.js';
+import { Compare, block } from "../Compare.js";
 
-export default { title: 'Verification/Data management' };
+export default { title: "Verification/Data management" };
 
 export const Collaboration = () => (
   <Compare
@@ -14,10 +14,13 @@ export const Collaboration = () => (
     afterMount={{
       cellmoa: (grid) => {
         // A change arriving from somewhere else, a moment later.
-        setTimeout(() => grid.setDataAtCell(0, 0, 'from elsewhere', 'api'), 2500);
+        setTimeout(
+          () => grid.setDataAtCell(0, 0, "from elsewhere", "api"),
+          2500,
+        );
       },
       handsontable: (hot) => {
-        setTimeout(() => hot.setDataAtCell(0, 0, 'from elsewhere'), 2500);
+        setTimeout(() => hot.setDataAtCell(0, 0, "from elsewhere"), 2500);
       },
     }}
   />

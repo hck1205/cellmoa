@@ -16,32 +16,32 @@
  * separate tree instead.
  */
 
-import { Compare, OnlyReference, block } from '../Compare.js';
+import { Compare, block } from "../Compare.js";
 
-export default { title: 'Verification/Rows' };
+export default { title: "Verification/Rows" };
 
 const coord = (row: number, col: number) => `${row}, ${col}`;
 
-const months = ['January', 'February', 'March', 'April', 'May', 'June'];
+const months = ["January", "February", "March", "April", "May", "June"];
 
 const finance = [
-  ['42000', '31000', '11000'],
-  ['45500', '33200', '12300'],
-  ['48700', '35100', '13600'],
-  ['51200', '36800', '14400'],
-  ['54800', '38900', '15900'],
-  ['57300', '40100', '17200'],
+  ["42000", "31000", "11000"],
+  ["45500", "33200", "12300"],
+  ["48700", "35100", "13600"],
+  ["51200", "36800", "14400"],
+  ["54800", "38900", "15900"],
+  ["57300", "40100", "17200"],
 ];
 
 const products = [
-  ['Trail Helmet', '1298.14', '2025-08-31', 'true'],
-  ['Windbreaker Jacket', '178.90', '2025-05-10', 'false'],
-  ['Cycling Cap', '288.10', '2025-09-15', 'true'],
-  ['HL Mountain Frame', '94.49', '2025-01-17', 'false'],
-  ['Racing Socks', '430.38', '2025-05-10', 'true'],
-  ['Aero Bottle', '1571.13', '2025-05-24', 'true'],
-  ['Carbon Handlebar', '1080.70', '2025-10-24', 'false'],
-  ['Speed Gloves', '635.13', '2025-11-17', 'true'],
+  ["Trail Helmet", "1298.14", "2025-08-31", "true"],
+  ["Windbreaker Jacket", "178.90", "2025-05-10", "false"],
+  ["Cycling Cap", "288.10", "2025-09-15", "true"],
+  ["HL Mountain Frame", "94.49", "2025-01-17", "false"],
+  ["Racing Socks", "430.38", "2025-05-10", "true"],
+  ["Aero Bottle", "1571.13", "2025-05-24", "true"],
+  ["Carbon Handlebar", "1080.70", "2025-10-24", "false"],
+  ["Speed Gloves", "635.13", "2025-11-17", "true"],
 ];
 
 export function RowFreezing() {
@@ -50,7 +50,7 @@ export function RowFreezing() {
       height={320}
       settings={{
         height: 320,
-        width: '100%',
+        width: "100%",
         colWidths: 100,
         rowHeaders: true,
         colHeaders: true,
@@ -76,7 +76,7 @@ export function RowHeaders() {
       height={240}
       settings={{
         height: 240,
-        colHeaders: ['Revenue', 'Expenses', 'Profit'],
+        colHeaders: ["Revenue", "Expenses", "Profit"],
         rowHeaders: months,
         rowHeaderWidth: 80,
       }}
@@ -98,7 +98,7 @@ export function RowHeights() {
       height={280}
       settings={{
         height: 280,
-        width: '100%',
+        width: "100%",
         colHeaders: true,
         rowHeaders: true,
         minRowHeights: [60, 28, 44, 28, 60],
@@ -126,7 +126,11 @@ export function RowHiding() {
         colHeaders: true,
         rowHeaders: true,
         contextMenu: true,
-        hiddenRows: { rows: [3, 5, 9], indicators: true, copyPasteEnabled: false },
+        hiddenRows: {
+          rows: [3, 5, 9],
+          indicators: true,
+          copyPasteEnabled: false,
+        },
       }}
       data={block(12, 5)}
       note={`Rows 4, 6 and 10 should be missing from both grids while the numbering still
@@ -144,67 +148,64 @@ export function RowHiding() {
 
 export function RowMoving() {
   return (
-    <OnlyReference
+    <Compare
       height={320}
       settings={{
         height: 320,
-        width: '100%',
+        width: "100%",
         colWidths: 100,
         rowHeaders: true,
         colHeaders: true,
         manualRowMove: true,
       }}
       data={block(30, 8, coord)}
-      note={`Select a row on the right and drag the handle that appears above its header.
-        There is nothing to put beside it: manualRowMove is accepted here and moveRows()
-        and dragRows() both work, but the plugin registers zero pointer listeners, so the
-        handle does not exist and no amount of dragging moves anything. The parity table
-        claimed this feature outright until the audit; it is API-only, and a story that
-        mounted both grids would show two that look identical and behave differently,
-        which is worse than showing one.`}
+      note={`Select a row and drag the handle that appears above its header. On the right
+        the row moves; on the left there is no handle to grab. manualRowMove is accepted
+        here and moveRows() and dragRows() both work — it is only the pointer half that is
+        missing, since the plugin registers no listeners. Both grids are mounted on purpose:
+        with one of them the claim "there is nothing on our side" has to be believed, and
+        with two it can be tried. The parity table claimed this feature outright until the
+        audit.`}
     />
   );
 }
 
 export function RowParentChild() {
   return (
-    <OnlyReference
+    <Compare
       height={320}
       settings={{
         height: 320,
         rowHeaders: true,
-        colHeaders: ['Category', 'Nominee'],
+        colHeaders: ["Category", "Nominee"],
         contextMenu: true,
         nestedRows: true,
-        columns: [{ data: 'category' }, { data: 'nominee' }],
+        columns: [{ data: "category" }, { data: "nominee" }],
         data: [
           {
-            category: 'Best Rock Performance',
-            nominee: '',
+            category: "Best Rock Performance",
+            nominee: "",
             __children: [
-              { category: '', nominee: 'Twenty One Pilots' },
-              { category: '', nominee: 'Coldplay' },
+              { category: "", nominee: "Twenty One Pilots" },
+              { category: "", nominee: "Coldplay" },
             ],
           },
           {
-            category: 'Best Metal Performance',
-            nominee: '',
+            category: "Best Metal Performance",
+            nominee: "",
             __children: [
-              { category: '', nominee: 'August Burns Red' },
-              { category: '', nominee: 'Ghost' },
+              { category: "", nominee: "August Burns Red" },
+              { category: "", nominee: "Ghost" },
             ],
           },
         ],
       }}
-      note={`The expand and collapse buttons in the row headers, and the indentation that
-        goes with them, come from a __children property inside the data source. This
-        library implements nestedRows differently: nesting is a separate tree of physical
-        row numbers handed to the setting, because the sheet underneath is flat and a
-        formula must keep reading a collapsed row. Nothing here reads __children, so the
-        page's configuration produces an ordinary flat grid rather than a tree, and there
-        is no honest side-by-side to draw. The behaviour the two share — collapsing trims
-        rather than deletes — is visible on the right when a parent is folded and the
-        values are still reachable.`}
+      note={`The same nested data on both sides. The tree should draw the same: parent rows
+        with a collapse arrow, children indented beneath. What to check is the context menu,
+        which the reference fills with the four nesting entries — insert child, detach from
+        parent, and the two row-insert entries that respect the tree — and which here has
+        the ordinary row entries only, so a child cannot be created by hand. Collapsing and
+        expanding work on both.`}
     />
   );
 }
@@ -215,14 +216,14 @@ export function RowPrePopulating() {
       height={260}
       settings={{
         height: 260,
-        colHeaders: ['Name', 'Team', 'Role'],
+        colHeaders: ["Name", "Team", "Role"],
         rowHeaders: true,
         minSpareRows: 1,
       }}
       data={[
-        ['Ana García', 'Engineering', 'Senior Engineer'],
-        ['James Okafor', 'Marketing', 'Product Manager'],
-        ['Li Wei', 'Engineering', 'Staff Engineer'],
+        ["Ana García", "Engineering", "Senior Engineer"],
+        ["James Okafor", "Marketing", "Product Manager"],
+        ["Li Wei", "Engineering", "Staff Engineer"],
       ]}
       note={`Both grids should show exactly one empty row under the third name. Type into
         it: a fourth name should land in row 4 and one new empty row should appear beneath,
@@ -262,7 +263,7 @@ export function RowVirtualization() {
       height={320}
       settings={{
         height: 320,
-        width: '100%',
+        width: "100%",
         colWidths: 100,
         rowHeaders: true,
         colHeaders: true,
@@ -287,7 +288,7 @@ export function RowsPagination() {
       height={340}
       settings={{
         height: 340,
-        colHeaders: ['Model', 'Price', 'Sell date', 'In stock'],
+        colHeaders: ["Model", "Price", "Sell date", "In stock"],
         rowHeaders: true,
         pagination: {
           pageSize: 5,
@@ -318,12 +319,12 @@ export function RowsSorting() {
       height={300}
       settings={{
         height: 300,
-        colHeaders: ['Model', 'Price', 'Sell date', 'In stock'],
+        colHeaders: ["Model", "Price", "Sell date", "In stock"],
         rowHeaders: true,
         columnSorting: {
           indicator: true,
           headerAction: true,
-          initialConfig: { column: 0, sortOrder: 'desc' },
+          initialConfig: { column: 0, sortOrder: "desc" },
         },
       }}
       data={products}

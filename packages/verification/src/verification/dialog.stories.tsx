@@ -12,12 +12,16 @@
  * The pages are in the order the guide's own sidebar lists them.
  */
 
-import type { Dialog as CmDialog, Loading as CmLoading, Notification as CmNotification } from '@cellmoa/grid';
-import { registerLanguageDictionary, jaJP } from 'handsontable/i18n';
+import type {
+  Dialog as CmDialog,
+  Loading as CmLoading,
+  Notification as CmNotification,
+} from "@cellmoa/grid";
+import { registerLanguageDictionary, jaJP } from "handsontable/i18n";
 
-import { Compare, block } from '../Compare.js';
+import { Compare, block } from "../Compare.js";
 
-export default { title: 'Verification/Dialog' };
+export default { title: "Verification/Dialog" };
 
 registerLanguageDictionary(jaJP);
 
@@ -29,18 +33,18 @@ registerLanguageDictionary(jaJP);
  */
 const alert = {
   template: {
-    type: 'alert' as const,
-    title: 'Unsaved changes',
-    description: 'Three cells have been edited since the last save.',
+    type: "alert" as const,
+    title: "Unsaved changes",
+    description: "Three cells have been edited since the last save.",
     buttons: [
-      { text: 'Discard', type: 'secondary' as const },
-      { text: 'Save', type: 'primary' as const },
+      { text: "Discard", type: "secondary" as const },
+      { text: "Save", type: "primary" as const },
     ],
   },
-  background: 'semi-transparent' as const,
+  background: "semi-transparent" as const,
   contentBackground: true,
   closable: true,
-  a11y: { role: 'dialog', ariaLabel: 'Unsaved changes' },
+  a11y: { role: "dialog", ariaLabel: "Unsaved changes" },
 };
 
 export const Dialog = () => (
@@ -51,10 +55,10 @@ export const Dialog = () => (
     height={280}
     afterMount={{
       cellmoa: (grid) => {
-        setTimeout(() => grid.getPlugin<CmDialog>('dialog')?.show(alert), 700);
+        setTimeout(() => grid.getPlugin<CmDialog>("dialog")?.show(alert), 700);
       },
       handsontable: (hot) => {
-        setTimeout(() => hot.getPlugin('dialog').show(alert), 700);
+        setTimeout(() => hot.getPlugin("dialog").show(alert), 700);
       },
     }}
   />
@@ -63,15 +67,21 @@ export const Dialog = () => (
 export const Loading = () => (
   <Compare
     note="Both grids are put into a loading state a moment after mount and left there. The overlay should cover the whole grid root — headers, rows and the strip below the table — because a pager you can still click while the data is loading will ask for a page nobody is waiting for. Check the spinner actually animates rather than sitting still, and that the phrase is Japanese: the grid is set to `ja-JP`, and both libraries take the default from a dictionary key (`LOADING_TITLE` there, `Loading:title` here). English text means the plugin hard-coded it. Two differences are worth knowing. Handsontable's overlay takes an `icon`, a `title` and a `description`; cellmoa's takes one `message` and draws its own spinner, so a caller who wants three lines cannot have them. And cellmoa's is reference-counted rather than a flag — two things loading at once take it up twice, and the first to finish does not pull the overlay out from under the second, which is a difference in behaviour you can only see by starting a second load before the first ends."
-    settings={{ colHeaders: true, rowHeaders: true, dialog: true, loading: true, language: 'ja-JP' }}
+    settings={{
+      colHeaders: true,
+      rowHeaders: true,
+      dialog: true,
+      loading: true,
+      language: "ja-JP",
+    }}
     data={block(6, 4)}
     height={260}
     afterMount={{
       cellmoa: (grid) => {
-        setTimeout(() => grid.getPlugin<CmLoading>('loading')?.show(), 700);
+        setTimeout(() => grid.getPlugin<CmLoading>("loading")?.show(), 700);
       },
       handsontable: (hot) => {
-        setTimeout(() => hot.getPlugin('loading').show(), 700);
+        setTimeout(() => hot.getPlugin("loading").show(), 700);
       },
     }}
   />
@@ -85,44 +95,48 @@ export const Notification = () => (
     height={260}
     afterMount={{
       cellmoa: (grid) => {
-        const toast = grid.getPlugin<CmNotification>('notification');
+        const toast = grid.getPlugin<CmNotification>("notification");
         setTimeout(() => {
           toast?.showMessage({
-            title: 'Could not save',
-            message: 'The server refused the write. Nothing was lost.',
-            variant: 'error',
+            title: "Could not save",
+            message: "The server refused the write. Nothing was lost.",
+            variant: "error",
             duration: 0,
-            position: 'top-end',
+            position: "top-end",
             // The callback is required by Handsontable's type; taking the
             // action is what dismisses the toast on both sides.
-            actions: [{ label: 'Retry', type: 'primary', callback: () => undefined }],
+            actions: [
+              { label: "Retry", type: "primary", callback: () => undefined },
+            ],
           });
           toast?.showMessage({
-            message: 'Sorted by Region.',
-            variant: 'info',
+            message: "Sorted by Region.",
+            variant: "info",
             duration: 0,
-            position: 'bottom-start',
+            position: "bottom-start",
           });
         }, 700);
       },
       handsontable: (hot) => {
-        const toast = hot.getPlugin('notification');
+        const toast = hot.getPlugin("notification");
         setTimeout(() => {
           toast.showMessage({
-            title: 'Could not save',
-            message: 'The server refused the write. Nothing was lost.',
-            variant: 'error',
+            title: "Could not save",
+            message: "The server refused the write. Nothing was lost.",
+            variant: "error",
             duration: 0,
-            position: 'top-end',
+            position: "top-end",
             // The callback is required by Handsontable's type; taking the
             // action is what dismisses the toast on both sides.
-            actions: [{ label: 'Retry', type: 'primary', callback: () => undefined }],
+            actions: [
+              { label: "Retry", type: "primary", callback: () => undefined },
+            ],
           });
           toast.showMessage({
-            message: 'Sorted by Region.',
-            variant: 'info',
+            message: "Sorted by Region.",
+            variant: "info",
             duration: 0,
-            position: 'bottom-start',
+            position: "bottom-start",
           });
         }, 700);
       },

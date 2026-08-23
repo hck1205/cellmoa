@@ -12,16 +12,16 @@
  * codebase and was found by hand. This is where they would have shown.
  */
 
-import { useEffect, useRef, useState } from 'react';
-import { Engine, Grid } from '@cellmoa/grid';
-import type { GridSettings } from '@cellmoa/grid';
-import Handsontable from 'handsontable';
-import '@cellmoa/grid/style.css';
-import '@cellmoa/grid/themes.css';
-import 'handsontable/styles/handsontable.css';
-import 'handsontable/styles/ht-theme-main.css';
+import { useEffect, useRef, useState } from "react";
+import { Engine, Grid } from "@cellmoa/grid";
+import type { GridSettings } from "@cellmoa/grid";
+import Handsontable from "handsontable";
+import "@cellmoa/grid/style.css";
+import "@cellmoa/grid/themes.css";
+import "handsontable/styles/handsontable.css";
+import "handsontable/styles/ht-theme-main.css";
 
-import wasmUrl from '@cellmoa/grid/wasm?url';
+import wasmUrl from "@cellmoa/grid/wasm?url";
 
 /** Compiled once and shared: building the module per story is slow enough to see. */
 let engine: Promise<Engine> | null = null;
@@ -38,7 +38,10 @@ export interface CompareProps {
   /** What to look at, and what would count as a difference. */
   note?: string;
   /** Run once after each is up, for a story that has to open or press something. */
-  afterMount?: { cellmoa?: (grid: Grid) => void; handsontable?: (hot: Handsontable) => void };
+  afterMount?: {
+    cellmoa?: (grid: Grid) => void;
+    handsontable?: (hot: Handsontable) => void;
+  };
   height?: number;
 }
 
@@ -68,9 +71,13 @@ function Cellmoa({ settings, data, afterMount, height }: CompareProps) {
   }, []);
 
   if (error) {
-    return <pre style={{ color: 'crimson', margin: 8, whiteSpace: 'pre-wrap' }}>{error}</pre>;
+    return (
+      <pre style={{ color: "crimson", margin: 8, whiteSpace: "pre-wrap" }}>
+        {error}
+      </pre>
+    );
   }
-  return <div ref={host} style={{ height, width: '100%' }} />;
+  return <div ref={host} style={{ height, width: "100%" }} />;
 }
 
 function Reference({ settings, data, afterMount, height }: CompareProps) {
@@ -86,8 +93,8 @@ function Reference({ settings, data, afterMount, height }: CompareProps) {
       hot = new Handsontable(host.current, {
         ...(settings as Handsontable.GridSettings),
         ...(data ? { data: data.map((row) => [...row]) } : {}),
-        licenseKey: 'non-commercial-and-evaluation',
-        themeName: 'ht-theme-main',
+        licenseKey: "non-commercial-and-evaluation",
+        themeName: "ht-theme-main",
       });
       afterMount?.handsontable?.(hot);
     } catch (cause: unknown) {
@@ -97,41 +104,49 @@ function Reference({ settings, data, afterMount, height }: CompareProps) {
   }, []);
 
   if (error) {
-    return <pre style={{ color: 'crimson', margin: 8, whiteSpace: 'pre-wrap' }}>{error}</pre>;
+    return (
+      <pre style={{ color: "crimson", margin: 8, whiteSpace: "pre-wrap" }}>
+        {error}
+      </pre>
+    );
   }
-  return <div ref={host} style={{ height, width: '100%' }} />;
+  return <div ref={host} style={{ height, width: "100%" }} />;
 }
 
 const panel: React.CSSProperties = {
-  flex: '1 1 0',
+  flex: "1 1 0",
   minWidth: 0,
-  border: '1px solid #d4d4d8',
+  border: "1px solid #d4d4d8",
   borderRadius: 6,
-  overflow: 'hidden',
+  overflow: "hidden",
 };
 
 const label: React.CSSProperties = {
-  padding: '6px 10px',
-  font: '600 12px/1.4 ui-sans-serif, system-ui, sans-serif',
-  background: '#fafafa',
-  borderBottom: '1px solid #e4e4e7',
+  padding: "6px 10px",
+  font: "600 12px/1.4 ui-sans-serif, system-ui, sans-serif",
+  background: "#fafafa",
+  borderBottom: "1px solid #e4e4e7",
 };
 
 /** The two grids, and what to look for. */
 export function Compare(props: CompareProps) {
   const height = props.height ?? 260;
   return (
-    <div style={{ font: '13px/1.5 ui-sans-serif, system-ui, sans-serif' }}>
+    <div style={{ font: "13px/1.5 ui-sans-serif, system-ui, sans-serif" }}>
       {props.note ? (
-        <p style={{ margin: '0 0 12px', maxWidth: '78ch', color: '#3f3f46' }}>{props.note}</p>
+        <p style={{ margin: "0 0 12px", maxWidth: "78ch", color: "#3f3f46" }}>
+          {props.note}
+        </p>
       ) : null}
-      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+      <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
         <section style={panel}>
           <header style={label}>cellmoa</header>
           <Cellmoa {...props} height={height} />
         </section>
         <section style={panel}>
-          <header style={{ ...label, background: '#f4f4f5' }}>Handsontable 18</header>
+          <header style={{ ...label, background: "#f4f4f5" }}>
+            Handsontable 18
+          </header>
           <Reference {...props} height={height} />
         </section>
       </div>
@@ -166,17 +181,27 @@ export function docLink(path: string): string {
  * what they are. A reader counting stories against the table of contents
  * should find every page.
  */
-export function NotAFeature({ page, why, path }: { page: string; why: string; path?: string }) {
+export function NotAFeature({
+  page,
+  why,
+  path,
+}: {
+  page: string;
+  why: string;
+  path?: string;
+}) {
   return (
     <div
       style={{
-        font: '13px/1.6 ui-sans-serif, system-ui, sans-serif',
-        maxWidth: '72ch',
-        color: '#3f3f46',
+        font: "13px/1.6 ui-sans-serif, system-ui, sans-serif",
+        maxWidth: "72ch",
+        color: "#3f3f46",
       }}
     >
-      <h3 style={{ margin: '0 0 8px', font: '600 15px/1.4 inherit' }}>{page}</h3>
-      <p style={{ margin: '0 0 12px' }}>{why}</p>
+      <h3 style={{ margin: "0 0 8px", font: "600 15px/1.4 inherit" }}>
+        {page}
+      </h3>
+      <p style={{ margin: "0 0 12px" }}>{why}</p>
       {path ? (
         <p style={{ margin: 0 }}>
           <a href={docLink(path)} target="_blank" rel="noreferrer">
@@ -200,29 +225,33 @@ export function OnlyReference({
   data,
   note,
   height,
-}: Omit<CompareProps, 'afterMount'>) {
+}: Omit<CompareProps, "afterMount">) {
   return (
-    <div style={{ font: '13px/1.5 ui-sans-serif, system-ui, sans-serif' }}>
+    <div style={{ font: "13px/1.5 ui-sans-serif, system-ui, sans-serif" }}>
       {note ? (
-        <p style={{ margin: '0 0 12px', maxWidth: '78ch', color: '#3f3f46' }}>{note}</p>
+        <p style={{ margin: "0 0 12px", maxWidth: "78ch", color: "#3f3f46" }}>
+          {note}
+        </p>
       ) : null}
-      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-        <section style={{ ...panel, background: '#fafafa' }}>
+      <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+        <section style={{ ...panel, background: "#fafafa" }}>
           <header style={label}>cellmoa — not implemented</header>
           <div
             style={{
               height: height ?? 260,
-              display: 'grid',
-              placeItems: 'center',
-              color: '#71717a',
-              font: '12px/1.5 inherit',
+              display: "grid",
+              placeItems: "center",
+              color: "#71717a",
+              font: "12px/1.5 inherit",
             }}
           >
             nothing to show
           </div>
         </section>
         <section style={panel}>
-          <header style={{ ...label, background: '#f4f4f5' }}>Handsontable 18</header>
+          <header style={{ ...label, background: "#f4f4f5" }}>
+            Handsontable 18
+          </header>
           <Reference settings={settings} data={data} height={height ?? 260} />
         </section>
       </div>

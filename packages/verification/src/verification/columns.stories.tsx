@@ -57,7 +57,7 @@ export function AddingAndRemovingColumns() {
 
 export function ColumnFilter() {
   return (
-    <OnlyReference
+    <Compare
       height={320}
       settings={{
         height: 320,
@@ -74,15 +74,13 @@ export function ColumnFilter() {
         ["Racing Socks", "430.38", "2025-05-10", "true"],
         ["Aero Bottle", "1571.13", "2025-05-24", "true"],
       ]}
-      note={`Open the arrow on any header on the right: a condition list, a value list with
-        checkboxes, an operator choice and an action bar. None of it exists here. The
-        filters plugin is 220 lines and every one of them is API — filter(), addCondition(),
-        clearConditions() — with no DOM, so the five documented menu keys
-        (filter_by_condition, filter_by_value, filter_operators, filter_action_bar,
-        filter_by_condition2) match nothing in the source, and the menu entry named
-        ITEM.filter points at nothing. The labels for all of it are translated into 21
-        languages and no code reads them. This is the largest gap in the library, not a
-        divergence, and mounting an empty panel beside the reference is the honest picture.`}
+      note={`Open the arrow on a header on the right and a filter menu appears: a condition
+        list, a value list with checkboxes, an operator choice and an action bar. Open the
+        same header on the left and nothing opens — that is the finding, and it is worth
+        looking at rather than reading, which is why both grids are here. The filters plugin
+        is API only: filter(), addCondition() and clearConditions() all work and change what
+        the grid shows, but none of them has a menu attached, so the five documented menu
+        keys have nothing to be keys of. Everything else about the two panels should match.`}
     />
   );
 }
@@ -220,7 +218,7 @@ export function ColumnHiding() {
 
 export function ColumnMoving() {
   return (
-    <OnlyReference
+    <Compare
       height={320}
       settings={{
         height: 320,
@@ -231,13 +229,14 @@ export function ColumnMoving() {
         manualColumnMove: true,
       }}
       data={block(40, 20, coord)}
-      note={`Grab a column header on the right and drag it. There is nothing on our side to
-        show: manualColumnMove is accepted, moveColumns() and dragColumns() work and the
-        array form sets an initial order, but the plugin registers no pointer listeners at
-        all, so there is no drag handle and no drop indicator. The page also documents what
-        moving does to the data — nothing; the order lives in the index map and
-        getSourceData() still returns the original sequence — and that part is true of both
-        libraries. It is only the gesture that is missing here.`}
+      note={`Grab a column header and drag it. On the right it moves; on the left it does
+        not. manualColumnMove is accepted here, moveColumns() and dragColumns() both work,
+        and the array form sets an initial order — what is missing is the gesture, because
+        the plugin registers no pointer listeners, so there is no drag handle and no drop
+        indicator. Both grids are mounted so that can be tried rather than taken on trust.
+        The page also documents what moving does to the data — nothing; the order lives in
+        the index map and getSourceData() still returns the original sequence — and that
+        part is true of both.`}
     />
   );
 }
@@ -367,17 +366,29 @@ export function ColumnWidths() {
 
 export function ColumnComponent() {
   return (
-    <NotAFeature
-      page="Column component"
-      why={`This page documents the props of HotColumn, a React component in the
-        @handsontable/react-wrapper package — how to declare per-column settings as JSX
-        children of HotTable, and how to pass a React component as a renderer or an editor.
-        It describes a wrapper, not a grid feature: everything it configures is the columns
-        setting, which the Column headers story on this page already compares. This library
-        ships one package, @cellmoa/grid, with no framework wrapper, so there is no
-        component here whose props could be set beside those. The reference's own guide
-        marks the page react-only.`}
-      path="hot-column"
+    <Compare
+      note={`The page documents HotColumn, a React component in @handsontable/react-wrapper:
+        declare a column as JSX and pass a React component as its renderer or editor. There
+        is no wrapper here, so the component form is genuinely absent. What the component
+        configures is not: every prop it takes is a key of the columns option, and both
+        grids are given the same one below — a width, a read-only column, a type, a class.
+        The two panels should be identical. The gap is the authoring style, not the
+        capability, and the way to see that is to have the configured result in front of
+        you rather than a sentence about it.`}
+      settings={{
+        colHeaders: ["Locked", "Amount", "Done", "Wide"],
+        rowHeaders: true,
+        columns: [
+          { readOnly: true },
+          { type: "numeric" },
+          { type: "checkbox" },
+          { width: 180, className: "htRight" },
+        ],
+      }}
+      data={[
+        ["locked", "1200", "true", "right aligned"],
+        ["locked", "84", "false", "right aligned"],
+      ]}
     />
   );
 }

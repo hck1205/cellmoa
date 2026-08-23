@@ -5,9 +5,9 @@
  * the table of contents is not left wondering whether they were missed.
  */
 
-import { NotAFeature } from '../Compare.js';
+import { Compare, NotAFeature, block } from "../Compare.js";
 
-export default { title: 'Verification/AI tools' };
+export default { title: "Verification/AI tools" };
 
 export const AiDocsAssistant = () => (
   <NotAFeature
@@ -18,10 +18,32 @@ export const AiDocsAssistant = () => (
 );
 
 export const AiThemeBuilder = () => (
-  <NotAFeature
-    page="AI Theme Builder"
-    path="ai-theme-builder"
-    why="A generator on the reference's website that emits a theme's custom properties. cellmoa's themes are the same shape — a set of `--ht-*` values — but it consumes eleven of the roughly 334 the reference defines, so most of what such a generator emits would have nothing reading it."
+  <Compare
+    note={`The page is a generator on the reference's website: describe a look, get a block
+      of custom properties. The generator cannot be compared, but its output can, because
+      what it emits is a theme — and both grids here are given the same one, written by
+      hand in the same shape it would produce. That is the honest test of whether a
+      generated theme would carry over.
+
+      It half does. The variables below are among the eleven cellmoa reads; the reference
+      defines roughly 334, so a generated theme sets a great many that do nothing here —
+      and does nothing visible about it, since an unknown custom property is not an error.
+      Compare the two panels: the shared variables should agree, and everything the
+      generator would have styled beyond them will only have moved on the right.`}
+    settings={
+      {
+        colHeaders: true,
+        rowHeaders: true,
+        themeName: "ht-theme-main",
+        style: {
+          "--ht-background-color": "#0f172a",
+          "--ht-foreground-color": "#e2e8f0",
+          "--ht-accent-color": "#38bdf8",
+          "--ht-border-color": "#334155",
+        },
+      } as never
+    }
+    data={block(5, 4)}
   />
 );
 

@@ -6,9 +6,9 @@
  * which no grid can show you — and where cellmoa has nothing at all.
  */
 
-import { Compare, NotAFeature, block } from '../Compare.js';
+import { Compare, NotAFeature, block } from "../Compare.js";
 
-export default { title: 'Verification/Optimization' };
+export default { title: "Verification/Optimization" };
 
 export const BatchOperations = () => (
   <Compare

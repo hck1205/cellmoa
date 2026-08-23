@@ -5,9 +5,9 @@
  * repository build and CI are not, and pretending they were would pad the tree.
  */
 
-import { Compare, NotAFeature, block } from '../Compare.js';
+import { Compare, NotAFeature, block } from "../Compare.js";
 
-export default { title: 'Verification/Tools and building' };
+export default { title: "Verification/Tools and building" };
 
 export const CustomBuilds = () => (
   <NotAFeature
@@ -60,11 +60,14 @@ export const TypeScriptTypes = () => (
   <Compare
     note="Both packages ship declarations. cellmoa exports all 36 types the page names, mostly as aliases over its own — `HotInstance` is `Grid`, `CellCoords` is `Coords`. Two mean something different and say so: `getCell` returns a value here rather than a `<td>`, and `Events` checks a hook's name but not its arguments. Nothing to see on screen; the grids below are only proof the typed configuration compiled."
     settings={{
-      colHeaders: ['typed', 'columns'],
+      colHeaders: ["typed", "columns"],
       rowHeaders: true,
-      columns: [{ type: 'text' }, { type: 'numeric' }],
+      columns: [{ type: "text" }, { type: "numeric" }],
     }}
-    data={[['a', '1'], ['b', '2']]}
+    data={[
+      ["a", "1"],
+      ["b", "2"],
+    ]}
     height={180}
   />
 );

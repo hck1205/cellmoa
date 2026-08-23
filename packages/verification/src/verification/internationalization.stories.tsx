@@ -18,11 +18,11 @@
  * The pages are in the order the guide's own sidebar lists them.
  */
 
-import { registerLanguageDictionary, arAR, deDE } from 'handsontable/i18n';
+import { registerLanguageDictionary, arAR, deDE } from "handsontable/i18n";
 
-import { Compare, block } from '../Compare.js';
+import { Compare, block } from "../Compare.js";
 
-export default { title: 'Verification/Internationalization' };
+export default { title: "Verification/Internationalization" };
 
 registerLanguageDictionary(deDE);
 registerLanguageDictionary(arAR);
@@ -33,7 +33,7 @@ export const Language = () => (
     settings={{
       colHeaders: true,
       rowHeaders: true,
-      language: 'de-DE',
+      language: "de-DE",
       contextMenu: true,
       dropdownMenu: true,
       filters: true,
@@ -49,20 +49,20 @@ export const Locale = () => (
   <Compare
     note="Both grids are set to `locale: 'de-DE'` with the language left at the default, which is the split the page is about: the interface stays English while the numbers are written the German way. The `Value` column is numeric and asks for two fraction digits, so cellmoa should render `1.234,50` — a dot for thousands, a comma for the decimal. Handsontable will not, and that is a divergence rather than a defect on either side: its `numericFormat` is a numbro pattern with its own `culture` key, and `locale` in Handsontable governs filtering, searching and locale-aware comparison rather than display. cellmoa hands `numericFormat` straight to `Intl.NumberFormat` and takes the locale from `locale`, falling back to `language`, so one option covers both. What that means for a caller porting settings across: a `numericFormat` written for one library is not a `numericFormat` for the other, and the value will silently render unformatted rather than raise anything. Check the sort order too — the last column holds `ä`, `o` and `z`, which German and American collation order differently."
     settings={{
-      colHeaders: ['Item', 'Value', 'Label'],
+      colHeaders: ["Item", "Value", "Label"],
       rowHeaders: true,
-      locale: 'de-DE',
+      locale: "de-DE",
       columnSorting: true,
       columns: [
         {},
-        { type: 'numeric', numericFormat: { minimumFractionDigits: 2 } },
+        { type: "numeric", numericFormat: { minimumFractionDigits: 2 } },
         {},
       ],
     }}
     data={[
-      ['Widget', '1234.5', 'zebra'],
-      ['Gasket', '89.125', 'ähnlich'],
-      ['Flange', '1000000', 'orange'],
+      ["Widget", "1234.5", "zebra"],
+      ["Gasket", "89.125", "ähnlich"],
+      ["Flange", "1000000", "orange"],
     ]}
     height={240}
   />
@@ -74,8 +74,8 @@ export const LayoutDirection = () => (
     settings={{
       colHeaders: true,
       rowHeaders: true,
-      layoutDirection: 'rtl',
-      language: 'ar-AR',
+      layoutDirection: "rtl",
+      language: "ar-AR",
       contextMenu: true,
     }}
     data={block(7, 5)}

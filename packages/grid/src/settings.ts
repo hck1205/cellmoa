@@ -12,6 +12,7 @@
  */
 
 
+import type { CellRenderer } from './cellTypes/types.js';
 import type { HookHandler } from './hooks.js';
 import type { RegisteredTheme } from './themes/index.js';
 
@@ -264,7 +265,19 @@ export interface GridSettings {
   // --- behaviour --------------------------------------------------------
   readOnly?: boolean;
   editor?: string | false;
-  renderer?: string;
+  /**
+   * A registered renderer's name, or the function itself.
+   *
+   * The runtime has always accepted both — `getCellRenderer` and the draw path
+   * each check `typeof meta.renderer === 'function'` — but this said `string`,
+   * so the working half was unreachable from TypeScript without a cast.
+   *
+   * The signature is not the reference's. A renderer here is called with one
+   * context object, `({ row, col, td, cell, meta })`; Handsontable calls one
+   * with positional arguments, `(instance, td, row, col, prop, value,
+   * cellProperties)`. A renderer written for one does not run under the other.
+   */
+  renderer?: string | CellRenderer;
   validator?: unknown;
   type?: CellType;
   allowInvalid?: boolean;

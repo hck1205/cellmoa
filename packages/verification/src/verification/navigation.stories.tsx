@@ -10,10 +10,10 @@
  * back; that is the only way the difference shows.
  */
 
-import { Compare, OnlyReference, block } from '../Compare.js';
-import type { Search } from '@cellmoa/grid';
+import { Compare, block } from "../Compare.js";
+import type { Search } from "@cellmoa/grid";
 
-export default { title: 'Verification/Navigation' };
+export default { title: "Verification/Navigation" };
 
 export const KeyboardShortcuts = () => (
   <Compare
@@ -38,49 +38,49 @@ export const CustomShortcuts = () => (
     data={block(6, 4)}
     afterMount={{
       cellmoa: (grid) => {
-        const context = grid.getShortcutManager().getContext('grid');
+        const context = grid.getShortcutManager().getContext("grid");
         context?.addShortcut({
-          keys: [['control', 'b']],
-          group: 'verification',
+          keys: [["control", "b"]],
+          group: "verification",
           callback: () => {
             const cell = grid.getSelectedLast();
             if (cell) {
-              grid.setDataAtCell(cell[0], cell[1], 'bold', 'api');
+              grid.setDataAtCell(cell[0], cell[1], "bold", "api");
             }
           },
         });
         context?.addShortcut({
-          keys: [['control', 'k']],
-          group: 'verification',
+          keys: [["control", "k"]],
+          group: "verification",
           runOnlyIf: () => (grid.getSelectedLast()?.[1] ?? -1) === 0,
           callback: () => {
             const cell = grid.getSelectedLast();
             if (cell) {
-              grid.setDataAtCell(cell[0], cell[1], 'column A only', 'api');
+              grid.setDataAtCell(cell[0], cell[1], "column A only", "api");
             }
           },
         });
       },
       handsontable: (hot) => {
-        const context = hot.getShortcutManager().getContext('grid');
+        const context = hot.getShortcutManager().getContext("grid");
         context?.addShortcut({
-          keys: [['control', 'b']],
-          group: 'verification',
+          keys: [["control", "b"]],
+          group: "verification",
           callback: () => {
             const cell = hot.getSelectedLast();
             if (cell) {
-              hot.setDataAtCell(cell[0], cell[1], 'bold');
+              hot.setDataAtCell(cell[0], cell[1], "bold");
             }
           },
         });
         context?.addShortcut({
-          keys: [['control', 'k']],
-          group: 'verification',
+          keys: [["control", "k"]],
+          group: "verification",
           runOnlyIf: () => (hot.getSelectedLast()?.[1] ?? -1) === 0,
           callback: () => {
             const cell = hot.getSelectedLast();
             if (cell) {
-              hot.setDataAtCell(cell[0], cell[1], 'column A only');
+              hot.setDataAtCell(cell[0], cell[1], "column A only");
             }
           },
         });
@@ -90,8 +90,8 @@ export const CustomShortcuts = () => (
 );
 
 export const FocusScopes = () => (
-  <OnlyReference
-    note="Absent here, entirely. The page is about `getFocusScopeManager().registerScope(name, element, { type, shortcutsContextName, onActivate })` — a way for a widget outside the table, such as the pager below, to take focus and bring its own shortcut context with it, and for a `modal` scope to keep focus from leaving a dialog. cellmoa's `getFocusScopeManager()` exists and returns the grid itself, so a chained call does not throw; there is no `registerScope`, no scope registry, and no per-scope shortcut context. The grid keeps focus on one element and moves a selection inside it. Tab through the reference below and watch focus enter the pagination controls and leave again; there is nothing on our side that could be put next to it, which is why only one grid is mounted. `tabNavigation` does work here — switching it off hands Tab back to the browser so a grid inside a form does not trap it — but that is the whole of it."
+  <Compare
+    note="Tab through both grids and watch where focus goes. On the right it enters the pagination controls below the table and leaves again, because the page is about `getFocusScopeManager().registerScope(name, element, { type, shortcutsContextName, onActivate })` — a way for a widget outside the table to take focus and bring its own shortcut context with it, and for a `modal` scope to keep focus inside a dialog. On the left focus stays on the table: `getFocusScopeManager()` exists and returns the grid itself, so a chained call does not throw, but there is no `registerScope`, no scope registry and no per-scope shortcut context. Both are mounted so the difference can be tabbed through rather than read. `tabNavigation` does work here — switching it off hands Tab back to the browser so a grid inside a form does not trap it — but that is the whole of it."
     settings={{
       colHeaders: true,
       rowHeaders: true,
@@ -112,13 +112,17 @@ export const SearchingValues = () => (
       rowHeaders: true,
       search: true,
     }}
-    data={block(7, 5, (row, col) => `${String.fromCharCode(65 + col)}${row + 1}`)}
+    data={block(
+      7,
+      5,
+      (row, col) => `${String.fromCharCode(65 + col)}${row + 1}`,
+    )}
     afterMount={{
       cellmoa: (grid) => {
-        grid.getPlugin<Search>('search')?.query('3');
+        grid.getPlugin<Search>("search")?.query("3");
       },
       handsontable: (hot) => {
-        hot.getPlugin('search').query('3');
+        hot.getPlugin("search").query("3");
         hot.render();
       },
     }}
