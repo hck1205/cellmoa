@@ -95,3 +95,29 @@ Excel의 `SEARCH`는 `?`와 `*`를 와일드카드로 본다. 여기서는 문�
 `categories!` 매크로가 `pub mod`를 만들어내서 rustfmt이 함수 파일 11개로
 내려가지 못했다. 선언을 매크로 밖으로 꺼내고, 매크로가 지키던 보장은
 디렉터리를 읽는 테스트로 대신했다.
+
+## The engine reads `$1,200.00` as text, not as 1200
+
+Typing `$1,200.00` into Excel, Google Sheets or Handsontable stores the number
+1200 and a currency format. cellmoa stores the string. `ISNUMBER` says FALSE
+and `SUM` skips it.
+
+Found while wiring `convert | calc` together: `convert --where 'Amount>1000'`
+matches such a cell, because the filter strips `$` and `,` before comparing,
+but `calc "=SUM(A:A)"` over the same column ignores it. Two parts of the same
+tool disagreeing about whether a cell is a number is worse than either answer
+on its own.
+
+The filter is right for its job — it is reading a file someone exported, and
+`$1,200.00` is what banks write. The gap is in `parse_input`, which decides
+what a cell holds. Closing it means teaching that function currency symbols,
+thousands separators, parenthesised negatives and trailing `%`, and attaching
+the number format that Excel attaches, so a round trip through .xlsx does not
+lose the formatting. That is an engine change with a wide blast radius — every
+existing cell whose text happens to look like money would change meaning — so
+it is written down here rather than done as a side effect of a CLI page.
+
+Reproduce:
+
+    printf '$1,200.00\n-500\n' | cellmoa calc "=SUM(A:A)" -f csv   # -500
+    printf '1200\n-500\n'      | cellmoa calc "=SUM(A:A)" -f csv   # 700

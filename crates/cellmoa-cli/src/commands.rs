@@ -50,6 +50,7 @@ macro_rules! note {
 pub fn run(args: &Args) -> Outcome {
     match args.command.as_str() {
         "calc" => calc(args),
+        "convert" => convert(args),
         "eval" => eval(args),
         "get" => get(args),
         "export" => export(args),
@@ -188,7 +189,109 @@ fn calc(args: &Args) -> Outcome {
     ok()
 }
 
-/// Evaluates one formula against data piped in.
+/// Converts tabular data between formats, optionally renaming, filtering and
+/// projecting columns on the way through.
+///
+/// The three column operations run in a fixed order — rename, filter, select —
+/// so that `--where` and `--select` speak the names `--rename` produced. Any
+/// other order would make the flags mean different things depending on which
+/// were present.
+fn convert(args: &Args) -> Outcome {
+    args.reject_unknown(&[
+        "from",
+        "to",
+        "out",
+        "sheet",
+        "delimiter",
+        "headers",
+        "where",
+        "select",
+        "rename",
+        "quiet",
+    ])
+    .map_err(|e| Fault::Usage(e.to_string()))?;
+
+    let to =
+        args.value("to").ok_or_else(|| Fault::Usage("`--to <format>` is required".to_string()))?;
+    let to = crate::tabular::Format::parse(to)?;
+    let delimiter = match args.value("delimiter") {
+        Some(text) => Some(one_char(text)?),
+        None => None,
+    };
+    let headers = args.has("headers");
+
+    let mut table = read_input(args, headers, delimiter)?;
+
+    // Rename first: everything downstream refers to columns by name, and the
+    // names the caller has in mind are the ones they just assigned.
+    let renames = args.values("rename");
+    crate::reshape::rename(&mut table, &renames)?;
+
+    let filters: Vec<crate::reshape::Filter> = args
+        .values("where")
+        .iter()
+        .map(|clause| crate::reshape::Filter::parse(clause))
+        .collect::<Result<_, _>>()?;
+    let report = crate::reshape::filter(&mut table, &filters)?;
+
+    let selected = args.values("select");
+    crate::reshape::select(&mut table, &selected)?;
+
+    let text = crate::tabular::write(&table, to, delimiter);
+    match args.value("out") {
+        Some(path) => crate::exit::write(path, &text)?,
+        None => out_raw!("{text}"),
+    }
+
+    // A row count smaller than expected has a reason, and this is it. It goes
+    // to stderr after the data, so a pipeline sees only the data.
+    for (column, count) in &report.skipped {
+        let rows = if *count == 1 { "row" } else { "rows" };
+        note!(args, "note: {count} {rows} skipped ({column} not numeric)");
+    }
+    ok()
+}
+
+/// Reads the input named on the command line, or stdin when none was.
+fn read_input(
+    args: &Args,
+    headers: bool,
+    delimiter: Option<char>,
+) -> Result<crate::tabular::Table, Fault> {
+    use crate::tabular::{Format, Reading};
+    let path = args.positional.first().map(String::as_str).filter(|p| *p != "-");
+
+    // From a file the extension usually says what the format is; from a pipe
+    // there is nothing to go on, so `--from` is required rather than guessed.
+    let format = match args.value("from") {
+        Some(named) => Format::parse(named)?,
+        None => match path {
+            Some(path) => Format::from_extension(path).ok_or_else(|| {
+                Fault::Usage(format!(
+                    "cannot tell the format of {path:?} from its name; pass `--from`"
+                ))
+            })?,
+            None => {
+                return Err(Fault::Usage("reading from stdin needs `--from <format>`".to_string()))
+            }
+        },
+    };
+
+    let text = match path {
+        Some(path) => crate::exit::read(path)?,
+        None => {
+            use std::io::Read;
+            let mut text = String::new();
+            std::io::stdin()
+                .read_to_string(&mut text)
+                .map_err(|e| Fault::Io(format!("stdin: {e}")))?;
+            text
+        }
+    };
+    crate::tabular::read(&text, Reading { format, headers, delimiter })
+}
+
+/// Evaluates one formula against data piped in./// Evaluates one formula against data piped in.
 ///
 /// The data is loaded into a throwaway sheet and the formula is evaluated
 /// against it, so `=SUM(A:A)` means what it means in a spreadsheet. Nothing is

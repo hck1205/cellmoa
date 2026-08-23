@@ -17,6 +17,7 @@
 mod args;
 mod commands;
 mod exit;
+mod reshape;
 mod tabular;
 
 use args::Args;
@@ -36,6 +37,10 @@ const VALUE_FLAGS: &[&str] = &[
     "into",
     "delimiter",
     "spill",
+    "to",
+    "where",
+    "select",
+    "rename",
 ];
 
 /// Short options, per command, because the same letter means different things
@@ -58,6 +63,12 @@ usage: cellmoa <command> [arguments]
   calc <formula> --from <csv|tsv|json|lines> [--headers] [--into <cell>]
        [--delimiter <char>] [--spill <csv|json>]
         Evaluate one formula against data piped in on stdin.
+
+  convert [file] --to <csv|tsv|json|lines> [--from <format>] [--out <file>]
+          [--headers] [--delimiter <char>] [--rename OLD:NEW,...]
+          [--where col=value ...] [--select col,... ]
+        Convert tabular data between formats. Reads stdin when no file is
+        named. --rename, then --where, then --select.
 
   calc <file> [--out <file>] [--seed <n>] [--now <serial>]
         Recalculate a workbook and report what it holds.

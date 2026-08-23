@@ -12,7 +12,10 @@ use std::fmt;
 pub struct Args {
     pub command: String,
     pub positional: Vec<String>,
-    flags: BTreeMap<String, Option<String>>,
+    /// Every occurrence of every flag, in the order it was written. Repeats
+    /// matter: `--where a=1 --where b=2` means both, and keeping only the
+    /// last would drop half a filter without saying so.
+    flags: BTreeMap<String, Vec<Option<String>>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -79,7 +82,7 @@ impl Args {
                             .ok_or_else(|| ArgError::UnknownFlag(format!("-{short}")))?;
                         match tail {
                             Some(value) => {
-                                flags.insert(long.to_string(), Some(value));
+                                push(&mut flags, long, Some(value));
                                 continue;
                             }
                             None => long.to_string(),
@@ -90,14 +93,14 @@ impl Args {
             let name = name.as_str();
             // `--flag=value` and `--flag value` are both accepted.
             if let Some((name, value)) = name.split_once('=') {
-                flags.insert(name.to_string(), Some(value.to_string()));
+                push(&mut flags, name, Some(value.to_string()));
                 continue;
             }
             if value_flags.contains(&name) {
                 let value = arguments.next().ok_or_else(|| ArgError::MissingValue(name.into()))?;
-                flags.insert(name.to_string(), Some(value));
+                push(&mut flags, name, Some(value));
             } else {
-                flags.insert(name.to_string(), None);
+                push(&mut flags, name, None);
             }
         }
         Ok(Args { command, positional, flags })
@@ -107,8 +110,19 @@ impl Args {
         self.flags.contains_key(flag)
     }
 
+    /// The last value given for a flag, for options where repeating is a
+    /// correction rather than an addition.
     pub fn value(&self, flag: &str) -> Option<&str> {
-        self.flags.get(flag).and_then(|v| v.as_deref())
+        self.flags.get(flag)?.last()?.as_deref()
+    }
+
+    /// Every value given for a flag, in the order written, for options where
+    /// repeating means "and also".
+    pub fn values(&self, flag: &str) -> Vec<&str> {
+        self.flags
+            .get(flag)
+            .map(|values| values.iter().filter_map(Option::as_deref).collect())
+            .unwrap_or_default()
     }
 
     /// Rejects any flag that is not in the given list, so a typo is reported
@@ -119,6 +133,10 @@ impl Args {
             None => Ok(()),
         }
     }
+}
+
+fn push(flags: &mut BTreeMap<String, Vec<Option<String>>>, name: &str, value: Option<String>) {
+    flags.entry(name.to_string()).or_default().push(value);
 }
 
 #[cfg(test)]
@@ -223,5 +241,45 @@ mod tests {
     #[test]
     fn no_arguments_at_all() {
         assert_eq!(Args::parse_with(Vec::new(), &[], &[]), Err(ArgError::NoCommand));
+    }
+}
+
+#[cfg(test)]
+mod repeat_tests {
+    use super::*;
+
+    fn parse(line: &str) -> Args {
+        Args::parse_with(
+            line.split_whitespace().map(String::from),
+            &["where", "select", "out"],
+            &[],
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn a_repeated_flag_keeps_every_value_in_order() {
+        let args = parse("convert --where a=1 --where b=2");
+        assert_eq!(args.values("where"), vec!["a=1", "b=2"]);
+    }
+
+    #[test]
+    fn a_repeated_flag_still_answers_value_with_the_last_one() {
+        // Some options are corrections rather than additions: writing `--out`
+        // twice means the second one.
+        let args = parse("convert --out first.csv --out second.csv");
+        assert_eq!(args.value("out"), Some("second.csv"));
+    }
+
+    #[test]
+    fn a_flag_that_was_never_given_has_no_values() {
+        assert!(parse("convert").values("where").is_empty());
+    }
+
+    #[test]
+    fn a_switch_repeated_is_still_just_present() {
+        let args = parse("convert --headers --headers");
+        assert!(args.has("headers"));
+        assert!(args.values("headers").is_empty(), "a switch carries no value");
     }
 }

@@ -217,6 +217,82 @@ fn scalar_text(value: &serde_json::Value) -> String {
     }
 }
 
+/// Renders a table in the given format.
+///
+/// A header row that was peeled off on the way in is put back on the way out,
+/// so `--headers` is about how the first row is *understood*, not about
+/// discarding it. JSON is the exception: there the headers become the object
+/// keys rather than a row of their own.
+pub fn write(table: &Table, format: Format, delimiter: Option<char>) -> String {
+    match format {
+        Format::Csv | Format::Tsv => {
+            let delimiter = delimiter.unwrap_or(format.default_delimiter());
+            let mut out = String::new();
+            for row in table.headers.iter().chain(table.rows.iter()) {
+                let fields: Vec<String> =
+                    row.iter().map(|field| quoted(field, delimiter)).collect();
+                out.push_str(&fields.join(&delimiter.to_string()));
+                out.push('\n');
+            }
+            out
+        }
+        // Inherently one column: the first is the one that survives.
+        Format::Lines => {
+            let mut out = String::new();
+            for row in table.headers.iter().chain(table.rows.iter()) {
+                out.push_str(row.first().map(String::as_str).unwrap_or(""));
+                out.push('\n');
+            }
+            out
+        }
+        Format::Json => write_json(table),
+    }
+}
+
+/// Writes JSON with the columns in the order they appear.
+///
+/// Built by hand rather than through `serde_json::Value`, whose object is a
+/// sorted map: an `--select 'Status,Amount'` came back out as `Amount` then
+/// `Status`, which contradicts the flag that asked for an order. Only the
+/// scalars go through serde, which is what gets the escaping right.
+fn write_json(table: &Table) -> String {
+    let quote = |text: &str| serde_json::to_string(text).unwrap_or_else(|_| "\"\"".to_string());
+    let mut out = String::from("[\n");
+    for (index, row) in table.rows.iter().enumerate() {
+        if index > 0 {
+            out.push_str(",\n");
+        }
+        match &table.headers {
+            Some(headers) => {
+                out.push_str("  {\n");
+                for (column, name) in headers.iter().enumerate() {
+                    if column > 0 {
+                        out.push_str(",\n");
+                    }
+                    let cell = row.get(column).map(String::as_str).unwrap_or("");
+                    out.push_str(&format!("    {}: {}", quote(name), quote(cell)));
+                }
+                out.push_str("\n  }");
+            }
+            None => {
+                let cells: Vec<String> = row.iter().map(|c| quote(c)).collect();
+                out.push_str(&format!("  [{}]", cells.join(", ")));
+            }
+        }
+    }
+    out.push_str("\n]\n");
+    out
+}
+
+/// Quotes a field when leaving it bare would change the shape of the output.
+fn quoted(field: &str, delimiter: char) -> String {
+    if field.contains([delimiter, '"', '\n', '\r']) {
+        format!("\"{}\"", field.replace('"', "\"\""))
+    } else {
+        field.to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -333,5 +409,107 @@ mod tests {
         assert_eq!(Format::from_extension("a/b.TSV"), Some(Format::Tsv));
         assert_eq!(Format::from_extension("data"), None);
         assert_eq!(Format::from_extension("a/b.parquet"), None);
+    }
+}
+
+#[cfg(test)]
+mod writing {
+    use super::*;
+
+    fn table(headers: Option<&[&str]>, rows: &[&[&str]]) -> Table {
+        Table {
+            headers: headers.map(|h| h.iter().map(|s| s.to_string()).collect()),
+            rows: rows.iter().map(|r| r.iter().map(|c| c.to_string()).collect()).collect(),
+        }
+    }
+
+    #[test]
+    fn csv_puts_the_header_row_back() {
+        let t = table(Some(&["a", "b"]), &[&["1", "2"]]);
+        assert_eq!(write(&t, Format::Csv, None), "a,b\n1,2\n");
+    }
+
+    #[test]
+    fn csv_quotes_a_field_that_would_change_the_shape() {
+        let t = table(None, &[&["a,b", "say \"hi\"", "two\nlines"]]);
+        assert_eq!(write(&t, Format::Csv, None), "\"a,b\",\"say \"\"hi\"\"\",\"two\nlines\"\n");
+    }
+
+    #[test]
+    fn a_comma_is_not_special_in_a_tsv() {
+        let t = table(None, &[&["a,b"]]);
+        assert_eq!(write(&t, Format::Tsv, None), "a,b\n");
+    }
+
+    #[test]
+    fn an_explicit_delimiter_is_what_gets_quoted_against() {
+        let t = table(None, &[&["a;b"]]);
+        assert_eq!(write(&t, Format::Csv, Some(';')), "\"a;b\"\n");
+    }
+
+    #[test]
+    fn json_with_headers_is_objects_keyed_by_column_name() {
+        let t = table(Some(&["a", "b"]), &[&["1", "x"]]);
+        let text = write(&t, Format::Json, None);
+        let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(parsed, serde_json::json!([{"a": "1", "b": "x"}]));
+    }
+
+    #[test]
+    fn json_keys_come_out_in_column_order_not_alphabetical_order() {
+        // `--select 'Status,Amount'` asks for an order. Going through a sorted
+        // map returned Amount first, which is the opposite of what was asked.
+        let t = table(Some(&["Status", "Amount"]), &[&["Pending", "12"]]);
+        let text = write(&t, Format::Json, None);
+        let status = text.find("\"Status\"").expect("Status present");
+        let amount = text.find("\"Amount\"").expect("Amount present");
+        assert!(status < amount, "{text}");
+    }
+
+    #[test]
+    fn json_escapes_what_needs_escaping() {
+        let t = table(Some(&["a\"b"]), &[&["line\nbreak \\ \"quoted\""]]);
+        let parsed: serde_json::Value =
+            serde_json::from_str(&write(&t, Format::Json, None)).unwrap();
+        assert_eq!(parsed[0]["a\"b"], serde_json::json!("line\nbreak \\ \"quoted\""));
+    }
+
+    #[test]
+    fn an_empty_table_is_an_empty_json_array() {
+        let t = table(Some(&["a"]), &[]);
+        let parsed: serde_json::Value =
+            serde_json::from_str(&write(&t, Format::Json, None)).unwrap();
+        assert_eq!(parsed, serde_json::json!([]));
+    }
+
+    #[test]
+    fn json_without_headers_is_arrays() {
+        let t = table(None, &[&["1", "x"]]);
+        let parsed: serde_json::Value =
+            serde_json::from_str(&write(&t, Format::Json, None)).unwrap();
+        assert_eq!(parsed, serde_json::json!([["1", "x"]]));
+    }
+
+    #[test]
+    fn a_short_row_gets_empty_cells_rather_than_missing_keys() {
+        let t = table(Some(&["a", "b"]), &[&["1"]]);
+        let parsed: serde_json::Value =
+            serde_json::from_str(&write(&t, Format::Json, None)).unwrap();
+        assert_eq!(parsed, serde_json::json!([{"a": "1", "b": ""}]));
+    }
+
+    #[test]
+    fn lines_writes_the_first_column() {
+        let t = table(None, &[&["a", "ignored"], &["b", "ignored"]]);
+        assert_eq!(write(&t, Format::Lines, None), "a\nb\n");
+    }
+
+    #[test]
+    fn a_round_trip_through_csv_preserves_the_awkward_cases() {
+        let original = table(Some(&["a", "b"]), &[&["x,y", "say \"hi\""], &["", "plain"]]);
+        let text = write(&original, Format::Csv, None);
+        let back =
+            read(&text, Reading { format: Format::Csv, headers: true, delimiter: None }).unwrap();
+        assert_eq!(back, original);
     }
 }

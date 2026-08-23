@@ -548,3 +548,291 @@ fn calc_rejects_an_into_that_is_not_a_cell() {
     let output = piped("1\n", &["calc", "=A1", "--from", "csv", "--into", "sideways"]);
     assert_eq!(code(&output), 2, "{}", stderr(&output));
 }
+
+// `convert` — docs/visigrid/03-convert.md.
+
+/// The worked example from the filtering section of that page.
+const TRANSACTIONS: &str = "Status,Amount,Description, Vendor \n\
+    Pending,$1200.00,Google Workspace annual,Google\n\
+    Settled,-45.50,Coffee,Blue Bottle\n\
+    Pending,-500,Refund issued,Acme\n\
+    Pending,n/a,Unknown amount,Ghost\n";
+
+fn transactions(scratch: &Scratch) -> PathBuf {
+    let path = scratch.join("tx.csv");
+    std::fs::write(&path, TRANSACTIONS).unwrap();
+    path
+}
+
+#[test]
+fn convert_turns_csv_into_json_keyed_by_header() {
+    let scratch = Scratch::new("convjson");
+    let file = transactions(&scratch);
+    let output = cellmoa(&["convert", file.to_str().unwrap(), "-t", "json", "--headers"]);
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    let parsed: serde_json::Value = serde_json::from_str(&stdout(&output)).unwrap();
+    assert_eq!(parsed[0]["Status"], "Pending");
+    assert_eq!(parsed.as_array().unwrap().len(), 4);
+}
+
+#[test]
+fn convert_reads_stdin_when_told_the_format() {
+    let output = piped(TRANSACTIONS, &["convert", "-f", "csv", "-t", "json", "--headers"]);
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    let parsed: serde_json::Value = serde_json::from_str(&stdout(&output)).unwrap();
+    assert_eq!(parsed.as_array().unwrap().len(), 4);
+}
+
+#[test]
+fn convert_reading_stdin_without_a_format_says_so_rather_than_guessing() {
+    let output = piped(TRANSACTIONS, &["convert", "-t", "json"]);
+    assert_eq!(code(&output), 2, "{}", stderr(&output));
+    assert!(stderr(&output).contains("--from"), "{}", stderr(&output));
+}
+
+#[test]
+fn convert_filters_rows_by_column_value() {
+    let scratch = Scratch::new("convwhere");
+    let file = transactions(&scratch);
+    let output = cellmoa(&[
+        "convert",
+        file.to_str().unwrap(),
+        "-t",
+        "csv",
+        "--headers",
+        "--where",
+        "Status=Pending",
+    ]);
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    assert_eq!(stdout(&output).lines().count(), 4, "header plus three Pending rows");
+}
+
+#[test]
+fn several_where_flags_are_an_and() {
+    let scratch = Scratch::new("convand");
+    let file = transactions(&scratch);
+    let output = cellmoa(&[
+        "convert",
+        file.to_str().unwrap(),
+        "-t",
+        "csv",
+        "--headers",
+        "--where",
+        "Status=Pending",
+        "--where",
+        "Amount<0",
+    ]);
+    let text = stdout(&output);
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(lines.len(), 2, "{}", stdout(&output));
+    assert!(lines[1].contains("Refund issued"));
+}
+
+#[test]
+fn a_row_a_numeric_filter_could_not_read_is_counted_on_stderr_after_the_data() {
+    let scratch = Scratch::new("convskip");
+    let file = transactions(&scratch);
+    let output = cellmoa(&[
+        "convert",
+        file.to_str().unwrap(),
+        "-t",
+        "csv",
+        "--headers",
+        "--where",
+        "Amount<0",
+    ]);
+    assert!(stderr(&output).contains("1 row skipped (Amount not numeric)"), "{}", stderr(&output));
+    assert!(!stdout(&output).contains("skipped"), "the note is not data");
+}
+
+#[test]
+fn quiet_suppresses_the_skipped_row_note_but_not_the_data() {
+    let scratch = Scratch::new("convquiet");
+    let file = transactions(&scratch);
+    let loud = cellmoa(&[
+        "convert",
+        file.to_str().unwrap(),
+        "-t",
+        "csv",
+        "--headers",
+        "--where",
+        "Amount<0",
+    ]);
+    let quiet = cellmoa(&[
+        "convert",
+        file.to_str().unwrap(),
+        "-t",
+        "csv",
+        "--headers",
+        "--where",
+        "Amount<0",
+        "-q",
+    ]);
+    assert_eq!(stdout(&quiet), stdout(&loud));
+    assert_eq!(stderr(&quiet), "");
+}
+
+#[test]
+fn money_punctuation_does_not_defeat_a_numeric_filter() {
+    let scratch = Scratch::new("convmoney");
+    let file = transactions(&scratch);
+    let output = cellmoa(&[
+        "convert",
+        file.to_str().unwrap(),
+        "-t",
+        "csv",
+        "--headers",
+        "--where",
+        "Amount>1000",
+    ]);
+    assert!(
+        stdout(&output).contains("$1,200.00") || stdout(&output).contains("$1200.00"),
+        "{}",
+        stdout(&output)
+    );
+    assert_eq!(stdout(&output).lines().count(), 2);
+}
+
+#[test]
+fn contains_matches_without_regard_to_case() {
+    let scratch = Scratch::new("convcontains");
+    let file = transactions(&scratch);
+    let output = cellmoa(&[
+        "convert",
+        file.to_str().unwrap(),
+        "-t",
+        "csv",
+        "--headers",
+        "--where",
+        "Description~\"google workspace\"",
+    ]);
+    assert_eq!(stdout(&output).lines().count(), 2, "{}", stdout(&output));
+}
+
+#[test]
+fn select_picks_and_reorders_columns() {
+    let scratch = Scratch::new("convselect");
+    let file = transactions(&scratch);
+    let output = cellmoa(&[
+        "convert",
+        file.to_str().unwrap(),
+        "-t",
+        "csv",
+        "--headers",
+        "--select",
+        "Amount,Status",
+    ]);
+    assert_eq!(stdout(&output).lines().next(), Some("Amount,Status"), "{}", stdout(&output));
+}
+
+#[test]
+fn rename_applies_before_where_and_select() {
+    // The page fixes this order, and it is the only one in which the flags
+    // read the way they are written: rename a column, then use the new name.
+    let scratch = Scratch::new("convrename");
+    let file = transactions(&scratch);
+    let output = cellmoa(&[
+        "convert",
+        file.to_str().unwrap(),
+        "-t",
+        "csv",
+        "--headers",
+        "--rename",
+        "Status:State,Amount:Total",
+        "--where",
+        "State=Pending",
+        "--select",
+        "Total,State",
+    ]);
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    let text = stdout(&output);
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(lines[0], "Total,State");
+    assert_eq!(lines.len(), 4, "{}", stdout(&output));
+}
+
+#[test]
+fn an_unknown_column_exits_two_and_lists_the_ones_that_exist() {
+    let scratch = Scratch::new("convunknown");
+    let file = transactions(&scratch);
+    let output =
+        cellmoa(&["convert", file.to_str().unwrap(), "-t", "csv", "--headers", "--select", "Nope"]);
+    assert_eq!(code(&output), 2, "{}", stderr(&output));
+    assert!(stderr(&output).contains("Status"), "{}", stderr(&output));
+}
+
+#[test]
+fn where_and_select_need_headers_to_resolve_a_name_against() {
+    let scratch = Scratch::new("convnohead");
+    let file = transactions(&scratch);
+    let output =
+        cellmoa(&["convert", file.to_str().unwrap(), "-t", "csv", "--where", "Status=Pending"]);
+    assert_eq!(code(&output), 2, "{}", stderr(&output));
+    assert!(stderr(&output).contains("--headers"), "{}", stderr(&output));
+}
+
+#[test]
+fn convert_writes_to_a_file_when_asked() {
+    let scratch = Scratch::new("convout");
+    let file = transactions(&scratch);
+    let out = scratch.join("out.json");
+    let output = cellmoa(&[
+        "convert",
+        file.to_str().unwrap(),
+        "-t",
+        "json",
+        "--headers",
+        "-o",
+        out.to_str().unwrap(),
+    ]);
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    assert_eq!(stdout(&output), "", "the data went to the file, not the terminal");
+    let written = std::fs::read_to_string(&out).unwrap();
+    assert!(written.contains("Google Workspace"), "{written}");
+}
+
+#[test]
+fn convert_infers_the_input_format_from_the_extension() {
+    let scratch = Scratch::new("convinfer");
+    let file = transactions(&scratch);
+    let output = cellmoa(&["convert", file.to_str().unwrap(), "-t", "lines", "--headers"]);
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    assert_eq!(stdout(&output).lines().next(), Some("Status"));
+}
+
+#[test]
+fn convert_refuses_a_format_it_cannot_write() {
+    let scratch = Scratch::new("convbad");
+    let file = transactions(&scratch);
+    let output = cellmoa(&["convert", file.to_str().unwrap(), "-t", "parquet"]);
+    assert_eq!(code(&output), 5, "{}", stderr(&output));
+}
+
+#[test]
+fn convert_output_can_be_piped_into_calc() {
+    // The page ends its filtering section with exactly this pipeline, and it
+    // only works if the filtered CSV on stdout carries no summary line.
+    let scratch = Scratch::new("convpipe");
+    let file = transactions(&scratch);
+    let filtered = cellmoa(&[
+        "convert",
+        file.to_str().unwrap(),
+        "-t",
+        "csv",
+        "--headers",
+        "--where",
+        "Status=Pending",
+        "--select",
+        "Amount",
+        "-q",
+    ]);
+    assert_eq!(code(&filtered), 0, "{}", stderr(&filtered));
+    let summed = piped(&stdout(&filtered), &["calc", "=SUM(A:A)", "-f", "csv", "--headers"]);
+    assert_eq!(code(&summed), 0, "{}", stderr(&summed));
+    // -500 is the only cell the engine reads as a number. "n/a" is text, and
+    // so — for now — is "$1,200.00": `--where` parses money punctuation, but
+    // loading a cell does not. See docs/known-defects.md. The pipeline itself
+    // is what this test is for, and it works: the filtered CSV arrived with
+    // no summary line mixed into it.
+    assert_eq!(stdout(&summed).trim(), "-500");
+}
