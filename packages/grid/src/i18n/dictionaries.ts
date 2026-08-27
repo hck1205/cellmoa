@@ -373,7 +373,7 @@ export const DICTIONARY_DE_CH: Dictionary = {
   "Pagination:nextPage": "Zur nächsten Seite wechseln",
   "Pagination:lastPage": "Zur letzten Seite wechseln",
   "Loading:title": "Lädt...",
-  "Notification:buttons.close": "Schließen",
+  "Notification:buttons.close": "Schliessen",
   "EmptyDataState:title": "Keine Daten verfügbar",
   "EmptyDataState:description": "Es gibt noch nichts anzuzeigen.",
   "EmptyDataState:title.filters": "Keine Ergebnisse gefunden",
