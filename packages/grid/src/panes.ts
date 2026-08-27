@@ -21,7 +21,7 @@
 
 import { columnLetters } from './dataSource.js';
 import type { Metrics, ScrollState } from './geometry.js';
-import type { ViewModel } from './viewModel.js';
+import type { ColHeaderCell, ViewModel } from './viewModel.js';
 
 export const CLASS = {
   root: 'cm-grid',
@@ -140,8 +140,10 @@ export function drawPane(
   // The row-header column counts as a column for ARIA, so the data columns are
   // numbered after it. Zero when there are no row headers.
   const rowHeaderColumns = headerWidth > 0 ? 1 : 0;
-  // Header rows are rows: a data row's index counts past them.
-  const colHeaderRows = headerHeight > 0 ? model.colHeaderRows(area.firstCol, area.lastCol).length : 0;
+  // The header rows, asked for once. A data row's ARIA index counts past them,
+  // and the header itself is drawn from them — two callers for one answer, and
+  // asking twice put a model lookup in the draw path for nothing.
+  const levels = headerHeight > 0 ? model.colHeaderRows(area.firstCol, area.lastCol) : [];
 
   pane.body.replaceChildren();
   pane.table.style.position = 'absolute';
@@ -149,7 +151,7 @@ export function drawPane(
   pane.table.style.top = '0';
 
   if (area.colHeader && headerHeight > 0) {
-    drawColHeader(pane, area, metrics, model, document, aria);
+    drawColHeader(pane, area, metrics, model, document, aria, levels, rowHeaderColumns);
   }
 
   for (let row = area.firstRow; row <= area.lastRow; row += 1) {
@@ -168,7 +170,7 @@ export function drawPane(
       // drawn — a screen reader announcing "row 1 of 12" while the user is at
       // row 400 would be worse than saying nothing — and counted past the
       // header rows, which are rows too.
-      tr.setAttribute('aria-rowindex', String(row + 1 + colHeaderRows));
+      tr.setAttribute('aria-rowindex', String(row + 1 + levels.length));
     }
     // Each pane draws its own slice, so the row is placed by its own offset
     // within that slice rather than by its index in the sheet.
@@ -224,10 +226,10 @@ function drawColHeader(
   model: ViewModel,
   document: Document,
   aria: boolean,
+  levels: ColHeaderCell[][],
+  rowHeaderColumns: number,
 ): void {
   const { cols, headerWidth, headerHeight } = metrics;
-  const rowHeaderColumns = headerWidth > 0 ? 1 : 0;
-  const levels = model.colHeaderRows(area.firstCol, area.lastCol);
   levels.forEach((cells, level) => {
     const tr = createElement(document, 'tr', CLASS.header);
     tr.style.height = `${

@@ -15,80 +15,68 @@
  *   npm run build && node divergence.mjs [story-id...]
  */
 
-import { chromium } from "playwright";
-import { readFileSync } from "node:fs";
+import { storyIds, visit, withPage } from "./harness.mjs";
 
-const wanted = process.argv.slice(2);
-const meta = JSON.parse(
-  readFileSync(new URL("./build/meta.json", import.meta.url), "utf8"),
-);
-const stories = wanted.length ? wanted : Object.keys(meta.stories).sort();
-
-const browser = await chromium.launch({
-  executablePath: "/opt/pw-browsers/chromium-1194/chrome-linux/chrome",
-});
-const page = await browser.newPage();
-
+const stories = storyIds();
 const differing = [];
 const same = [];
 const unreadable = [];
 
-for (const story of stories) {
-  await page.goto(`http://localhost:61004/?story=${story}&mode=preview`, {
-    waitUntil: "networkidle",
-  });
-  await page.waitForTimeout(700);
+await withPage(async (page) => {
+  for (const story of stories) {
+    await visit(page, story);
 
-  const panels = await page.evaluate(() =>
-    [...document.querySelectorAll("section")].map((panel) =>
-      [...panel.querySelectorAll("td")].map((td) =>
-        (td.textContent ?? "").trim(),
+    const panels = await page.evaluate(() =>
+      [...document.querySelectorAll("section")].map((panel) =>
+        [...panel.querySelectorAll("td")].map((td) =>
+          (td.textContent ?? "").trim(),
+        ),
       ),
-    ),
-  );
+    );
 
-  if (panels.length !== 2) {
-    unreadable.push(story);
-    continue;
-  }
-  const [ours, theirs] = panels;
-  // Compared as a bag of values rather than in order. This library draws the
-  // grid as several pane tables — frozen rows and columns are their own — so a
-  // flat list of `td`s is not in row-major order on our side and is on theirs.
-  // Comparing sequences reported 153 of 214 stories as differing when almost
-  // all of them held the same values in a different DOM order.
-  //
-  // The weaker claim is the honest one: these are the values each panel shows,
-  // and a value present on one side and not the other is worth looking at. It
-  // will not catch a value in the wrong *place*, and saying so is better than
-  // a number that means nothing.
-  const tally = (cells) => {
-    const counts = new Map();
-    for (const text of cells) {
-      if (text === "") continue;
-      counts.set(text, (counts.get(text) ?? 0) + 1);
+    if (panels.length !== 2) {
+      unreadable.push(story);
+      continue;
     }
-    return counts;
-  };
-  const mine = tally(ours);
-  const theirsCounts = tally(theirs);
-  const mismatches = [];
-  for (const [text, count] of mine) {
-    const other = theirsCounts.get(text) ?? 0;
-    if (other < count) mismatches.push({ text, ours: count, theirs: other });
+    const [ours, theirs] = panels;
+    // Compared as a bag of values rather than in order. This library draws the
+    // grid as several pane tables — frozen rows and columns are their own — so a
+    // flat list of `td`s is not in row-major order on our side and is on theirs.
+    // Comparing sequences reported 153 of 214 stories as differing when almost
+    // all of them held the same values in a different DOM order.
+    //
+    // The weaker claim is the honest one: these are the values each panel shows,
+    // and a value present on one side and not the other is worth looking at. It
+    // will not catch a value in the wrong *place*, and saying so is better than
+    // a number that means nothing.
+    const tally = (cells) => {
+      const counts = new Map();
+      for (const text of cells) {
+        if (text === "") continue;
+        counts.set(text, (counts.get(text) ?? 0) + 1);
+      }
+      return counts;
+    };
+    const mine = tally(ours);
+    const theirsCounts = tally(theirs);
+    const mismatches = [];
+    for (const [text, count] of mine) {
+      const other = theirsCounts.get(text) ?? 0;
+      if (other < count) mismatches.push({ text, ours: count, theirs: other });
+    }
+    for (const [text, count] of theirsCounts) {
+      if (!mine.has(text)) mismatches.push({ text, ours: 0, theirs: count });
+    }
+    const shared = Math.min(ours.length, theirs.length);
+    if (shared === 0) {
+      unreadable.push(story);
+    } else if (mismatches.length === 0) {
+      same.push(story);
+    } else {
+      differing.push({ story, shared, mismatches });
+    }
   }
-  for (const [text, count] of theirsCounts) {
-    if (!mine.has(text)) mismatches.push({ text, ours: 0, theirs: count });
-  }
-  const shared = Math.min(ours.length, theirs.length);
-  if (shared === 0) {
-    unreadable.push(story);
-  } else if (mismatches.length === 0) {
-    same.push(story);
-  } else {
-    differing.push({ story, shared, mismatches });
-  }
-}
+});
 
 for (const { story, shared, mismatches } of differing) {
   console.log(
@@ -107,4 +95,3 @@ console.log(
   `\n${same.length} stories agree cell for cell, ${differing.length} differ, ` +
     `${unreadable.length} have nothing to compare`,
 );
-await browser.close();
