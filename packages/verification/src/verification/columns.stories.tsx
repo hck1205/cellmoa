@@ -230,7 +230,7 @@ export function ColumnMoving() {
       }}
       data={block(40, 20, coord)}
       note={`Grab a column header and drag it. On the right it moves; on the left it does
-        not. manualColumnMove is accepted here, moveColumns() and dragColumns() both work,
+        not. manualColumnMove is accepted here and the plugin's moveIndexes() works,
         and the array form sets an initial order — what is missing is the gesture, because
         the plugin registers no pointer listeners, so there is no drag handle and no drop
         indicator. Both grids are mounted so that can be tried rather than taken on trust.

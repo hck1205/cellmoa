@@ -173,7 +173,7 @@ export class Notification extends BasePlugin {
       return;
     }
     this.#remove(id);
-    this.grid.hooks.run('afterNotificationHide', undefined, id);
+    this.grid.hooks.notify('afterNotificationHide', id);
     this.#pump();
   }
 
@@ -263,7 +263,7 @@ export class Notification extends BasePlugin {
     const duration = options.duration ?? options.timeout ?? DEFAULT_NOTIFICATION_DURATION;
     const timer = duration > 0 ? setTimeout(() => this.hide(id), duration) : null;
     this.#shown.set(id, { element, timer, position });
-    this.grid.hooks.run('afterNotificationShow', undefined, id, options);
+    this.grid.hooks.notify('afterNotificationShow', id, options);
   }
 
   /** Takes a message off the screen without saying anything about it. */

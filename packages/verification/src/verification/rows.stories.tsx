@@ -161,7 +161,7 @@ export function RowMoving() {
       data={block(30, 8, coord)}
       note={`Select a row and drag the handle that appears above its header. On the right
         the row moves; on the left there is no handle to grab. manualRowMove is accepted
-        here and moveRows() and dragRows() both work — it is only the pointer half that is
+        here and the plugin's moveIndexes() works — it is only the pointer half that is
         missing, since the plugin registers no listeners. Both grids are mounted on purpose:
         with one of them the claim "there is nothing on our side" has to be believed, and
         with two it can be tried. The parity table claimed this feature outright until the

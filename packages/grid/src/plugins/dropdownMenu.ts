@@ -24,8 +24,7 @@ export class DropdownMenu extends MenuPlugin {
 
   protected override onMenuEnable(): void {
     this.addHook(
-      'afterGetColHeader',
-      (_value: unknown, col: number, th: HTMLTableCellElement, level: number) => {
+      'afterGetColHeader', (col: number, th: HTMLTableCellElement, level: number) => {
         // Only on the bottom row of the header: the levels above are groups,
         // and a column command has nothing to say about a group.
         if (level !== this.grid.countColHeaderLevels() - 1 || col < 0) {

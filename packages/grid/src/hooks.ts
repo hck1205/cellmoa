@@ -201,6 +201,37 @@ export class Hooks {
   }
 
   /**
+   * Announces that something happened, handing the handlers exactly what they
+   * were given.
+   *
+   * `run` threads a value through the handlers, which is what `modifyColWidth`
+   * and its kind need. A notification has no value to thread, and every caller
+   * of one was passing `undefined` into that slot — so a handler registered for
+   * `afterHideRows` was called with `(null, [1, 2])` rather than `([1, 2])`, and
+   * the argument a reader would reach for first was a placeholder the plugin
+   * never meant to send.
+   *
+   * Return values are ignored here on purpose: there is nothing to modify, and
+   * letting a handler return one would quietly make this a `run`.
+   */
+  notify(name: string, ...args: unknown[]): void {
+    const bucket = this.#buckets.get(name);
+    if (!bucket) {
+      return;
+    }
+    for (const registration of [...bucket]) {
+      if (registration.removed) {
+        continue;
+      }
+      registration.handler(...args);
+      if (registration.once) {
+        registration.removed = true;
+      }
+    }
+    this.#compact(name);
+  }
+
+  /**
    * Runs a `before*` hook and reports whether the action may go ahead.
    *
    * Any handler returning `false` vetoes it, and the rest still run: a plugin

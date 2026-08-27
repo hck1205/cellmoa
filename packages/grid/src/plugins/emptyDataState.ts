@@ -158,7 +158,7 @@ export class EmptyDataState extends BasePlugin {
     }
     if (changed) {
       this.#showing = reason;
-      this.grid.hooks.run('afterEmptyDataStateShow', undefined, reason);
+      this.grid.hooks.notify('afterEmptyDataStateShow', reason);
     }
   }
 
@@ -230,7 +230,7 @@ export class EmptyDataState extends BasePlugin {
     this.#element.remove();
     this.#element = null;
     this.#showing = null;
-    this.grid.hooks.run('afterEmptyDataStateHide', undefined);
+    this.grid.hooks.notify('afterEmptyDataStateHide');
   }
 }
 

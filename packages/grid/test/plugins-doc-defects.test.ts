@@ -283,7 +283,7 @@ describe('settings the guides describe and something has to read', () => {
     // which is a defect of its own and not this one.
     const press = (col: number) => {
       const target = grid.view?.root.querySelector(`th.cm-col-header[data-col="${col}"]`);
-      grid.hooks.run('afterOnCellMouseDown', undefined, { target }, { row: -1, col });
+      grid.hooks.notify('afterOnCellMouseDown', { target }, { row: -1, col });
     };
     press(0);
     expect(plugin.isSorted(0)).toBe(false);

@@ -204,7 +204,7 @@ export class Autofill extends BasePlugin {
     if (changes.length > 0) {
       this.grid.setDataAtCells(changes, 'autofill');
     }
-    this.grid.hooks.run('afterAutofill', undefined, source.toArray(), target);
+    this.grid.hooks.notify('afterAutofill', source.toArray(), target);
   }
 
   /**

@@ -40,7 +40,7 @@ abstract class ManualMove extends BasePlugin {
       return false;
     }
     this.map.moveIndexes(indexes, target);
-    this.grid.hooks.run(`after${capitalised}Move`, undefined, indexes, target);
+    this.grid.hooks.notify(`after${capitalised}Move`, indexes, target);
     this.grid.render();
     return true;
   }
@@ -93,7 +93,7 @@ export class ManualColumnFreeze extends BasePlugin {
     }
     this.grid.colIndex.moveIndexes([column], fixed);
     this.grid.updateSettings({ fixedColumnsStart: fixed + 1 }, false);
-    this.grid.hooks.run('afterColumnFreeze', undefined, column, true);
+    this.grid.hooks.notify('afterColumnFreeze', column, true);
     this.grid.render();
   }
 
@@ -110,7 +110,7 @@ export class ManualColumnFreeze extends BasePlugin {
     // find it.
     this.grid.colIndex.moveIndexes([column], fixed - 1);
     this.grid.updateSettings({ fixedColumnsStart: Math.max(fixed - 1, 0) }, false);
-    this.grid.hooks.run('afterColumnUnfreeze', undefined, column, false);
+    this.grid.hooks.notify('afterColumnUnfreeze', column, false);
     this.grid.render();
   }
 

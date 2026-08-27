@@ -372,7 +372,7 @@ export class CopyPaste extends BasePlugin {
     if (isCut) {
       this.grid.emptySelectedCells('cut');
     }
-    this.grid.hooks.run(isCut ? 'afterCut' : 'afterCopy', undefined, rows);
+    this.grid.hooks.notify(isCut ? 'afterCut' : 'afterCopy', rows);
   }
 
   /**
@@ -455,7 +455,7 @@ export class CopyPaste extends BasePlugin {
       range.startCol + cols - 1,
       'paste',
     );
-    this.grid.hooks.run('afterPaste', undefined, values, range.toArray());
+    this.grid.hooks.notify('afterPaste', values, range.toArray());
   }
 
   /**

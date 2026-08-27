@@ -426,7 +426,7 @@ describe('the empty state’s hooks', () => {
     // Rows to begin with, so the overlay goes up while the test is watching
     // rather than during the plugin's own start-up.
     const grid = await mount({ emptyDataState: true, startRows: 2, minRows: 0 });
-    grid.hooks.add('afterEmptyDataStateShow', (_value: unknown, reason: unknown) => {
+    grid.hooks.add('afterEmptyDataStateShow', (reason: unknown) => {
       seen.push(`show:${String(reason)}`);
     });
     grid.hooks.add('afterEmptyDataStateHide', () => {

@@ -61,8 +61,7 @@ export class DiffView extends BasePlugin {
 
   protected override onEnable(): void {
     this.addHook(
-      'afterRenderer',
-      (_value: unknown, td: HTMLTableCellElement, row: number, col: number) => {
+      'afterRenderer', (td: HTMLTableCellElement, row: number, col: number) => {
         const change = this.#byCell.get(row, col);
         if (!change) {
           return;
@@ -129,7 +128,7 @@ export class DiffView extends BasePlugin {
         names: 0,
       },
     };
-    this.grid.hooks.run('afterDiff', undefined, result);
+    this.grid.hooks.notify('afterDiff', result);
     return result;
   }
 

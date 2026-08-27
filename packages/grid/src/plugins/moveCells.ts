@@ -96,7 +96,7 @@ export class MoveCells extends BasePlugin {
 
     this.grid.setDataAtCells(changes, isCopy ? 'copyDrag' : 'moveCells');
     this.grid.selectCell(row, col, row + height - 1, col + width - 1);
-    this.grid.hooks.run('afterMoveCells', undefined, source, { row, col }, isCopy);
+    this.grid.hooks.notify('afterMoveCells', source, { row, col }, isCopy);
     return true;
   }
 }

@@ -122,7 +122,7 @@ describe('the grid', () => {
 
   it('fires afterSelection with the range', () => {
     const seen: number[][] = [];
-    grid.addHook('afterSelection', (_value: unknown, ...coords: number[]) => {
+    grid.addHook('afterSelection', (...coords: number[]) => {
       seen.push(coords);
     });
     grid.selectCell(1, 2, 3, 4);

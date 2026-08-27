@@ -59,8 +59,7 @@ export class CustomBorders extends BasePlugin {
       this.#build(settings as BorderSpec[]);
     }
     this.addHook(
-      'afterRenderer',
-      (_value: unknown, td: HTMLTableCellElement, row: number, col: number) => {
+      'afterRenderer', (td: HTMLTableCellElement, row: number, col: number) => {
         const border = this.getBorder(row, col);
         if (!border) {
           return;

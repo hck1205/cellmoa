@@ -263,7 +263,7 @@ export class Grid {
     this.#checkLicense();
     this.#checkFormulasSetting();
     this.#checkDataBinding();
-    this.hooks.run('afterInit', undefined);
+    this.hooks.notify('afterInit');
   }
 
   /**
@@ -432,7 +432,7 @@ if ('data' in settings) {
   /** Sets one setting on one cell. */
   setCellMeta(row: number, col: number, key: string, value: unknown): void {
     this.#meta.setCell(row, col, { [key]: value });
-    this.hooks.run('afterSetCellMeta', undefined, row, col, key, value);
+    this.hooks.notify('afterSetCellMeta', row, col, key, value);
   }
 
   /** Sets several settings on one cell. */
@@ -709,7 +709,7 @@ if ('data' in settings) {
       this.#data.write(edits, undefined, source === 'edit' ? undefined : source);
     } catch (error) {
       if (error instanceof WriteConflict) {
-        this.hooks.run('afterRevisionConflict', undefined, error.revision);
+        this.hooks.notify('afterRevisionConflict', error.revision);
         return;
       }
       throw error;
@@ -875,7 +875,7 @@ if ('data' in settings) {
       return;
     }
     this.replaceRows(data, 'loadData');
-    this.hooks.run('afterLoadData', undefined, data);
+    this.hooks.notify('afterLoadData', data);
   }
 
   /**
@@ -908,7 +908,7 @@ if ('data' in settings) {
       });
     });
     this.setDataAtCells(changes, 'updateData');
-    this.hooks.run('afterUpdateData', undefined, data);
+    this.hooks.notify('afterUpdateData', data);
   }
 
   /** Replaces part of a row, as `Array.prototype.splice` does. */
@@ -1087,7 +1087,7 @@ if ('data' in settings) {
     }
     this.#data.undo();
     this.#syncDimensions();
-    this.hooks.run('afterUndo', undefined);
+    this.hooks.notify('afterUndo');
     this.render();
   }
 
@@ -1098,7 +1098,7 @@ if ('data' in settings) {
     }
     this.#data.redo();
     this.#syncDimensions();
-    this.hooks.run('afterRedo', undefined);
+    this.hooks.notify('afterRedo');
     this.render();
   }
 
@@ -1115,7 +1115,7 @@ if ('data' in settings) {
     }
     this.#data.undo(actor);
     this.#syncDimensions();
-    this.hooks.run('afterUndo', undefined, actor);
+    this.hooks.notify('afterUndo', actor);
     this.render();
   }
 
@@ -1126,7 +1126,7 @@ if ('data' in settings) {
     }
     this.#data.redo(actor);
     this.#syncDimensions();
-    this.hooks.run('afterRedo', undefined, actor);
+    this.hooks.notify('afterRedo', actor);
     this.render();
   }
 
@@ -1614,22 +1614,35 @@ if ('data' in settings) {
 
   /** Resizes a column. Passing `null` restores the default. */
   setColWidth(col: number, width: number | null): void {
+    // The hooks fire here rather than in the manualColumnResize plugin, where
+    // they used to be. The plugin's setSize called this method to do the work,
+    // so anyone resizing the documented way saw no hook at all and only a
+    // caller who had gone looking for the plugin saw one. A notification about
+    // a change belongs where the change happens.
+    if (this.hooks.allows('beforeColumnResize', width, col) === false) {
+      return;
+    }
     this.#colSizes.setSize(col, width);
     if (width === null) {
       this.#manualWidths.delete(col);
     } else {
       this.#manualWidths.add(col);
     }
+    this.hooks.notify('afterColumnResize', width, col);
     this.render();
   }
 
   setRowHeight(row: number, height: number | null): void {
+    if (this.hooks.allows('beforeRowResize', height, row) === false) {
+      return;
+    }
     this.#rowSizes.setSize(row, height);
     if (height === null) {
       this.#manualHeights.delete(row);
     } else {
       this.#manualHeights.add(row);
     }
+    this.hooks.notify('afterRowResize', height, row);
     this.render();
   }
 
@@ -1933,7 +1946,7 @@ if ('data' in settings) {
       return;
     }
     this.#selection.clear();
-    this.hooks.run('afterDeselect', undefined);
+    this.hooks.notify('afterDeselect');
     this.render();
   }
 
@@ -1999,9 +2012,9 @@ if ('data' in settings) {
       this.#renderQueued = true;
       return;
     }
-    this.hooks.run('beforeRender', undefined);
+    this.hooks.notify('beforeRender');
     this.#view?.render();
-    this.hooks.run('afterRender', undefined);
+    this.hooks.notify('afterRender');
   }
 
   /**
@@ -2151,7 +2164,7 @@ if ('data' in settings) {
     this.initIndexMappers();
     this.registerAllShortcutContexts();
     this.render();
-    this.hooks.run('afterInit', undefined);
+    this.hooks.notify('afterInit');
   }
 
   /**
@@ -2276,7 +2289,7 @@ if ('data' in settings) {
     if (this.#destroyed) {
       return;
     }
-    this.hooks.run('beforeDestroy', undefined);
+    this.hooks.notify('beforeDestroy');
     for (const plugin of this.#plugins.values()) {
       plugin.destroy();
     }
@@ -2288,7 +2301,7 @@ if ('data' in settings) {
     this.#view?.destroy();
     this.#view = null;
     this.#destroyed = true;
-    this.hooks.run('afterDestroy', undefined);
+    this.hooks.notify('afterDestroy');
     this.hooks.clear();
   }
 
@@ -2357,7 +2370,7 @@ if ('data' in settings) {
     });
     this.shortcuts.setActiveContextName('editor');
     this.#editor.focus();
-    this.hooks.run('afterBeginEditing', undefined, target.row, target.col);
+    this.hooks.notify('afterBeginEditing', target.row, target.col);
   }
 
   /** Closes the editor, writing its value when asked to. */
@@ -2528,7 +2541,7 @@ if ('data' in settings) {
         if (message) {
           console.warn(`${message} (${cellRef(row, col)}: ${JSON.stringify(value)})`);
         }
-        this.hooks.run('afterSourceDataValidate', undefined, value, row, col);
+        this.hooks.notify('afterSourceDataValidate', value, row, col);
       }
     }
   }
@@ -2627,15 +2640,14 @@ if ('data' in settings) {
     const state = this.#selection.state;
     if (state) {
       const last = this.#selection.last!;
-      this.hooks.run(
+      this.hooks.notify(
         'afterSelection',
-        undefined,
         last.topRow,
         last.startCol,
         last.bottomRow,
         last.endCol,
       );
-      this.hooks.run('afterSelectionEnd', undefined, state);
+      this.hooks.notify('afterSelectionEnd', state);
     }
     this.render();
   }
@@ -3037,7 +3049,7 @@ if ('data' in settings) {
       }
       this.#afterSelection();
       view.root.focus();
-      this.hooks.run('afterOnCellMouseDown', undefined, event, coords);
+      this.hooks.notify('afterOnCellMouseDown', event, coords);
     });
 
     view.root.addEventListener('dblclick', (event) => {
@@ -3095,7 +3107,7 @@ if ('data' in settings) {
     } else if (coords.col === -1 && coords.row >= 0) {
       this.selectRows(coords.row);
     }
-    this.hooks.run('afterOnCellMouseDown', undefined, event, coords);
+    this.hooks.notify('afterOnCellMouseDown', event, coords);
   }
 
   #onDocument(type: string, handler: (event: Event) => void): void {
@@ -3145,11 +3157,11 @@ if ('data' in settings) {
         this.hasColHeaders() ? this.getColHeaderHeight(level) : 0,
       renderColHeader: (th, cell) => {
         this.#markHeader(th, { col: cell.col });
-        this.hooks.run('afterGetColHeader', undefined, cell.col, th, cell.level);
+        this.hooks.notify('afterGetColHeader', cell.col, th, cell.level);
       },
       renderRowHeader: (th, row) => {
         this.#markHeader(th, { row });
-        this.hooks.run('afterGetRowHeader', undefined, row, th);
+        this.hooks.notify('afterGetRowHeader', row, th);
       },
       ariaTags: () => this.getSettings().ariaTags !== false,
       fixedRowsBottom: () => (this.getSettings().fixedRowsBottom as number) ?? 0,
@@ -3197,7 +3209,7 @@ if ('data' in settings) {
         // The one point where the window about to be drawn is known. A plugin
         // that decorates cells needs it here: without it, the only place it can
         // ask about a cell is while drawing that cell, one round trip at a time.
-        this.hooks.run('beforeViewportRender', undefined, {
+        this.hooks.notify('beforeViewportRender', {
           startRow,
           endRow,
           startCol,
@@ -3358,7 +3370,7 @@ if ('data' in settings) {
         settings.fragmentSelection === 'cell' ? 'cm-text-select-cell' : 'cm-text-select',
       );
     }
-    this.hooks.run('afterRenderer', undefined, td, row, col, cell, meta);
+    this.hooks.notify('afterRenderer', td, row, col, cell, meta);
   }
 }
 

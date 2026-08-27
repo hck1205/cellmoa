@@ -154,7 +154,7 @@ export class Dialog extends BasePlugin {
     view.overlay.appendChild(overlay);
     this.#overlay = overlay;
     this.focus();
-    this.grid.hooks.run('afterDialogShow', undefined, this.#options);
+    this.grid.hooks.notify('afterDialogShow', this.#options);
   }
 
   /** Changes what an open dialog says without closing it. */
@@ -183,7 +183,7 @@ export class Dialog extends BasePlugin {
     this.#overlay.remove();
     this.#overlay = null;
     this.#options.onHide?.();
-    this.grid.hooks.run('afterDialogHide', undefined);
+    this.grid.hooks.notify('afterDialogHide');
   }
 
   /** Puts the keyboard in the dialog. */

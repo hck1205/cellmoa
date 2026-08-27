@@ -146,3 +146,51 @@ an object with `pattern` as numbro, and translating what is translatable — or
 rejecting the foreign spelling loudly at settings time. The first is a real
 translation layer with its own wrong answers at the edges; the second breaks
 configurations that currently load. Neither is a change to make quietly.
+
+## `moveRows`, `moveColumns`, `dragRows` and `dragColumns` do not exist
+
+The manual move plugin's whole API is `moveIndexes(indexes, target)`. The
+reference documents `moveRow`, `moveRows`, `dragRow`, `dragRows` and their
+column equivalents, and none of them is defined anywhere in this library.
+
+Two Ladle stories asserted otherwise — `Verification/Columns/ColumnMoving`
+said "moveColumns() and dragColumns() work" and `Verification/Rows/RowMoving`
+said "moveRows() and dragRows() both work". A story claiming a method works
+when calling it does nothing is worse than the gap it was describing, because
+the story is the thing a reader checks the claim against. Both notes are
+corrected.
+
+It surfaced from writing a test that called `moveRows`: `?.moveRows?.([0], 2)`
+did nothing and reported nothing, because optional chaining over a method that
+is not there is silent. `scripts/parity.mjs` did not catch it either — its
+method list is the reference's *core* methods, and these live on a plugin.
+
+Closing it is a small piece of work — the names are aliases over `moveIndexes`
+with the row/column axis fixed — but `drag*` differs from `move*` in the
+reference (drag counts the target as a drop position, move as a destination
+index), so the two are not the same function under two names.
+
+## There was no prettier configuration, so `prettier --write` rewrote 74 files
+
+Running `npx prettier --write` over `packages/grid` reformatted the whole
+package to prettier's defaults — double quotes throughout — because no config
+existed anywhere in the repository. The codebase had been written to a
+consistent style by hand, and nothing recorded what that style was.
+
+It was noticed because `scripts/parity.mjs` reports `settings 0/0 read`
+afterwards: it extracts the setting names with `/'([^']+)'/g`, and the names
+were no longer in single quotes. A tool that reads source with a regex is the
+canary for this, and it only sounded because the numbers went to zero rather
+than to something plausible.
+
+The reformatting was reverted rather than kept: a three-thousand-line diff of
+quote characters would have buried the thirty-three-file change it was mixed
+in with, and nobody reviewing it could have told the two apart.
+
+No configuration was adopted, because none works. `printWidth: 100` leaves 37
+files failing and wider settings leave more, so the package is simply not
+prettier-formatted — it was written by hand to something close to but not the
+same as prettier's output. A config that fails on 37 files is worse than none:
+it reads as an invitation to run `--write` and get the churn again.
+`packages/grid/.prettierignore` stops that mechanically instead.
+`packages/verification` is genuinely prettier-formatted and is left alone.

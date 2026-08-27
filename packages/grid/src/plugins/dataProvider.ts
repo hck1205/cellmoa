@@ -241,7 +241,7 @@ export class DataProvider extends BasePlugin {
     try {
       const result = await settings.fetchRows(query, { signal: controller.signal });
       if (generation !== this.#generation) {
-        this.grid.hooks.run('afterDataProviderFetchAbort', undefined, query, 'superseded');
+        this.grid.hooks.notify('afterDataProviderFetchAbort', query, 'superseded');
         // Overtaken, not failed: the fetch that replaced this one is the one
         // whose answer counts, so this is not a failure to report.
         return true;
@@ -249,9 +249,8 @@ export class DataProvider extends BasePlugin {
       this.#lastError = null;
       this.#totalRows = result.totalRows;
       this.grid.replaceRows(result.rows, 'dataProvider');
-      this.grid.hooks.run(
+      this.grid.hooks.notify(
         'afterDataProviderFetch',
-        undefined,
         {
           rows: result.rows,
           totalRows: result.totalRows,
@@ -271,12 +270,12 @@ export class DataProvider extends BasePlugin {
       return true;
     } catch (error) {
       if (generation !== this.#generation || isAbort(error)) {
-        this.grid.hooks.run('afterDataProviderFetchAbort', undefined, query, error);
+        this.grid.hooks.notify('afterDataProviderFetchAbort', query, error);
         return true;
       }
       this.#lastError = error;
       settings.onError?.(error, query);
-      this.grid.hooks.run('afterDataProviderFetchError', undefined, error, query);
+      this.grid.hooks.notify('afterDataProviderFetchError', error, query);
       this.#report(error, 'fetch');
       return false;
     } finally {
@@ -358,7 +357,7 @@ export class DataProvider extends BasePlugin {
     if (!allNamed(rows.map((row) => row.id))) {
       revert();
       const error = unnamedRowError('update');
-      this.grid.hooks.run('afterRowsMutationError', undefined, 'update', error);
+      this.grid.hooks.notify('afterRowsMutationError', 'update', error);
       return;
     }
 
@@ -375,7 +374,7 @@ export class DataProvider extends BasePlugin {
     const invalid = await this.#validate(changes);
     if (invalid) {
       revert();
-      this.grid.hooks.run('afterRowsMutationError', undefined, 'update', invalid);
+      this.grid.hooks.notify('afterRowsMutationError', 'update', invalid);
       return;
     }
 
@@ -502,20 +501,19 @@ export class DataProvider extends BasePlugin {
     try {
       await send();
     } catch (error) {
-      this.grid.hooks.run('afterRowsMutationError', undefined, operation, error);
+      this.grid.hooks.notify('afterRowsMutationError', operation, error);
       this.#report(error, operation);
       throw error;
     }
-    this.grid.hooks.run('afterRowsMutation', undefined, operation);
+    this.grid.hooks.notify('afterRowsMutation', operation);
     // A refetch that fails after a write that succeeded is still that write's
     // failure as far as the reader is concerned: what they see is now stale.
     // `fetchData` reports its own failure and resolves rather than throwing —
     // it has its own hooks and its own toast — so the answer has to be asked
     // for. Catching around it, as this used to, caught nothing.
     if (!(await this.fetchData({ skipLoading: true }))) {
-      this.grid.hooks.run(
+      this.grid.hooks.notify(
         'afterRowsMutationError',
-        undefined,
         operation,
         this.#lastError ?? new Error('[cellmoa] dataProvider: the refetch failed.'),
       );

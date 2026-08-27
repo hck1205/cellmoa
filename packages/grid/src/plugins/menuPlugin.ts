@@ -52,7 +52,7 @@ export abstract class MenuPlugin extends BasePlugin {
     this.#menu = new Menu({
       document: root.ownerDocument,
       selection: () => this.grid.getMenuSelection(),
-      afterCommand: (key) => this.grid.hooks.run(`after${this.hookPrefix}Execute`, undefined, key),
+      afterCommand: (key) => this.grid.hooks.notify(`after${this.hookPrefix}Execute`, key),
     });
     this.onMenuEnable(root);
   }
@@ -92,14 +92,14 @@ export abstract class MenuPlugin extends BasePlugin {
       return;
     }
     this.#menu?.open(shown, x, y, this.options<MenuSettings>().uiContainer);
-    this.grid.hooks.run(`after${this.hookPrefix}Show`, undefined, shown);
+    this.grid.hooks.notify(`after${this.hookPrefix}Show`, shown);
   }
 
   /** Takes it down. */
   close(): void {
     if (this.#menu?.isOpen) {
       this.#menu.close();
-      this.grid.hooks.run(`after${this.hookPrefix}Hide`, undefined);
+      this.grid.hooks.notify(`after${this.hookPrefix}Hide`);
     }
   }
 

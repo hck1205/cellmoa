@@ -53,7 +53,7 @@ export class MergeCells extends BasePlugin {
     for (const area of declared) {
       this.merge(area.row, area.col, area.row + area.rowspan - 1, area.col + area.colspan - 1);
     }
-    this.addHook('afterRenderer', (_value: unknown, td: HTMLTableCellElement, row: number, col: number) => {
+    this.addHook('afterRenderer', (td: HTMLTableCellElement, row: number, col: number) => {
       const covering = this.getCoveringArea(row, col);
       if (!covering) {
         return;
@@ -133,7 +133,7 @@ export class MergeCells extends BasePlugin {
     if (cleared.length > 0) {
       this.grid.setDataAtCells(cleared, 'merge');
     }
-    this.grid.hooks.run('afterMergeCells', undefined, area);
+    this.grid.hooks.notify('afterMergeCells', area);
     this.grid.render();
   }
 
@@ -155,7 +155,7 @@ export class MergeCells extends BasePlugin {
       return;
     }
     this.#areas = this.#areas.filter((existing) => existing !== area);
-    this.grid.hooks.run('afterUnmergeCells', undefined, area);
+    this.grid.hooks.notify('afterUnmergeCells', area);
     this.grid.render();
   }
 

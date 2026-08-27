@@ -317,7 +317,7 @@ describe('clicking a column header', () => {
   it('reports the header as row -1, the way the reference numbers one', async () => {
     const seen: Array<{ row: number; col: number }> = [];
     const { grid } = await mountGrid({ startRows: 2, startCols: 2 });
-    grid.addHook('afterOnCellMouseDown', (_v: unknown, _e: unknown, coords: never) => {
+    grid.addHook('afterOnCellMouseDown', (_e: unknown, coords: never) => {
       seen.push(coords);
     });
     grid.render();

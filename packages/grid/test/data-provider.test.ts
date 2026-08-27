@@ -137,8 +137,8 @@ describe('fetching', () => {
     });
     // The plugin fetches once when it starts; the hooks go on afterwards so
     // this counts only what the test itself provokes.
-    grid.addHook('afterDataProviderFetchAbort', (_v: unknown, query: unknown) => aborts.push(query));
-    grid.addHook('afterDataProviderFetchError', (_v: unknown, error: unknown) => errors.push(error));
+    grid.addHook('afterDataProviderFetchAbort', (query: unknown) => aborts.push(query));
+    grid.addHook('afterDataProviderFetchError', (error: unknown) => errors.push(error));
     const plugin = providerOf(grid);
     slowNext = true;
     const slow = plugin.fetchData();
@@ -301,7 +301,7 @@ describe('writing', () => {
   it('shows the edit at once and takes it back when the server refuses', async () => {
     const errors: unknown[] = [];
     const { grid } = await writable(() => Promise.reject(new Error('conflict')));
-    grid.addHook('afterRowsMutationError', (_v: unknown, op: unknown, error: unknown) =>
+    grid.addHook('afterRowsMutationError', (op: unknown, error: unknown) =>
       errors.push([op, (error as Error).message]),
     );
 
@@ -331,7 +331,7 @@ describe('writing', () => {
     const errors: unknown[] = [];
     const { grid } = await writable(onRowsUpdate);
     grid.setCellMeta(0, 1, 'validator', (value: string) => value !== 'Grace');
-    grid.addHook('afterRowsMutationError', (_v: unknown, op: unknown) => errors.push(op));
+    grid.addHook('afterRowsMutationError', (op: unknown) => errors.push(op));
 
     grid.setDataAtCell(0, 1, 'Grace', 'edit');
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -494,7 +494,7 @@ describe('when the ground shifts underneath it', () => {
       },
     });
     await providerOf(grid).fetchData();
-    grid.addHook('afterRowsMutationError', (_v: unknown, op: unknown) => errors.push(op));
+    grid.addHook('afterRowsMutationError', (op: unknown) => errors.push(op));
 
     grid.setDataAtCell(0, 1, 'Grace', 'edit');
     await new Promise((resolve) => setTimeout(resolve, 0));

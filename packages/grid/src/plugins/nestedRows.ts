@@ -35,8 +35,7 @@ export class NestedRows extends BasePlugin {
     const settings = this.grid.getSettings().nestedRows;
     this.#tree = Array.isArray(settings) ? (settings as NestedRow[]) : [];
     this.addHook(
-      'afterGetRowHeader',
-      (_value: unknown, row: number, th: HTMLTableCellElement) => this.#decorate(row, th),
+      'afterGetRowHeader', (row: number, th: HTMLTableCellElement) => this.#decorate(row, th),
     );
     this.grid.render();
   }
@@ -118,14 +117,14 @@ export class NestedRows extends BasePlugin {
     }
     this.#collapsed.add(row);
     this.#apply();
-    this.grid.hooks.run('afterCollapseRow', undefined, row);
+    this.grid.hooks.notify('afterCollapseRow', row);
   }
 
   /** Opens it again. */
   expand(row: number): void {
     if (this.#collapsed.delete(row)) {
       this.#apply();
-      this.grid.hooks.run('afterExpandRow', undefined, row);
+      this.grid.hooks.notify('afterExpandRow', row);
     }
   }
 

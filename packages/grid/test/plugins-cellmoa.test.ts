@@ -99,7 +99,7 @@ describe('revision conflicts', () => {
 
     // The grid raises this hook when the engine refuses a stale write; firing
     // it directly is how the reaction is checked without racing two writers.
-    grid.hooks.run('afterRevisionConflict', undefined, 7);
+    grid.hooks.notify('afterRevisionConflict', 7);
 
     expect(plugin.getRefusals().map((r) => r.revision)).toEqual([7]);
     const notifications = grid.view?.wrapper.querySelectorAll('.cm-notification');
@@ -109,7 +109,7 @@ describe('revision conflicts', () => {
 
   it('stays quiet when it was asked to', async () => {
     const grid = await makeGrid({ conflicts: { notify: false }, notification: true });
-    grid.hooks.run('afterRevisionConflict', undefined, 3);
+    grid.hooks.notify('afterRevisionConflict', 3);
     expect(grid.view?.wrapper.querySelectorAll('.cm-notification')).toHaveLength(0);
     // Still recorded, though: silence is about the message, not the fact.
     expect((grid.getPlugin('conflicts') as unknown as Conflicts).getRefusals()).toHaveLength(1);

@@ -183,7 +183,7 @@ export class Filters extends BasePlugin {
       return;
     }
     this.applyConditions();
-    this.grid.hooks.run('afterFilter', undefined, [...this.#filters.values()]);
+    this.grid.hooks.notify('afterFilter', [...this.#filters.values()]);
     this.grid.render();
   }
 

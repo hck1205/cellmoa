@@ -160,9 +160,17 @@ const methodsMissing = CORE_METHODS.filter((name) => !hasMethod(name));
  * is the cheap half.
  *
  * A hook counts as reachable if its name appears anywhere in `src/` outside
- * `hooks.ts`. That is deliberately generous — it counts a name in a ternary or
- * built from a template prefix, which a stricter test would miss — so a hook
- * this reports as dead really is dead.
+ * `hooks.ts`, or if a template literal in a `hooks.run`/`hooks.allows` call
+ * could produce it.
+ *
+ * That second half was missing, and the omission mattered. This used to
+ * special-case one template shape — `after${hookPrefix}Show` — and report
+ * everything else built from a template as dead. The hiding, move and resize
+ * plugins all spell their hooks `` `afterHide${this.#suffix()}` ``, so eight
+ * live hooks were counted dead, and the comment here claimed "a hook this
+ * reports as dead really is dead", which was not true. A check that overstates
+ * the problem is not the safe direction to be wrong in: it costs the reader's
+ * trust in every other number on the table.
  */
 function hookReachability() {
   const declaration = sources.get('hooks.ts') ?? '';
@@ -175,17 +183,24 @@ function hookReachability() {
     .map(([, text]) => text)
     .join('\n');
 
-  // `after${this.hookPrefix}Show` and its siblings, spelled out.
-  const templated = new Set();
-  for (const [, prefix] of body.matchAll(/hookPrefix\s*=\s*'(\w+)'/g)) {
-    for (const suffix of ['Show', 'Hide', 'Execute']) {
-      templated.add(`before${prefix}${suffix}`);
-      templated.add(`after${prefix}${suffix}`);
-    }
+  // Hook names built from a template: `` `afterHide${this.#suffix()}` `` and
+  // the like. The interpolations are unknowable statically, so each becomes
+  // `\w*` and the literal parts have to match. That is generous — it counts a
+  // hook a template *could* produce rather than one it demonstrably does — and
+  // generous is the right direction here, because the cost of calling a live
+  // hook dead is that nobody believes the table.
+  const patterns = [];
+  for (const [, literal] of body.matchAll(/hooks\.(?:run|notify|allows)\(\s*`([^`]+)`/g)) {
+    const source = literal
+      .split(/\$\{[^}]*\}/)
+      .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+      .join('\\w*');
+    patterns.push(new RegExp(`^${source}$`));
   }
 
   const dead = names.filter(
-    (name) => !templated.has(name) && !new RegExp(`\\b${name}\\b`).test(body),
+    (name) =>
+      !patterns.some((pattern) => pattern.test(name)) && !new RegExp(`\\b${name}\\b`).test(body),
   );
   return { declared: names.length, reachable: names.length - dead.length, dead };
 }

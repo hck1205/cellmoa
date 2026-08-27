@@ -51,8 +51,7 @@ export class CollapsibleColumns extends BasePlugin {
 
   protected override onEnable(): void {
     this.addHook(
-      'afterGetColHeader',
-      (_value: unknown, col: number, th: HTMLTableCellElement, level: number) => {
+      'afterGetColHeader', (col: number, th: HTMLTableCellElement, level: number) => {
         if (!this.isCollapsible(level, col)) {
           return;
         }
@@ -155,7 +154,7 @@ export class CollapsibleColumns extends BasePlugin {
     }
     this.#collapsed.add(`${level}:${col}`);
     this.#apply();
-    this.grid.hooks.run('afterColumnCollapse', undefined, level, col);
+    this.grid.hooks.notify('afterColumnCollapse', level, col);
   }
 
   /** Opens it again. */
@@ -168,7 +167,7 @@ export class CollapsibleColumns extends BasePlugin {
     }
     this.#collapsed.delete(`${level}:${col}`);
     this.#apply();
-    this.grid.hooks.run('afterColumnExpand', undefined, level, col);
+    this.grid.hooks.notify('afterColumnExpand', level, col);
   }
 
   toggle(level: number, col: number): void {

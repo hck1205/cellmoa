@@ -52,16 +52,14 @@ export class Provenance extends BasePlugin {
 
   protected override onEnable(): void {
     this.addHook(
-      'beforeViewportRender',
-      (_value: unknown, window: { startRow: number; endRow: number; startCol: number; endCol: number }) => {
+      'beforeViewportRender', (window: { startRow: number; endRow: number; startCol: number; endCol: number }) => {
         if (this.marksAgentEdits()) {
           this.load(window);
         }
       },
     );
     this.addHook(
-      'afterRenderer',
-      (_value: unknown, td: HTMLTableCellElement, row: number, col: number) => {
+      'afterRenderer', (td: HTMLTableCellElement, row: number, col: number) => {
         const actor = this.#lastActor.get(row, col);
         if (actor?.kind === 'agent') {
           td.classList.add(this.agentClassName());

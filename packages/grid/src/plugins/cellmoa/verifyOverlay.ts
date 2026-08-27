@@ -55,8 +55,7 @@ export class VerifyOverlay extends BasePlugin {
 
   protected override onEnable(): void {
     this.addHook(
-      'afterRenderer',
-      (_value: unknown, td: HTMLTableCellElement, row: number, col: number) => {
+      'afterRenderer', (td: HTMLTableCellElement, row: number, col: number) => {
         const failure = this.#failed.get(row, col);
         if (failure) {
           td.classList.add('cm-verify-failed');
@@ -95,7 +94,7 @@ export class VerifyOverlay extends BasePlugin {
     }
     this.grid.render();
     const passed = this.#results.every((result) => result.passed);
-    this.grid.hooks.run('afterVerify', undefined, { passed, results: this.#results });
+    this.grid.hooks.notify('afterVerify', { passed, results: this.#results });
     return { passed, results: this.getResults() };
   }
 

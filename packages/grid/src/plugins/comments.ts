@@ -30,7 +30,7 @@ export class Comments extends BasePlugin {
   }
 
   protected override onEnable(): void {
-    this.addHook('afterRenderer', (_value: unknown, td: HTMLTableCellElement, row: number, col: number) => {
+    this.addHook('afterRenderer', (td: HTMLTableCellElement, row: number, col: number) => {
       const comment = this.getComment(row, col);
       if (comment) {
         td.classList.add(String(this.grid.getSettings().commentedCellClassName ?? 'htCommentCell'));
@@ -59,14 +59,14 @@ export class Comments extends BasePlugin {
       return;
     }
     this.grid.setCellMeta(row, col, 'comment', { value });
-    this.grid.hooks.run('afterSetComment', undefined, row, col, value);
+    this.grid.hooks.notify('afterSetComment', row, col, value);
     this.grid.render();
   }
 
   /** Removes it. */
   removeComment(row: number, col: number): void {
     this.grid.removeCellMeta(row, col, 'comment');
-    this.grid.hooks.run('afterRemoveComment', undefined, row, col);
+    this.grid.hooks.notify('afterRemoveComment', row, col);
     this.grid.render();
   }
 

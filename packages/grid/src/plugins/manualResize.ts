@@ -26,20 +26,21 @@ abstract class ManualResize extends BasePlugin {
     }
   }
 
-  /** Resizes one index. Passing `null` restores the default. */
+  /**
+   * Resizes one index. Passing `null` restores the default.
+   *
+   * The before/after hooks used to be announced here, which meant the
+   * documented way to resize — `grid.setColWidth` — fired nothing, and only a
+   * caller who had gone looking for the plugin ever saw one. They live on the
+   * grid methods now; this goes through them, so the size is still recorded as
+   * chosen and automatic sizing leaves it alone, and it fires once.
+   */
   setSize(index: number, size: number | null): void {
-    const capitalised = this.axis === 'row' ? 'Row' : 'Column';
-    if (this.grid.hooks.allows(`before${capitalised}Resize`, size, index) === false) {
-      return;
-    }
-    // Through the grid rather than straight to the size map, so the width is
-    // recorded as chosen and automatic sizing leaves it alone.
     if (this.axis === 'row') {
       this.grid.setRowHeight(index, size);
     } else {
       this.grid.setColWidth(index, size);
     }
-    this.grid.hooks.run(`after${capitalised}Resize`, undefined, size, index);
   }
 
   /** The sizes that differ from the default, for saving a layout. */

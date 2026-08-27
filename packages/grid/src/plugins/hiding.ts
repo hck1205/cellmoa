@@ -50,7 +50,7 @@ abstract class HidingPlugin extends BasePlugin {
       // side of it there is nothing on screen to say anything is missing.
       this.addHook(
         this.axis === 'rows' ? 'afterGetRowHeader' : 'afterGetColHeader',
-        (_value: unknown, index: number, th: HTMLTableCellElement) =>
+        (index: number, th: HTMLTableCellElement) =>
           this.#markNeighbour(index, th),
       );
     }
@@ -67,7 +67,7 @@ abstract class HidingPlugin extends BasePlugin {
       return;
     }
     this.map.hide(indexes);
-    this.grid.hooks.run(`afterHide${this.#suffix()}`, undefined, indexes);
+    this.grid.hooks.notify(`afterHide${this.#suffix()}`, indexes);
     this.grid.render();
   }
 
@@ -77,7 +77,7 @@ abstract class HidingPlugin extends BasePlugin {
       return;
     }
     this.map.unhide(indexes);
-    this.grid.hooks.run(`afterUnhide${this.#suffix()}`, undefined, indexes);
+    this.grid.hooks.notify(`afterUnhide${this.#suffix()}`, indexes);
     this.grid.render();
   }
 
@@ -170,7 +170,7 @@ export class TrimRows extends BasePlugin {
       return;
     }
     this.#trimmed.set([...this.#trimmed.indexes, ...rows]);
-    this.grid.hooks.run('afterTrimRow', undefined, this.getTrimmedRows(), rows);
+    this.grid.hooks.notify('afterTrimRow', this.getTrimmedRows(), rows);
     this.grid.render();
   }
 
@@ -181,7 +181,7 @@ export class TrimRows extends BasePlugin {
     }
     const wanted = new Set(rows);
     this.#trimmed.set(this.#trimmed.indexes.filter((row) => !wanted.has(row)));
-    this.grid.hooks.run('afterUntrimRow', undefined, this.getTrimmedRows(), rows);
+    this.grid.hooks.notify('afterUntrimRow', this.getTrimmedRows(), rows);
     this.grid.render();
   }
 
@@ -198,7 +198,7 @@ export class TrimRows extends BasePlugin {
       return;
     }
     this.#trimmed.clear();
-    this.grid.hooks.run('afterUntrimRow', undefined, this.getTrimmedRows(), released);
+    this.grid.hooks.notify('afterUntrimRow', this.getTrimmedRows(), released);
     this.grid.render();
   }
 

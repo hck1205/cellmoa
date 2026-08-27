@@ -89,7 +89,7 @@ export class ColumnSorting extends BasePlugin {
     }
     // Clicking a header cycles ascending, descending, off — the order every
     // spreadsheet uses.
-    this.addHook('afterOnCellMouseDown', (_value: unknown, event: MouseEvent, coords: unknown) => {
+    this.addHook('afterOnCellMouseDown', (event: MouseEvent, coords: unknown) => {
       const target = event?.target as HTMLElement | undefined;
       if (!target || !target.classList.contains('cm-col-header')) {
         return;
@@ -164,7 +164,7 @@ export class ColumnSorting extends BasePlugin {
     }
     this.sortState = this.limit(wanted);
     this.#apply();
-    this.grid.hooks.run('afterColumnSort', undefined, this.getSortConfig(), wanted);
+    this.grid.hooks.notify('afterColumnSort', this.getSortConfig(), wanted);
     this.grid.render();
   }
 

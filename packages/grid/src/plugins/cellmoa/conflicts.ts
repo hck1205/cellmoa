@@ -29,7 +29,7 @@ export class Conflicts extends BasePlugin {
   }
 
   protected override onEnable(): void {
-    this.addHook('afterRevisionConflict', (_value: unknown, revision: number) =>
+    this.addHook('afterRevisionConflict', (revision: number) =>
       this.#onConflict(revision),
     );
   }

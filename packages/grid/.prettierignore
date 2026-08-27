@@ -1,0 +1,18 @@
+# This package is formatted by hand, not by prettier.
+#
+# That is a fact found the hard way: `prettier --write` over src/ rewrote 74
+# files to prettier's defaults, because no configuration existed and the code
+# matched none of them. The diff was three thousand lines of quote characters —
+# invisible in review — and it broke scripts/parity.mjs, which reads setting
+# names with a regex over single-quoted strings and reported "0/0 settings
+# read" afterwards.
+#
+# No printWidth makes the existing code clean: 100 is closest at 37 files, and
+# wider is worse. So there is no configuration to adopt that would make
+# `--write` safe here. Until someone reformats the package in one deliberate
+# commit, prettier does not touch it.
+#
+# packages/verification is different — it is prettier-formatted with the
+# defaults, and running prettier there is fine.
+src
+test

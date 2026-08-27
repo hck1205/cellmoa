@@ -151,7 +151,7 @@ export class Pagination extends BasePlugin {
     const previous = this.#page;
     this.#page = target;
     this.#apply();
-    this.grid.hooks.run('afterPageChange', undefined, target, previous);
+    this.grid.hooks.notify('afterPageChange', target, previous);
   }
 
   nextPage(): void {
@@ -179,7 +179,7 @@ export class Pagination extends BasePlugin {
     this.#pageSize = pageSize;
     this.#page = Math.floor(firstRow / this.getCurrentPageSize()) + 1;
     this.#apply();
-    this.grid.hooks.run('afterPageSizeChange', undefined, pageSize, previous);
+    this.grid.hooks.notify('afterPageSizeChange', pageSize, previous);
   }
 
   resetPageSize(): void {

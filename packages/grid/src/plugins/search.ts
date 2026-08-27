@@ -53,8 +53,7 @@ export class Search extends BasePlugin {
 
   protected override onEnable(): void {
     this.addHook(
-      'afterRenderer',
-      (_value: unknown, td: HTMLTableCellElement, row: number, col: number) => {
+      'afterRenderer', (td: HTMLTableCellElement, row: number, col: number) => {
         if (this.#results.some((result) => result.row === row && result.col === col)) {
           td.classList.add(this.resultClass());
         }
