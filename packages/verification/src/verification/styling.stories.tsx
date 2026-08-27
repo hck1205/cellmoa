@@ -129,3 +129,37 @@ export const LegacyStyle = () => (
     data={block(5, 4)}
   />
 );
+
+// --- more of what each page documents ---------------------------------------
+
+export const ThemesHorizon = () => (
+  <Compare
+    note={`The second built-in theme, asked for by name. Both panels should change
+      together: background, borders, header weight and the selection colour. A theme that
+      is accepted and not applied leaves the grid in its default colours, which looks
+      deliberate — so the thing to check is that this panel differs from the Themes story
+      above it rather than that it looks like anything in particular.`}
+    settings={{
+      colHeaders: true,
+      rowHeaders: true,
+      themeName: "ht-theme-horizon",
+    }}
+    data={block(5, 4)}
+  />
+);
+
+export const ThemeCustomizationDensity = () => (
+  <Compare
+    note={`A theme carries a density as well as colours, and the row height follows it.
+      Set beside the default theme, the rows here should be visibly tighter in both
+      panels. Density is the part of a theme most often half-applied — the colours land
+      because they are custom properties, and the spacing does not because it needs the
+      layout to be recomputed.`}
+    settings={{
+      colHeaders: true,
+      rowHeaders: true,
+      themeName: "ht-theme-main-dark",
+    }}
+    data={block(6, 4)}
+  />
+);

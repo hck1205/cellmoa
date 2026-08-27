@@ -347,3 +347,208 @@ export function ColumnFilter() {
     />
   );
 }
+
+// --- more of what each page documents ---------------------------------------
+//
+// One story per page shows a page exists; it cannot show what the page says.
+// The Column headers page alone documents four spellings of `colHeaders`, a
+// header height, a per-column class and nested headers. These are the rest.
+
+export const ColumnHeadersFromAFunction = () => (
+  <Compare
+    note={`\`colHeaders\` as a function is called with the visual index and returns the
+      label, so a header can be computed rather than listed. Both should show A1..E1
+      spelled out in words. Watch what happens past the end of a short array elsewhere
+      on this page: the function form has no end, so there is nothing to fall back to.`}
+    settings={{
+      colHeaders: (index: number) => `col ${index + 1}`,
+      rowHeaders: true,
+    }}
+    data={block(4, 5)}
+  />
+);
+
+export const ColumnHeadersShorterThanTheTable = () => (
+  <Compare
+    note={`Three labels for five columns. The reference falls back to the spreadsheet
+      letter for the columns the array does not reach, so the headers should read
+      Alpha, Beta, Gamma, D, E on both sides. A grid that instead showed blanks — or
+      that ran off the end of the array — would be reporting a column that has no name
+      rather than one whose name it was not given.`}
+    settings={{ colHeaders: ["Alpha", "Beta", "Gamma"], rowHeaders: true }}
+    data={block(3, 5)}
+  />
+);
+
+export const ColumnHeadersHeightAndClass = () => (
+  <Compare
+    note={`\`columnHeaderHeight\` sets the header row's height and \`headerClassName\`
+      puts a class on every header cell — here \`htRight\`, so the labels should sit
+      against the right edge of their cells in both panels. The height is the easier of
+      the two to get wrong invisibly: a grid that accepts the number and does not apply
+      it looks identical until you measure, which is why the value here is large enough
+      to see.`}
+    settings={{
+      colHeaders: ["One", "Two", "Three"],
+      rowHeaders: true,
+      columnHeaderHeight: 56,
+      headerClassName: "htRight",
+    }}
+    data={block(3, 3)}
+  />
+);
+
+export const ColumnHeadersNested = () => (
+  <Compare
+    height={240}
+    note={`Two header rows, the upper one spanning groups. Count the rows first — a
+      nested header array of N levels should draw exactly N rows, and an off-by-one here
+      draws an empty band that looks like padding. Then check the spans: \`{ label,
+      colspan }\` should cover the columns beneath it, and the leaf row underneath
+      should stay aligned with the data.`}
+    settings={{
+      rowHeaders: true,
+      nestedHeaders: [
+        [
+          { label: "Identity", colspan: 2 },
+          { label: "Amounts", colspan: 3 },
+        ],
+        ["Code", "Name", "Q1", "Q2", "Q3"],
+      ],
+    }}
+    data={block(4, 5)}
+  />
+);
+
+export const ColumnHidingWithIndicators = () => (
+  <Compare
+    note={`\`indicators: true\` marks the headers either side of a hidden column, because
+      hiding leaves no gap and without a mark there is nothing on screen to say a column
+      is missing. Column C is hidden here, so B and D should carry the indicator on both
+      sides. The data is unchanged underneath: ask either grid for row 0 and it still has
+      five values.`}
+    settings={{
+      colHeaders: ["A", "B", "C", "D", "E"],
+      rowHeaders: true,
+      hiddenColumns: { columns: [2], indicators: true },
+    }}
+    data={block(4, 5)}
+  />
+);
+
+export const ColumnWidthsPerColumn = () => (
+  <Compare
+    note={`\`colWidths\` as an array gives each column its own width, and a single number
+      gives them all the same one. Here the first column is wide and the rest are narrow.
+      What to look for is the last column: the array is shorter than the table, and both
+      grids should fall back to the default rather than collapsing it.`}
+    settings={{ colHeaders: true, rowHeaders: true, colWidths: [220, 60, 60] }}
+    data={block(3, 5)}
+  />
+);
+
+export const ColumnWidthsFromAFunction = () => (
+  <Compare
+    note={`\`colWidths\` as a function is asked for each column's width by index. This one
+      alternates, so the table should read wide, narrow, wide, narrow. A grid that called
+      the function once and reused the answer would draw five equal columns — which looks
+      deliberate, and is the reason this story alternates rather than growing.`}
+    settings={{
+      colHeaders: true,
+      rowHeaders: true,
+      colWidths: (index: number) => (index % 2 === 0 ? 180 : 70),
+    }}
+    data={block(3, 5)}
+  />
+);
+
+export const ColumnWidthsStretched = () => (
+  <Compare
+    height={200}
+    note={`\`stretchH: 'all'\` spreads the spare horizontal space across every column so
+      the table fills its container; \`'last'\` gives it all to the final column. With
+      three narrow columns in a wide panel the difference is unmistakable — and a grid
+      that ignores the setting leaves a gap on the right, which is the failure this is
+      here to make visible.`}
+    settings={{
+      colHeaders: ["One", "Two", "Three"],
+      rowHeaders: true,
+      width: "100%",
+      height: 200,
+      stretchH: "all",
+    }}
+    data={block(4, 3)}
+  />
+);
+
+export const ColumnFreezingFixedStart = () => (
+  <Compare
+    height={240}
+    note={`\`fixedColumnsStart: 2\` freezes the first two columns. Scroll each panel
+      sideways: the frozen pair should stay put while the rest slide underneath, and the
+      boundary should be a clean edge rather than a seam that drifts. This is the setting
+      \`manualColumnFreeze\` moves a column into, so a grid that draws this correctly and
+      the manual version wrongly has a gesture problem rather than a layout one.`}
+    settings={{
+      colHeaders: true,
+      rowHeaders: true,
+      width: 420,
+      height: 240,
+      colWidths: 110,
+      fixedColumnsStart: 2,
+    }}
+    data={block(8, 10, coord)}
+  />
+);
+
+export const ColumnVirtualizationRenderAll = () => (
+  <Compare
+    height={240}
+    note={`\`renderAllColumns: true\` turns column virtualization off, so every column is
+      in the DOM whether or not it is on screen. Open the element inspector and count
+      \`td\` elements in a row: with forty columns there should be forty, against the
+      screenful the default draws. This is the setting to reach for when something
+      outside the grid measures the table, and the cost is exactly what the count shows.`}
+    settings={{
+      colHeaders: true,
+      rowHeaders: true,
+      width: 420,
+      height: 240,
+      colWidths: 90,
+      renderAllColumns: true,
+    }}
+    data={block(6, 40, coord)}
+  />
+);
+
+export const ColumnSummaryAcrossFunctions = () => (
+  <Compare
+    height={260}
+    note={`The five summary functions the page lists, one per column: sum, min, max,
+      count and average. Row 5 is the destination row. The two libraries get there
+      differently — the reference computes the number and writes it, while this one
+      writes \`=SUM(A1:A4)\` and lets the engine evaluate it — so edit a number above and
+      watch both totals move. \`roundFloat\` on the average should give two decimals on
+      both sides.`}
+    settings={{
+      height: 260,
+      colHeaders: ["sum", "min", "max", "count", "average"],
+      rowHeaders: true,
+      columnSummary: [0, 1, 2, 3, 4].map((source) => ({
+        sourceColumn: source,
+        destinationColumn: source,
+        destinationRow: 4,
+        type: (["sum", "min", "max", "count", "average"] as const)[source],
+        roundFloat: 2,
+        ranges: [[0, 3]],
+      })),
+    }}
+    data={[
+      ["1", "2", "3", "4", "5"],
+      ["6", "7", "8", "9", "12.345"],
+      ["11", "12", "13", "", "15"],
+      ["2", "3", "4", "5", "6"],
+      ["", "", "", "", ""],
+    ]}
+  />
+);

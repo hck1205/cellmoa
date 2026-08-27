@@ -1578,7 +1578,20 @@ if ('data' in settings) {
   }
 
   hasColHeaders(): boolean {
-    return this.getSettings().colHeaders !== false && this.getSettings().colHeaders !== undefined;
+    const settings = this.getSettings();
+    if (settings.colHeaders === false) {
+      return false;
+    }
+    if (settings.colHeaders !== undefined) {
+      return true;
+    }
+    // A column that declares a `title` is asking for a header, and the guide's
+    // Column headers page configures exactly that — `columns: [{ title: 'ID' }]`
+    // with no `colHeaders` beside it. `getColHeader` already returned the
+    // title; nothing asked it for one, so the header row was never drawn and
+    // the titles were computed into nowhere.
+    const columns = settings.columns;
+    return Array.isArray(columns) && columns.some((column) => typeof column?.title === 'string');
   }
 
   /** What a column header says. */

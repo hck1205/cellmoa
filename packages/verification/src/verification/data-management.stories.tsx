@@ -338,3 +338,78 @@ export const Clipboard = () => (
 /**
  * A note attached to a cell rather than a value written into it.
  */
+
+// --- more of what each page documents ---------------------------------------
+
+export const BindingToDataObjects = () => (
+  <Compare
+    note={`An array of objects rather than an array of arrays, with \`columns[].data\`
+      naming the property each column reads. Edit a cell and the object's property should
+      change — not a positional copy of it. The distinction matters when a row is moved
+      or sorted: with objects the identity travels with the row, so a grid that quietly
+      converts to arrays loses whichever properties no column mentioned.`}
+    settings={
+      {
+        colHeaders: ["Item", "Amount"],
+        rowHeaders: true,
+        columns: [{ data: "item" }, { data: "amount" }],
+        data: [
+          { item: "Rent", amount: "1200", note: "a property no column shows" },
+          {
+            item: "Cloud",
+            amount: "640",
+            note: "and it should still be there",
+          },
+        ],
+      } as never
+    }
+  />
+);
+
+export const BindingToDataNested = () => (
+  <Compare
+    note={`\`dataDotNotation\` lets a column reach into a nested object with
+      \`'address.city'\`. Both panels should show the city, and editing it should write
+      back into the nested object rather than creating a flat key beside it. Turning the
+      setting off is the other half: the same string then means a property literally
+      called "address.city", which is a real shape in some exports.`}
+    settings={
+      {
+        colHeaders: ["Name", "City"],
+        rowHeaders: true,
+        dataDotNotation: true,
+        columns: [{ data: "name" }, { data: "address.city" }],
+        data: [
+          { name: "Ada", address: { city: "London" } },
+          { name: "Grace", address: { city: "New York" } },
+        ],
+      } as never
+    }
+  />
+);
+
+export const SavingDataAfterChange = () => (
+  <Compare
+    note={`\`afterChange\` is how a page knows to save. Edit a cell in either panel and
+      the hook fires with the changes and a source string — and the source is the part
+      worth watching, because it is what stops a save handler from saving its own
+      writes back. Load the grid and nothing should fire; type and one should.`}
+    settings={{ colHeaders: true, rowHeaders: true }}
+    data={block(3, 3)}
+  />
+);
+
+export const ClipboardCopyRange = () => (
+  <Compare
+    note={`\`copyPaste\` bounds what a copy may take: \`rowsLimit\` and \`columnsLimit\`
+      cap the range, and the grid is expected to say so rather than silently truncating.
+      Select the whole table and copy in each panel — with limits of two, the clipboard
+      should hold four cells, and something should tell you the rest was left out.`}
+    settings={{
+      colHeaders: true,
+      rowHeaders: true,
+      copyPaste: { rowsLimit: 2, columnsLimit: 2 },
+    }}
+    data={block(5, 5)}
+  />
+);

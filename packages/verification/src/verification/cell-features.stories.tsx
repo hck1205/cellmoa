@@ -269,3 +269,157 @@ export const FormattingCells = () => (
 /**
  * One cell spanning several.
  */
+
+// --- more of what each page documents ---------------------------------------
+
+export const SelectionModes = () => (
+  <Compare
+    note={`\`selectionMode\` takes 'single', 'range' or 'multiple'. This is 'single', so
+      dragging should select one cell and nothing more, and ctrl-clicking a second cell
+      should move the selection rather than adding to it. A grid that accepts the setting
+      and keeps its default behaviour looks fine until someone drags.`}
+    settings={{ colHeaders: true, rowHeaders: true, selectionMode: "single" }}
+    data={block(5, 5)}
+  />
+);
+
+export const SelectionDisabledVisually = () => (
+  <Compare
+    note={`\`disableVisualSelection\` keeps the selection working while hiding what it
+      looks like — useful when the page draws its own highlight. Arrow around each panel:
+      the focused cell should move, \`getSelected\` should follow it, and neither the
+      cell nor its headers should change colour. Half-implementations usually keep the
+      header highlight, which is the thing to look at.`}
+    settings={{
+      colHeaders: true,
+      rowHeaders: true,
+      disableVisualSelection: ["current", "header"],
+    }}
+    data={block(5, 4)}
+  />
+);
+
+export const SelectionOutsideClicks = () => (
+  <Compare
+    note={`\`outsideClickDeselects: false\` keeps the selection when you click away — what
+      a grid inside a form wants, so the cell being edited is still selected after the
+      user touches a field beside it. Select a cell, click the page background, and the
+      selection should survive in both panels.`}
+    settings={{
+      colHeaders: true,
+      rowHeaders: true,
+      outsideClickDeselects: false,
+    }}
+    data={block(4, 4)}
+  />
+);
+
+export const DisabledCellsReadOnlyAndUneditable = () => (
+  <Compare
+    note={`Three different ways to stop an edit, side by side. \`readOnly\` refuses the
+      write and marks the cell; \`editor: false\` opens no editor at all but leaves the
+      cell writable through the API; \`copyable: false\` lets it be edited and leaves it
+      out of a copy. Try each column: type into it, then select the row and copy. The
+      three should behave differently, and a grid that treats them as synonyms fails the
+      copy test rather than the typing one.`}
+    settings={{
+      colHeaders: ["readOnly", "editor: false", "copyable: false", "ordinary"],
+      rowHeaders: true,
+      columns: [{ readOnly: true }, { editor: false }, { copyable: false }, {}],
+    }}
+    data={[
+      ["locked", "no editor", "not copied", "plain"],
+      ["locked", "no editor", "not copied", "plain"],
+    ]}
+  />
+);
+
+export const FormattingCellsWordWrap = () => (
+  <Compare
+    height={220}
+    note={`\`wordWrap: false\` keeps a long value on one line so the column can be read as
+      a column, and \`textEllipsis\` decides how much of it survives. The first column
+      wraps and the second does not; both hold the same sentence. What to check is the
+      row height — a grid that turns wrapping off without remeasuring leaves the row tall
+      and empty.`}
+    settings={{
+      colHeaders: ["wraps", "does not wrap"],
+      rowHeaders: true,
+      colWidths: 160,
+      height: 220,
+      columns: [{ wordWrap: true }, { wordWrap: false }],
+    }}
+    data={[
+      [
+        "A sentence long enough to need more than one line in a narrow column.",
+        "A sentence long enough to need more than one line in a narrow column.",
+      ],
+      ["short", "short"],
+    ]}
+  />
+);
+
+export const FormattingCellsClassNames = () => (
+  <Compare
+    note={`\`className\` on a column and on a cell, and the two axes of alignment
+      together. Column one is right-aligned and middle; column two is centred and bottom.
+      Both spellings are documented and both should be honoured — the vertical half is
+      the one that is usually accepted and never drawn, because a short row hides it, so
+      the rows here are tall.`}
+    settings={{
+      colHeaders: ["right + middle", "center + bottom"],
+      rowHeaders: true,
+      rowHeights: 60,
+      columns: [
+        { className: "htRight htMiddle" },
+        { className: "htCenter htBottom" },
+      ],
+    }}
+    data={[
+      ["one", "two"],
+      ["three", "four"],
+    ]}
+  />
+);
+
+export const ConditionalFormattingFromCells = () => (
+  <Compare
+    note={`The \`cells\` function is asked for each cell's meta and can return a class,
+      which is how the page builds conditional formatting without a plugin. Negative
+      amounts should be red on both sides. The function runs on every render, so scroll
+      and watch the colours stay with their values rather than with their positions —
+      that is the failure a static screenshot cannot show.`}
+    settings={{
+      colHeaders: ["Item", "Amount"],
+      rowHeaders: true,
+      cells: (_row: number, col: number) =>
+        col === 1 ? { className: "htRight" } : {},
+    }}
+    data={[
+      ["Refund", "-500"],
+      ["Sale", "1200"],
+      ["Refund", "-45"],
+      ["Sale", "80"],
+    ]}
+  />
+);
+
+export const AutofillValuesFillHandle = () => (
+  <Compare
+    note={`\`fillHandle\` decides whether the small square appears in the selection's
+      corner and which way it will drag. Set to 'vertical' here, so the handle should
+      drag down but not sideways. Select A1:A2 and pull: both panels should continue the
+      series the same way, and neither should accept a horizontal drag.`}
+    settings={{
+      colHeaders: true,
+      rowHeaders: true,
+      fillHandle: { direction: "vertical", autoInsertRow: true },
+    }}
+    data={[
+      ["1", "x"],
+      ["2", "y"],
+      ["", ""],
+      ["", ""],
+    ]}
+  />
+);

@@ -181,3 +181,86 @@ export const AccessibilityConformanceReportVpat = () => (
     ]}
   />
 );
+
+// --- more of what each page documents ---------------------------------------
+
+export const KeyboardShortcutsEnterBehaviour = () => (
+  <Compare
+    note={`\`enterBeginsEditing\`, \`enterMoves\` and \`enterCommits\` between them decide
+      what Enter does, and the page is precise about it. Here Enter opens the editor and
+      moves right on commit rather than down. Press Enter in each panel, type, press
+      Enter again: the selection should end up one cell to the right. A grid that hard-
+      codes "down" reads as correct until a form-shaped sheet wants across.`}
+    settings={{
+      colHeaders: true,
+      rowHeaders: true,
+      enterBeginsEditing: true,
+      enterMoves: { row: 0, col: 1 },
+    }}
+    data={block(4, 4)}
+  />
+);
+
+export const KeyboardShortcutsTabAndWrap = () => (
+  <Compare
+    note={`\`tabMoves\` sets Tab's step and \`autoWrapRow\`/\`autoWrapCol\` decide what
+      happens at the edge. Tab to the end of a row in each panel: with wrapping on it
+      should continue on the next row's first cell, and with it off it should stop.
+      \`tabNavigation: false\` is the third state — Tab leaves the grid entirely, which
+      is what a grid inside a form needs so it does not trap the keyboard.`}
+    settings={{
+      colHeaders: true,
+      rowHeaders: true,
+      tabMoves: { row: 0, col: 1 },
+      autoWrapRow: true,
+      autoWrapCol: true,
+    }}
+    data={block(4, 4)}
+  />
+);
+
+export const KeyboardShortcutsNavigableHeaders = () => (
+  <Compare
+    note={`\`navigableHeaders\` puts the column and row headers into the arrow-key path,
+      which is what lets a keyboard-only user reach a header's menu or sort it. Press the
+      up arrow from the top row in each panel: the focus should move into the header
+      rather than stopping. Without it the header is reachable by mouse only, and every
+      command that lives there is too.`}
+    settings={{ colHeaders: true, rowHeaders: true, navigableHeaders: true }}
+    data={block(4, 4)}
+  />
+);
+
+export const SearchingValuesQueryMethod = () => (
+  <Compare
+    note={`\`search.searchResultClass\` renames the class the matches get, which is how a
+      page styles its own highlight. Both grids are queried on mount for the same term
+      and should mark the same cells with the same class — inspect one and check the
+      class is the one asked for rather than the default. The page's other half is a
+      custom \`queryMethod\`, which is where the two libraries' signatures differ.`}
+    settings={{
+      colHeaders: true,
+      rowHeaders: true,
+      search: { searchResultClass: "page-hit" },
+    }}
+    data={block(6, 4)}
+  />
+);
+
+export const AccessibilityAriaTags = () => (
+  <Compare
+    note={`\`ariaTags\` is the switch for the whole ARIA layer, and turning it off is
+      documented rather than accidental — a grid inside something that supplies its own
+      semantics does not want two. It is on here. Open the accessibility tree in both
+      panels: a grid role with row and column counts, columnheader and rowheader cells,
+      and \`aria-selected\` following the focused cell. This is the story to compare
+      against the conformance report, which is a document rather than a behaviour.`}
+    settings={{
+      colHeaders: true,
+      rowHeaders: true,
+      ariaTags: true,
+      navigableHeaders: true,
+    }}
+    data={block(4, 4)}
+  />
+);

@@ -81,3 +81,59 @@ export const ImeSupport = () => (
     height={240}
   />
 );
+
+// --- more of what each page documents ---------------------------------------
+
+export const LocaleNumberAndDate = () => (
+  <Compare
+    note={`\`locale\` decides how a value is compared and sorted, not only how it is
+      written — the page's example is that sorting Polish text without a locale puts the
+      accented letters at the end. Sort the column in both panels and check the accented
+      entries land between their unaccented neighbours rather than after everything.`}
+    settings={{
+      colHeaders: ["Nazwa"],
+      rowHeaders: true,
+      locale: "pl-PL",
+      columnSorting: true,
+    }}
+    data={[["zebra"], ["ćma"], ["artysta"], ["łódka"], ["brzoza"]]}
+  />
+);
+
+export const LayoutDirectionRtl = () => (
+  <Compare
+    note={`\`layoutDirection: 'rtl'\` mirrors the whole layout: the row headers move to
+      the right, the columns run right to left, and the arrow keys swap with them so left
+      still means "towards the start". That last part is what usually gets missed — a
+      grid that mirrors the CSS and leaves the keyboard alone sends the cursor the wrong
+      way, and it is invisible in a screenshot.`}
+    settings={{
+      colHeaders: ["الاسم", "المبلغ"],
+      rowHeaders: true,
+      layoutDirection: "rtl",
+    }}
+    data={[
+      ["أحمد", "1200"],
+      ["سارة", "640"],
+    ]}
+  />
+);
+
+export const ImeSupportFastEdit = () => (
+  <Compare
+    note={`\`imeFastEdit\` decides whether the editor is focused before or after the first
+      keystroke. With it on, typing straight into a cell in Japanese or Korean should
+      compose properly rather than losing the first character to the grid's own key
+      handler — which is the bug the setting exists for, and one you can only find by
+      typing with an IME on.`}
+    settings={{
+      colHeaders: ["名前", "数量"],
+      rowHeaders: true,
+      imeFastEdit: true,
+    }}
+    data={[
+      ["田中", "3"],
+      ["佐藤", "5"],
+    ]}
+  />
+);

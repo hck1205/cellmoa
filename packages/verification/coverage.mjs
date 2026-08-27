@@ -58,14 +58,28 @@ for (const section of toc) {
   const entry = tree.get(`Verification/${section.section}`);
   const names = entry?.names ?? new Set();
   const wanted = section.pages.map((page) => titleCase(page.title));
-  const absent = wanted.filter((name) => !names.has(name));
-  const unexpected = [...names].filter((name) => !wanted.includes(name));
+  // A page may have more than one story. The guide's pages document several
+  // behaviours each — a filter page covers the menu, the conditions, the value
+  // list and the API — and one story per page can only ever show one of them.
+  // A story belongs to a page when its name starts with the page's, so
+  // `ColumnFilter`, `ColumnFilterMenu` and `ColumnFilterByValue` are all that
+  // page, and the page counts as covered if at least one of them exists.
+  const belongsTo = (name) =>
+    wanted
+      .filter((page) => name === page || name.startsWith(page))
+      .sort((a, b) => b.length - a.length)[0];
+  const absent = wanted.filter(
+    (page) => ![...names].some((name) => belongsTo(name) === page),
+  );
+  const unexpected = [...names].filter((name) => !belongsTo(name));
   missing += absent.length;
   extra += unexpected.length;
 
   const mark = absent.length || unexpected.length ? " <-" : "";
+  const covered = section.pages.length - absent.length;
   console.log(
-    `  ${section.section.padEnd(width)} ${String(names.size).padStart(3)}/${section.pages.length}${mark}`,
+    `  ${section.section.padEnd(width)} ${String(covered).padStart(3)}/${section.pages.length} pages` +
+      `  ${String(names.size).padStart(3)} stories${mark}`,
   );
   for (const name of absent) console.log(`      no story for ${name}`);
   for (const name of unexpected)
@@ -74,7 +88,12 @@ for (const section of toc) {
 
 const pages = toc.reduce((total, section) => total + section.pages.length, 0);
 const beyond = tree.get("Beyond the guide")?.names.size ?? 0;
-console.log(`\n${pages - missing}/${pages} pages in the guide have a story`);
+const told = [...tree]
+  .filter(([title]) => title.startsWith("Verification/"))
+  .reduce((total, [, entry]) => total + entry.names.size, 0);
+console.log(
+  `\n${pages - missing}/${pages} pages in the guide have a story, told by ${told} stories`,
+);
 console.log(
   `${beyond} stories about pages the sidebar does not list, kept under "Beyond the guide"`,
 );

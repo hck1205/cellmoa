@@ -336,3 +336,175 @@ export function RowPrePopulating() {
     />
   );
 }
+
+// --- more of what each page documents ---------------------------------------
+
+export const RowHeadersFromAFunction = () => (
+  <Compare
+    note={`\`rowHeaders\` takes true, an array, or a function of the visual index. The
+      function form is the one worth checking, because it is called on every render for
+      every visible row — so a grid that memoised the wrong thing shows stale labels
+      after a sort. These should read "row 1" downwards, and keep doing so after you
+      scroll.`}
+    settings={{
+      colHeaders: true,
+      rowHeaders: (index: number) => `row ${index + 1}`,
+    }}
+    data={block(8, 3)}
+  />
+);
+
+export const RowHeadersWidth = () => (
+  <Compare
+    note={`\`rowHeaderWidth\` fixes the header column's width. Long labels are the test:
+      at 140px both panels should show the whole word, and at the default they would
+      clip. A grid that accepts the number without applying it looks right until a label
+      is longer than the default, which is why these labels are long.`}
+    settings={{
+      colHeaders: true,
+      rowHeaders: ["Reconciliation", "Adjustments", "Provisions", "Total"],
+      rowHeaderWidth: 140,
+    }}
+    data={block(4, 3)}
+  />
+);
+
+export const RowHeightsPerRow = () => (
+  <Compare
+    note={`\`rowHeights\` as an array gives each row its own height and as a number gives
+      them all the same. The array here is shorter than the table, so the last rows
+      should fall back to the default rather than collapsing — the same fallback the
+      column widths story checks, and the same failure if it is missing.`}
+    settings={{ colHeaders: true, rowHeaders: true, rowHeights: [60, 24, 60] }}
+    data={block(5, 3)}
+  />
+);
+
+export const RowFreezingTopAndBottom = () => (
+  <Compare
+    height={260}
+    note={`\`fixedRowsTop\` pins rows to the top and \`fixedRowsBottom\` to the bottom.
+      Scroll each panel: two rows should stay above and one below, with the middle
+      sliding between them. The bottom one is the harder half — it has to be measured
+      from the end of the data rather than the start, so a grid that gets top right and
+      bottom wrong is measuring from the wrong edge.`}
+    settings={{
+      colHeaders: true,
+      rowHeaders: true,
+      height: 260,
+      fixedRowsTop: 2,
+      fixedRowsBottom: 1,
+    }}
+    data={block(30, 4)}
+  />
+);
+
+export const RowVirtualizationRenderAll = () => (
+  <Compare
+    height={240}
+    note={`\`renderAllRows: true\` puts every row in the DOM. Count \`tr\` elements: with
+      three hundred rows there should be three hundred, against the twenty or so the
+      default keeps. The setting exists for pages that print the grid or measure it from
+      outside, and the count is the whole of what it costs.`}
+    settings={{
+      colHeaders: true,
+      rowHeaders: true,
+      height: 240,
+      renderAllRows: true,
+    }}
+    data={block(300, 3)}
+  />
+);
+
+export const RowsSortingInitial = () => (
+  <Compare
+    note={`\`columnSorting.initialConfig\` sorts on load rather than on a click. Both
+      panels should come up already sorted by Amount descending, with the header showing
+      the indicator. What this catches that the click story cannot: a grid that wires
+      sorting to the header handler only sorts when clicked, and arrives here unsorted
+      while looking entirely correct.`}
+    settings={{
+      colHeaders: ["Item", "Amount"],
+      rowHeaders: true,
+      columnSorting: {
+        initialConfig: { column: 1, sortOrder: "desc" },
+        indicator: true,
+      },
+    }}
+    data={[
+      ["Rent", "1200"],
+      ["Cloud", "640"],
+      ["Travel", "180"],
+      ["Salaries", "8400"],
+    ]}
+  />
+);
+
+export const RowsSortingMultiColumn = () => (
+  <Compare
+    note={`\`multiColumnSorting\` sorts by more than one column at once: click Region,
+      then shift-click Amount, and the rows should order by region first and by amount
+      within each region. The indicators should show the order the columns were added,
+      because without that a reader cannot tell which sort is the tie-breaker.`}
+    settings={{
+      colHeaders: ["Region", "Amount"],
+      rowHeaders: true,
+      multiColumnSorting: { indicator: true },
+    }}
+    data={[
+      ["East", "30"],
+      ["West", "10"],
+      ["East", "10"],
+      ["West", "30"],
+      ["East", "20"],
+    ]}
+  />
+);
+
+export const RowsPaginationSizeList = () => (
+  <Compare
+    height={300}
+    note={`The pager's own controls: a page-size list, the counter, and the navigation.
+      Change the size and watch both the rows and the counter — a pager that redraws the
+      rows without updating the counter is the common half-wired case, and it reads as
+      correct until the numbers disagree.`}
+    settings={{
+      colHeaders: true,
+      rowHeaders: true,
+      height: 300,
+      pagination: {
+        pageSize: 5,
+        pageSizeList: [5, 10, "auto"],
+        showPageSize: true,
+        showCounter: true,
+        showNavigation: true,
+      },
+    }}
+    data={block(23, 3)}
+  />
+);
+
+export const RowPrePopulatingSpareRows = () => (
+  <Compare
+    note={`\`minSpareRows\` keeps empty rows at the bottom so there is always somewhere to
+      type. Type into the last row of either panel and another should appear beneath it.
+      The count is what to watch: the setting is a minimum, so after typing there should
+      still be two blank rows, not one.`}
+    settings={{ colHeaders: true, rowHeaders: true, minSpareRows: 2 }}
+    data={[
+      ["a", "b"],
+      ["c", "d"],
+    ]}
+  />
+);
+
+export const RowTrimmingHidesFromEverything = () => (
+  <Compare
+    note={`Trimming differs from hiding in what the rest of the grid can still see. A
+      hidden row is out of the view but still in the data; a trimmed row is out of both,
+      so \`countRows\` drops and a copy of the whole table leaves it out. Rows 2 and 4 are
+      trimmed here — check the row headers renumber on both sides rather than skipping.`}
+    settings={{ colHeaders: true, rowHeaders: true, trimRows: [1, 3] }}
+    data={block(6, 3)}
+  />
+);

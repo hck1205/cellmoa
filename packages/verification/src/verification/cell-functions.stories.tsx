@@ -266,3 +266,73 @@ export const CustomCells = () => (
     ]}
   />
 );
+
+// --- more of what each page documents ---------------------------------------
+
+export const CellValidatorAsync = () => (
+  <Compare
+    note={`A validator may answer later — the page's example is a server check — and the
+      grid has to keep the cell open until it does. Type into either panel and watch: the
+      cell should stay marked as pending rather than committing and then turning red,
+      because a value that is written before it is checked has already been read by
+      whatever was listening.`}
+    settings={
+      {
+        colHeaders: ["Code (must be AA-1234)"],
+        rowHeaders: true,
+        columns: [
+          {
+            validator: (value: unknown, callback: (valid: boolean) => void) => {
+              setTimeout(
+                () => callback(/^[A-Z]{2}-\d{4}$/.test(String(value ?? ""))),
+                150,
+              );
+            },
+          },
+        ],
+      } as never
+    }
+    data={[["AB-1234"], ["nope"]]}
+  />
+);
+
+export const CellValidatorAllowInvalid = () => (
+  <Compare
+    note={`\`allowInvalid: false\` is the difference between marking a bad value and
+      refusing it. The left column keeps what you typed and turns red; the right restores
+      what was there. Both are documented and they are not interchangeable: a form that
+      must not hold a bad value needs the second, and a sheet a person is still filling
+      in needs the first.`}
+    settings={{
+      colHeaders: ["marks it", "refuses it"],
+      rowHeaders: true,
+      columns: [
+        { type: "numeric", allowInvalid: true },
+        { type: "numeric", allowInvalid: false },
+      ],
+    }}
+    data={[
+      ["1", "1"],
+      ["2", "2"],
+    ]}
+  />
+);
+
+export const CellEditorDisabled = () => (
+  <Compare
+    note={`\`editor: false\` opens nothing while leaving the cell writable through the
+      API — different from \`readOnly\`, which refuses the write as well. Double-click
+      the first column in each panel and nothing should happen; the second should open.
+      A grid that maps \`editor: false\` onto \`readOnly\` passes every visual check and
+      then refuses a programmatic write it should have allowed.`}
+    settings={{
+      colHeaders: ["no editor", "ordinary"],
+      rowHeaders: true,
+      columns: [{ editor: false }, {}],
+    }}
+    data={[
+      ["try me", "try me"],
+      ["try me", "try me"],
+    ]}
+  />
+);

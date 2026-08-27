@@ -256,3 +256,78 @@ export const LayoutSlots = () => (
     }}
   />
 );
+
+// --- more of what each page documents ---------------------------------------
+
+export const ContextMenuFromAList = () => (
+  <Compare
+    note={`\`contextMenu\` as an array of keys is the short form, and the order of the
+      array is the order of the menu. Right-click in each panel and read down: insert
+      above, insert below, a separator, remove, undo, redo. A grid that keeps its own
+      order regardless of the array looks correct until the list is read in sequence,
+      which is why this one is deliberately not the default order.`}
+    settings={{
+      colHeaders: true,
+      rowHeaders: true,
+      contextMenu: [
+        "row_above",
+        "row_below",
+        "---------",
+        "remove_row",
+        "undo",
+        "redo",
+      ],
+    }}
+    data={block(4, 3)}
+  />
+);
+
+export const UndoAndRedoAcrossOperations = () => (
+  <Compare
+    note={`Undo has to reach further than an edit. Type into a cell, insert a row from the
+      context menu, sort a column, then press Ctrl+Z three times in each panel. Every one
+      of those should come back in reverse order — the structural change is the one that
+      usually is not recorded, and its absence shows as an undo that skips straight past
+      it to the edit before.`}
+    settings={{
+      colHeaders: true,
+      rowHeaders: true,
+      contextMenu: true,
+      columnSorting: true,
+      undo: true,
+    }}
+    data={block(5, 3)}
+  />
+);
+
+export const LoadingOverlayNested = () => (
+  <Compare
+    note={`The loading overlay counts rather than toggling, so three overlapping fetches
+      raise it once and lower it when the last one finishes. What to look at is the
+      cover: it should sit over the whole grid including any pager below, because a
+      control you can still click while the data is being replaced will ask for a page
+      nobody is waiting for.`}
+    settings={{
+      colHeaders: true,
+      rowHeaders: true,
+      loading: true,
+      pagination: { pageSize: 3 },
+    }}
+    data={block(9, 3)}
+  />
+);
+
+export const EmptyDataStateWithNoRows = () => (
+  <Compare
+    note={`With no rows, the overlay should cover the table and nothing else — not the
+      headers, which still say what the columns are, and not the page around it. This is
+      a pure layout claim and jsdom cannot answer it: it measures the overlay as zero and
+      passes whatever it is given.`}
+    settings={{
+      colHeaders: ["Item", "Amount"],
+      rowHeaders: true,
+      emptyDataState: true,
+    }}
+    data={[]}
+  />
+);

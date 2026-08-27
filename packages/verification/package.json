@@ -10,7 +10,8 @@
     "preview": "ladle preview",
     "check": "node check.mjs",
     "coverage": "node coverage.mjs",
-    "verify": "node coverage.mjs && npm run build && npm run check"
+    "verify": "node coverage.mjs && npm run build && npm run check",
+    "divergence": "node divergence.mjs"
   },
   "dependencies": {
     "@cellmoa/grid": "file:../grid",

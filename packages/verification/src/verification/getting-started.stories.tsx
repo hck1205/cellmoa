@@ -144,3 +144,77 @@ export const LicenseKey = () => (
     data={block(4, 4)}
   />
 );
+
+// --- more of what each page documents ---------------------------------------
+
+export const ConfigurationOptionsCascade = () => (
+  <Compare
+    note={`The cascade the page is about: grid, then column, then cell, each overriding
+      the one above. \`readOnly\` is true for the whole grid, false for the second
+      column, and true again for one cell inside it. So column two should be editable
+      except for its middle cell, and everything else locked. This is the single most
+      load-bearing rule in the configuration model, and a grid that resolves it in the
+      wrong order is wrong everywhere at once rather than in one place.`}
+    settings={{
+      colHeaders: ["locked by the grid", "unlocked by the column"],
+      rowHeaders: true,
+      readOnly: true,
+      columns: [{}, { readOnly: false }],
+      cell: [{ row: 1, col: 1, readOnly: true }],
+    }}
+    data={[
+      ["a", "editable"],
+      ["b", "locked again"],
+      ["c", "editable"],
+    ]}
+  />
+);
+
+export const GridSizeFixed = () => (
+  <Compare
+    height={200}
+    note={`\`width\` and \`height\` as numbers give the grid a fixed box and let it scroll
+      inside. With more rows than fit, both panels should show a vertical scrollbar and
+      stop at the stated height rather than growing. A grid that treats height as a
+      minimum looks fine with four rows and pushes the page down with forty.`}
+    settings={{ colHeaders: true, rowHeaders: true, width: 380, height: 200 }}
+    data={block(40, 4)}
+  />
+);
+
+export const GridSizeStretchAndOverflow = () => (
+  <Compare
+    height={200}
+    note={`\`width: '100%'\` follows the container, and \`preventOverflow: 'horizontal'\`
+      keeps the table from pushing the page sideways when the columns add up to more than
+      there is room for. Narrow the browser: the panel should scroll inside itself rather
+      than widening. This is the setting that decides whether a grid can be dropped into
+      a responsive layout without breaking it.`}
+    settings={{
+      colHeaders: true,
+      rowHeaders: true,
+      width: "100%",
+      height: 200,
+      colWidths: 140,
+      preventOverflow: "horizontal",
+    }}
+    data={block(8, 10)}
+  />
+);
+
+export const CustomIdClassAndStyleOnTheTable = () => (
+  <Compare
+    note={`\`className\` goes on the grid's own container and \`tableClassName\` on the
+      table inside it — two different elements, and the page is explicit about which is
+      which. Inspect both panels: the outer box should carry \`page-grid\` and the
+      \`<table>\` should carry \`page-table\`. A grid that puts both in one place is
+      indistinguishable until someone writes CSS against the inner one.`}
+    settings={{
+      colHeaders: true,
+      rowHeaders: true,
+      className: "page-grid",
+      tableClassName: "page-table",
+    }}
+    data={block(3, 3)}
+  />
+);

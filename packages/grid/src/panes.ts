@@ -137,6 +137,11 @@ export function drawPane(
   // Asked once for the whole pane: it is a setting, and reading it per cell
   // turns a settings lookup into part of the inner loop.
   const aria = model.ariaTags?.() !== false;
+  // The row-header column counts as a column for ARIA, so the data columns are
+  // numbered after it. Zero when there are no row headers.
+  const rowHeaderColumns = headerWidth > 0 ? 1 : 0;
+  // Header rows are rows: a data row's index counts past them.
+  const colHeaderRows = headerHeight > 0 ? model.colHeaderRows(area.firstCol, area.lastCol).length : 0;
 
   pane.body.replaceChildren();
   pane.table.style.position = 'absolute';
@@ -159,10 +164,11 @@ export function drawPane(
     tr.dataset.row = String(row);
     if (aria) {
       tr.setAttribute('role', 'row');
-      // One-based, and counted in the whole table rather than in the window
-      // being drawn: a screen reader announcing "row 1 of 12" while the user
-      // is at row 400 would be worse than saying nothing.
-      tr.setAttribute('aria-rowindex', String(row + 1));
+      // One-based, counted across the whole table rather than the window being
+      // drawn — a screen reader announcing "row 1 of 12" while the user is at
+      // row 400 would be worse than saying nothing — and counted past the
+      // header rows, which are rows too.
+      tr.setAttribute('aria-rowindex', String(row + 1 + colHeaderRows));
     }
     // Each pane draws its own slice, so the row is placed by its own offset
     // within that slice rather than by its index in the sheet.
@@ -174,6 +180,11 @@ export function drawPane(
       const th = createElement(document, 'th', CLASS.rowHeader);
       if (aria) {
         th.setAttribute('role', 'rowheader');
+        // The row-header column is column 1, so the data columns start at 2.
+        // Leaving it out of the numbering made a screen reader announce every
+        // cell one column to the left of where it is.
+        th.setAttribute('aria-colindex', '1');
+        th.setAttribute('scope', 'row');
       }
       th.style.width = `${headerWidth}px`;
       th.dataset.row = String(row);
@@ -192,7 +203,7 @@ export function drawPane(
       td.dataset.col = String(col);
       if (aria) {
         td.setAttribute('role', 'gridcell');
-        td.setAttribute('aria-colindex', String(col + 1));
+        td.setAttribute('aria-colindex', String(col + 1 + rowHeaderColumns));
       }
       model.renderCell({ row, col, td });
       tr.appendChild(td);
@@ -215,6 +226,7 @@ function drawColHeader(
   aria: boolean,
 ): void {
   const { cols, headerWidth, headerHeight } = metrics;
+  const rowHeaderColumns = headerWidth > 0 ? 1 : 0;
   const levels = model.colHeaderRows(area.firstCol, area.lastCol);
   levels.forEach((cells, level) => {
     const tr = createElement(document, 'tr', CLASS.header);
@@ -224,6 +236,11 @@ function drawColHeader(
     tr.dataset.level = String(level);
     if (aria) {
       tr.setAttribute('role', 'row');
+      // Header rows are rows: `aria-rowindex` is one-based across the whole
+      // table, headers included, so the first of them is 1 and the first row
+      // of data is one past the last header. Leaving it off here left a screen
+      // reader with a table whose rows all announced one lower than they are.
+      tr.setAttribute('aria-rowindex', String(level + 1));
     }
     if (area.rowHeader && headerWidth > 0) {
       const corner = createElement(document, 'th', CLASS.corner);
@@ -250,7 +267,8 @@ function drawColHeader(
       const th = createElement(document, 'th', CLASS.colHeader);
       if (aria) {
         th.setAttribute('role', 'columnheader');
-        th.setAttribute('aria-colindex', String(cell.col + 1));
+        th.setAttribute('aria-colindex', String(cell.col + 1 + rowHeaderColumns));
+        th.setAttribute('scope', 'col');
       }
       th.style.width = `${width}px`;
       th.dataset.col = String(cell.col);

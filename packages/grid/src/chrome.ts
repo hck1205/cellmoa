@@ -74,8 +74,14 @@ export class Chrome {
     }
     if (this.#model.ariaTags?.() !== false) {
       this.#root.setAttribute('role', 'grid');
-      this.#root.setAttribute('aria-rowcount', String(this.#model.rowCount()));
-      this.#root.setAttribute('aria-colcount', String(this.#model.colCount()));
+      // The counts have to agree with the indexes, and the indexes count the
+      // header row and the header column — they are rows and columns of the
+      // table. Counting one way here and the other way on the cells is how a
+      // screen reader ends up saying "row 3 of 4" about the last row.
+      const headerRows = this.#model.colHeaderRows?.(0, 0).length ?? 0;
+      const headerColumns = this.#model.rowHeaderWidth() > 0 ? 1 : 0;
+      this.#root.setAttribute('aria-rowcount', String(this.#model.rowCount() + headerRows));
+      this.#root.setAttribute('aria-colcount', String(this.#model.colCount() + headerColumns));
     } else {
       this.#root.removeAttribute('role');
       this.#root.removeAttribute('aria-rowcount');

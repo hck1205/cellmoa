@@ -56,3 +56,52 @@ export const BundleSize = () => (
     why="The page is about importing only what you use: `handsontable/base` plus `registerAllModules`, or individual plugin registrations. cellmoa has no modular entry points — `src/plugins/index.ts` registers every plugin as a side effect and the package declares no `sideEffects: false` — so the whole library is one indivisible bundle. There is nothing to put on screen; the gap is in the package, and it is recorded in the gap audit."
   />
 );
+
+// --- more of what each page documents ---------------------------------------
+
+export const BatchOperationsOneRender = () => (
+  <Compare
+    note={`\`batch\` holds the drawing until the work is done, so three writes cost one
+      render rather than three. There is nothing to see in a still picture — the point is
+      what did not happen — so the way to read this pair is to put a handler on
+      \`afterRender\` in the console and count. The visible half is that the grid does
+      not flicker through intermediate states on the way to the final one.`}
+    settings={{ colHeaders: true, rowHeaders: true }}
+    data={block(6, 4)}
+    afterMount={{
+      cellmoa: (grid) => {
+        grid.batch(() => {
+          grid.setDataAtCell(0, 0, "one");
+          grid.setDataAtCell(1, 0, "commit");
+          grid.setDataAtCell(2, 0, "one render");
+        });
+      },
+      handsontable: (hot) => {
+        hot.batch(() => {
+          hot.setDataAtCell(0, 0, "one");
+          hot.setDataAtCell(1, 0, "commit");
+          hot.setDataAtCell(2, 0, "one render");
+        });
+      },
+    }}
+  />
+);
+
+export const PerformanceViewportOffsets = () => (
+  <Compare
+    height={300}
+    note={`\`viewportRowRenderingOffset\` decides how far past the visible window the grid
+      draws, trading memory for a smoother scroll. Set high here. Scroll each panel fast
+      and watch the bottom edge: with a large offset there should be no blank band, and
+      the element count in the inspector should be correspondingly larger. That trade is
+      the whole of the page.`}
+    settings={{
+      colHeaders: true,
+      rowHeaders: true,
+      height: 300,
+      viewportRowRenderingOffset: 40,
+      viewportColumnRenderingOffset: 10,
+    }}
+    data={block(2000, 12)}
+  />
+);

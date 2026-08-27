@@ -408,3 +408,190 @@ export const HandsontableCellType = () => (
 /**
  * Several values in one cell.
  */
+
+// --- the options each type documents ----------------------------------------
+
+export const NumericCellTypeFormatting = () => (
+  <Compare
+    note={`\`numericFormat\` decides how a number is shown without changing what it is.
+      The reference spells it as a numbro pattern; cellmoa reads an Intl descriptor. Both
+      spellings are passed here, unchanged, which is why only the right panel formats —
+      see docs/known-defects.md. Click into a cell in either: the editor should show the
+      raw number, because a format is for reading and an editor is for changing.`}
+    settings={
+      {
+        colHeaders: ["as written", "formatted"],
+        rowHeaders: true,
+        columns: [
+          { type: "numeric" },
+          { type: "numeric", numericFormat: { pattern: "0,0.00" } },
+        ],
+      } as never
+    }
+    data={[
+      ["1234.5678", "1234.5678"],
+      ["-42", "-42"],
+    ]}
+  />
+);
+
+export const NumericCellTypeInvalid = () => (
+  <Compare
+    note={`\`allowInvalid: false\` sends a bad value back rather than storing it marked.
+      Type "abc" into either column and watch what happens: the left column should keep
+      the value and turn red, the right should refuse it and restore what was there. Both
+      behaviours are documented, and a grid that only has the first one silently accepts
+      text into a numeric column.`}
+    settings={{
+      colHeaders: ["allowInvalid: true", "allowInvalid: false"],
+      rowHeaders: true,
+      columns: [
+        { type: "numeric", allowInvalid: true },
+        { type: "numeric", allowInvalid: false },
+      ],
+    }}
+    data={[
+      ["10", "10"],
+      ["20", "20"],
+    ]}
+  />
+);
+
+export const CheckboxCellTypeTemplates = () => (
+  <Compare
+    note={`\`checkedTemplate\` and \`uncheckedTemplate\` say what the underlying value is
+      when the box is ticked. Here they are the strings "yes" and "no" rather than
+      booleans, which is what a column loaded from a CSV usually holds. Tick a box and
+      ask either grid for the cell: it should read "yes", not \`true\`. A grid that
+      accepts the templates for display and writes a boolean anyway corrupts the column
+      on the first click.`}
+    settings={{
+      colHeaders: ["In stock"],
+      rowHeaders: true,
+      columns: [
+        { type: "checkbox", checkedTemplate: "yes", uncheckedTemplate: "no" },
+      ],
+    }}
+    data={[["yes"], ["no"], ["yes"]]}
+  />
+);
+
+export const DropdownCellTypeStrict = () => (
+  <Compare
+    note={`A dropdown is an autocomplete that only accepts what is in the list, which is
+      \`strict: true\` plus \`filter: false\`. Type something not on the list into either
+      panel and it should be refused. The distinction is the whole of the difference
+      between this type and autocomplete, so a grid that treats them as one lets a typo
+      into a column that is supposed to be closed.`}
+    settings={{
+      colHeaders: ["Country"],
+      rowHeaders: true,
+      columns: [
+        { type: "dropdown", source: ["UK", "Japan", "Kenya", "Chile"] },
+      ],
+    }}
+    data={[["UK"], ["Japan"], [""]]}
+  />
+);
+
+export const AutocompleteCellTypeFiltering = () => (
+  <Compare
+    note={`Autocomplete filters the list as you type and, with \`strict: false\`, accepts
+      a value that is not on it. Type "Ke" into either panel: the list should narrow to
+      Kenya, and typing "Nowhere" should be kept rather than rejected. \`filter: false\`
+      would show the whole list while still matching — worth trying against the dropdown
+      story beside this one.`}
+    settings={{
+      colHeaders: ["Country"],
+      rowHeaders: true,
+      columns: [
+        {
+          type: "autocomplete",
+          source: ["UK", "Japan", "Kenya", "Chile"],
+          strict: false,
+        },
+      ],
+    }}
+    data={[["UK"], [""]]}
+  />
+);
+
+export const PasswordCellTypeMasking = () => (
+  <Compare
+    note={`\`hashSymbol\` and \`hashLength\` decide what the mask looks like: a fixed
+      number of a chosen character, so the length of the mask says nothing about the
+      length of the secret. Both panels should show exactly six bullets whatever the
+      value is. The other half of the type is that the value must not be copyable — select
+      a cell and copy, and the clipboard should not hold the password.`}
+    settings={{
+      colHeaders: ["Password"],
+      rowHeaders: true,
+      columns: [{ type: "password", hashSymbol: "•", hashLength: 6 }],
+    }}
+    data={[["short"], ["a much longer secret"]]}
+  />
+);
+
+export const DateCellTypeDefaultAndFormat = () => (
+  <Compare
+    note={`\`dateFormat\` and \`defaultDate\` — the reference's spellings, passed through
+      unchanged. Only the right panel formats, because cellmoa reads \`dateFormat\` as an
+      Intl descriptor rather than a moment pattern; the difference is recorded in
+      docs/known-defects.md and this is what it looks like. \`correctFormat\` is the
+      other half of the page: typing a date in another shape should be rewritten rather
+      than refused.`}
+    settings={
+      {
+        colHeaders: ["Sell date"],
+        rowHeaders: true,
+        columns: [
+          {
+            type: "date",
+            dateFormat: "YYYY-MM-DD",
+            defaultDate: "2026-01-01",
+            correctFormat: true,
+          },
+        ],
+      } as never
+    }
+    data={[["2026-03-04"], [""]]}
+  />
+);
+
+export const SelectCellTypeOptions = () => (
+  <Compare
+    note={`The select type uses the browser's own \`<select>\`, so its list is native and
+      its keyboard is the platform's rather than the grid's. Open it in both panels: the
+      options should match, and the closed cell should show the chosen value rather than
+      its index. This is the simplest of the list types and the one whose keyboard costs
+      the grid nothing, which is the reason the page recommends it.`}
+    settings={{
+      colHeaders: ["Status"],
+      rowHeaders: true,
+      columns: [
+        { type: "select", selectOptions: ["Pending", "Settled", "Refunded"] },
+      ],
+    }}
+    data={[["Pending"], ["Settled"]]}
+  />
+);
+
+export const TimeCellTypeFormat = () => (
+  <Compare
+    note={`\`timeFormat\` with \`correctFormat\` should rewrite a loosely typed time into
+      the column's shape — type "9:5" and it should become the format the column asks
+      for. As with the date type, the reference's format string is a moment pattern and
+      this library reads Intl options, so the two panels will not agree on the written
+      form even when they agree on the value.`}
+    settings={
+      {
+        colHeaders: ["Starts"],
+        rowHeaders: true,
+        columns: [
+          { type: "time", timeFormat: "h:mm:ss a", correctFormat: true },
+        ],
+      } as never
+    }
+    data={[["12:30:00 pm"], [""]]}
+  />
+);

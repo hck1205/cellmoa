@@ -194,3 +194,57 @@ same as prettier's output. A config that fails on 37 files is worse than none:
 it reads as an invitation to run `--write` and get the churn again.
 `packages/grid/.prettierignore` stops that mechanically instead.
 `packages/verification` is genuinely prettier-formatted and is left alone.
+
+## Two ARIA numbering defects, and a header row that was never drawn
+
+Found by writing a tool that compares the *text* the two panels put in their
+cells rather than only checking that both drew — `packages/verification/
+divergence.mjs`. The first run reported 153 of 214 stories differing, which was
+too many to be a coincidence and turned out to be one cause with three parts.
+
+**`aria-rowindex` did not count the header row.** The header `<tr>` carried no
+index at all, and the first data row said 1 where the reference says 2. The
+attribute is one-based across every row of the table, headers included, so a
+screen reader was announcing every row one lower than it is.
+
+**`aria-colindex` did not count the header column.** Same shape: the row-header
+`<th>` had no index and the first data cell claimed column 1. The reference
+gives the header column 1 and starts the data at 2.
+
+**`aria-rowcount` and `aria-colcount` were counted the other way**, so the
+totals disagreed with the indexes beside them — a four-row table would tell a
+screen reader "row 3 of 4" about its last row. Both now count the headers, and
+the row and column header cells carry `scope`.
+
+**A column that declares a `title` was not asking for a header row.**
+`getColHeader` had handled `columns: [{ title: 'ID' }]` correctly all along;
+`hasColHeaders` only ever looked at the `colHeaders` setting, so nothing asked
+for a header row and the titles were computed into nowhere. The guide's Column
+headers page configures exactly that shape, and our panel had been drawing no
+header at all against a reference that draws five. `colHeaders: false` still
+wins, because that is an instruction rather than an absence.
+
+## A column declared `type: 'text'` still loses its leading zeros
+
+    columns: [{ type: 'text' }]
+    data: [['004821'], ['000093']]
+
+draws `4821` and `93`. The reference draws them as written.
+
+The engine's `parse_input` decides what a loaded string becomes, and a string
+of digits becomes a number — which is right for a cell someone typed into and
+wrong for a column that has declared it holds text. A leading apostrophe forces
+text, but that is a convention for a person at a keyboard, not something a
+`data` array carries.
+
+The fix has a shape already: `Engine::apply_contents` writes literal contents
+without reinterpreting them, added for `cellmoa fill`. The load path would
+consult the column's `type` and use it for a text column instead of `set`. What
+makes it more than a one-liner is deciding the scope — a `text` column is
+clear, but `cells`/`cell` can set the type per cell, and the meta has to be
+resolved before the data is written rather than after.
+
+Found by `packages/verification/divergence.mjs`, which compares the values the
+two panels show. It is the same family as the `$1,200.00` note above and a
+worse case: there the column said nothing about its type, and here it says
+exactly what it is and is not listened to.
