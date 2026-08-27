@@ -1,19 +1,22 @@
 /**
- * The reference's own tooling, on its own website.
+ * AI Tools — the 3 pages the guide's
+ * sidebar lists under this heading, one story each, named as the sidebar
+ * names them.
  *
- * None of these is a grid feature. They are listed so a reader working through
- * the table of contents is not left wondering whether they were missed.
+ * src/guide-toc.json is that sidebar, and coverage.mjs checks this file
+ * against it, so a page the reference adds shows up as a failure here rather
+ * than as a gap nobody noticed.
  */
 
 import { Compare, NotAFeature, block } from "../Compare.js";
 
-export default { title: "Verification/AI tools" };
+export default { title: "Verification/AI Tools" };
 
-export const AiDocsAssistant = () => (
+export const SkillsForClaudeCode = () => (
   <NotAFeature
-    page="AI Docs Assistant"
-    path="ai-docs-assistant"
-    why="A chat box on the reference's documentation site."
+    page="Skills for Claude Code"
+    path="skills-for-claude-code"
+    why="A plugin the reference publishes for an editor. Not part of the library."
   />
 );
 
@@ -47,10 +50,10 @@ export const AiThemeBuilder = () => (
   />
 );
 
-export const SkillsForClaudeCode = () => (
+export const AiDocsAssistant = () => (
   <NotAFeature
-    page="Skills for Claude Code"
-    path="skills-for-claude-code"
-    why="A plugin the reference publishes for an editor. Not part of the library."
+    page="AI Docs Assistant"
+    path="ai-docs-assistant"
+    why="A chat box on the reference's documentation site."
   />
 );

@@ -1,35 +1,37 @@
 /**
- * How the grid looks, and how far a caller can move it.
+ * Styling — the 4 pages the guide's
+ * sidebar lists under this heading, one story each, named as the sidebar
+ * names them.
  *
- * A theme in either library is a bundle of CSS custom properties rather than a
- * stylesheet: the rules that lay the table out never change, only the values
- * do. That design is what makes the section measurable — you can count how many
- * of the reference's properties this stylesheet actually reads, and the answer
- * is the honest measure of how much of a theme survives the move.
- *
- * It is eleven. `ht-theme-main.css` defines 328 `--ht-*` custom properties;
- * `packages/grid/src/themes/themes.css` consumes `--ht-accent-color`,
- * `--ht-background-color`, `--ht-background-secondary-color`,
- * `--ht-border-color`, `--ht-border-radius`, `--ht-cell-horizontal-border-color`,
- * `--ht-cell-horizontal-padding`, `--ht-cell-vertical-border-color`,
- * `--ht-cell-vertical-padding`, `--ht-font-size` and `--ht-foreground-color`.
- * All eleven are real names the reference also uses, so those overrides carry;
- * the other 317 land on nothing. The customization story below makes that
- * visible with one property from each set.
- *
- * One harness note that shapes every story here: `Compare.tsx` hands
- * Handsontable `themeName: 'ht-theme-main'` after the shared settings, because
- * that is the only theme stylesheet this package imports. So a story cannot
- * move Handsontable off `main`, and the comparisons below all run inside it.
- *
- * The pages are in the order the guide's own sidebar lists them.
+ * src/guide-toc.json is that sidebar, and coverage.mjs checks this file
+ * against it, so a page the reference adds shows up as a failure here rather
+ * than as a gap nobody noticed.
  */
 
 import { Compare, block } from "../Compare.js";
+import type Handsontable from "handsontable";
 
 export default { title: "Verification/Styling" };
 
-/** The element the theme's class landed on, which is where an override has to go. */
+const colours = [
+  "yellow",
+  "red",
+  "orange and another colour",
+  "green",
+  "blue",
+  "gray",
+  "black",
+  "white",
+  "purple",
+  "lime",
+  "olive",
+  "cyan",
+];
+
+function row(id: string, sku: string, qty: string): string[] {
+  return Object.assign([id, sku, qty], { id, sku, qty });
+}
+
 function themed(root: HTMLElement): HTMLElement {
   if (/ht-theme-/.test(root.className)) {
     return root;

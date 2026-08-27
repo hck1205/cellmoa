@@ -1,113 +1,56 @@
 /**
- * Columns.
+ * Columns — the 10 pages the guide's
+ * sidebar lists under this heading, one story each, named as the sidebar
+ * names them.
  *
- * Eleven guide pages about the horizontal axis. Three of them — hiding,
- * freezing and virtualization — are the column-shaped twins of the row pages
- * and are read the same way, by watching the header strip rather than the
- * cells. The rest are about things only columns have: a header that is more
- * than one row deep, a summary written under a column, a width that stretches,
- * and a filter panel hanging off the header.
- *
- * Two pages have nothing to draw beside the reference, for different reasons.
- * `Column filter` is the largest single gap in this library: the plugin is 220
- * lines of API with no DOM at all, so there is no panel to open. `Column
- * moving` is a drag, and the move plugins here have no pointer handlers. One
- * page, `Column component`, is not about a grid at all — it is the React
- * wrapper's prop reference, and this library ships one package with no wrapper.
+ * src/guide-toc.json is that sidebar, and coverage.mjs checks this file
+ * against it, so a page the reference adds shows up as a failure here rather
+ * than as a gap nobody noticed.
  */
 
-import { Compare, NotAFeature, OnlyReference, block } from "../Compare.js";
+import { Compare, block } from "../Compare.js";
+import type Handsontable from "handsontable";
 
 export default { title: "Verification/Columns" };
 
 const coord = (row: number, col: number) => `${row}, ${col}`;
 
-const staff = [
-  ["Ana García", "Engineering", "Senior Engineer", "2021-04-12"],
-  ["James Okafor", "Marketing", "Product Manager", "2022-08-30"],
-  ["Li Wei", "Engineering", "Staff Engineer", "2019-02-18"],
-  ["Sofia Rossi", "Sales", "Account Executive", "2023-01-09"],
-  ["Diego Fernández", "Design", "UX Designer", "2020-11-23"],
-  ["Amara Singh", "Engineering", "Engineering Manager", "2018-06-05"],
-];
+function row(id: string, sku: string, qty: string): string[] {
+  return Object.assign([id, sku, qty], { id, sku, qty });
+}
 
-export function AddingAndRemovingColumns() {
+export function ColumnHeaders() {
   return (
     <Compare
       height={260}
       settings={{
         height: 260,
-        colHeaders: ["Name", "Department", "Title", "Hire date"],
         rowHeaders: true,
-        contextMenu: ["col_left", "col_right", "remove_col"],
-        minSpareCols: 1,
-      }}
-      data={staff}
-      note={`Both grids should carry one empty column to the right of Hire date, and a
-        right-click should offer exactly three items — insert left, insert right, remove —
-        because the context menu was given those keys and nothing else. Insert one and the
-        header labels should shift with the data rather than staying put, which is the
-        thing worth watching: a header array is positional, and a grid that inserts a
-        column into the data but not into the labels leaves every heading describing its
-        neighbour. The same operations are reachable as alter('insert_col_start') and
-        alter('remove_col'); both grids accept the v13 spellings and the pre-v13 ones.`}
-    />
-  );
-}
-
-export function ColumnFilter() {
-  return (
-    <Compare
-      height={320}
-      settings={{
-        height: 320,
-        colHeaders: ["Model", "Price", "Sell date", "In stock"],
-        rowHeaders: true,
-        filters: true,
-        dropdownMenu: true,
+        columnHeaderHeight: 50,
+        colWidths: [70, 140, 140, 120, 120],
+        columns: [
+          { title: "ID" },
+          { title: "Full name" },
+          { title: "Position" },
+          { title: "Country" },
+          { title: "Start date" },
+        ],
       }}
       data={[
-        ["Trail Helmet", "1298.14", "2025-08-31", "true"],
-        ["Windbreaker Jacket", "178.90", "2025-05-10", "false"],
-        ["Cycling Cap", "288.10", "2025-09-15", "true"],
-        ["HL Mountain Frame", "94.49", "2025-01-17", "false"],
-        ["Racing Socks", "430.38", "2025-05-10", "true"],
-        ["Aero Bottle", "1571.13", "2025-05-24", "true"],
+        ["1", "Ana García", "Product Manager", "Spain", "2022-03-14"],
+        ["2", "James Okafor", "Senior Engineer", "Nigeria", "2021-07-02"],
+        ["3", "Li Wei", "Data Analyst", "China", "2023-01-19"],
+        ["4", "Sofia Rossi", "UX Designer", "Italy", "2020-11-30"],
+        ["5", "Mateo Fernández", "Engineering Lead", "Argentina", "2019-05-08"],
       ]}
-      note={`Open the arrow on a header on the right and a filter menu appears: a condition
-        list, a value list with checkboxes, an operator choice and an action bar. Open the
-        same header on the left and nothing opens — that is the finding, and it is worth
-        looking at rather than reading, which is why both grids are here. The filters plugin
-        is API only: filter(), addCondition() and clearConditions() all work and change what
-        the grid shows, but none of them has a menu attached, so the five documented menu
-        keys have nothing to be keys of. Everything else about the two panels should match.`}
-    />
-  );
-}
-
-export function ColumnFreezing() {
-  return (
-    <Compare
-      height={320}
-      settings={{
-        height: 320,
-        width: "100%",
-        colWidths: 100,
-        rowHeaders: true,
-        colHeaders: true,
-        fixedColumnsStart: 2,
-        manualColumnFreeze: true,
-        contextMenu: true,
-      }}
-      data={block(40, 30, coord)}
-      note={`Scroll sideways. The first two columns must hold their place against the row
-        headers while the rest move, and the numbers in them must stay 0 and 1 — a frozen
-        pane that keeps drawing but reads a shifted column index is the failure that looks
-        like success. Then right-click a header further right and freeze it: the column
-        should move to the end of the frozen block rather than being duplicated there,
-        because manualColumnFreeze reorders the index map and raises fixedColumnsStart
-        rather than copying anything. The older spelling fixedColumnsLeft is accepted by
-        both and resolves to the same setting.`}
+      note={`There is no colHeaders setting here at all: the labels come from the title
+        property inside columns, which is the third of the page's four routes to a heading
+        and the one that goes through the settings cascade rather than through a top-level
+        array. Both header strips should read ID through Start date and be 50 pixels tall.
+        A grid that fell back to A, B, C, D, E is resolving the header from the global
+        layer and never consulting the column layer — which would also mean type, renderer
+        and readOnly declared the same way are being missed, so the interesting failure is
+        much larger than a wrong label.`}
     />
   );
 }
@@ -152,42 +95,6 @@ export function ColumnGroups() {
         collapsed nothing at all, so a left-hand grid with no buttons means exactly that.
         Two properties from the same page, visibleWhen and columnDropMode, are not read
         here and are left out rather than shown not working.`}
-    />
-  );
-}
-
-export function ColumnHeaders() {
-  return (
-    <Compare
-      height={260}
-      settings={{
-        height: 260,
-        rowHeaders: true,
-        columnHeaderHeight: 50,
-        colWidths: [70, 140, 140, 120, 120],
-        columns: [
-          { title: "ID" },
-          { title: "Full name" },
-          { title: "Position" },
-          { title: "Country" },
-          { title: "Start date" },
-        ],
-      }}
-      data={[
-        ["1", "Ana García", "Product Manager", "Spain", "2022-03-14"],
-        ["2", "James Okafor", "Senior Engineer", "Nigeria", "2021-07-02"],
-        ["3", "Li Wei", "Data Analyst", "China", "2023-01-19"],
-        ["4", "Sofia Rossi", "UX Designer", "Italy", "2020-11-30"],
-        ["5", "Mateo Fernández", "Engineering Lead", "Argentina", "2019-05-08"],
-      ]}
-      note={`There is no colHeaders setting here at all: the labels come from the title
-        property inside columns, which is the third of the page's four routes to a heading
-        and the one that goes through the settings cascade rather than through a top-level
-        array. Both header strips should read ID through Start date and be 50 pixels tall.
-        A grid that fell back to A, B, C, D, E is resolving the header from the global
-        layer and never consulting the column layer — which would also mean type, renderer
-        and readOnly declared the same way are being missed, so the interesting failure is
-        much larger than a wrong label.`}
     />
   );
 }
@@ -237,6 +144,61 @@ export function ColumnMoving() {
         The page also documents what moving does to the data — nothing; the order lives in
         the index map and getSourceData() still returns the original sequence — and that
         part is true of both.`}
+    />
+  );
+}
+
+export function ColumnFreezing() {
+  return (
+    <Compare
+      height={320}
+      settings={{
+        height: 320,
+        width: "100%",
+        colWidths: 100,
+        rowHeaders: true,
+        colHeaders: true,
+        fixedColumnsStart: 2,
+        manualColumnFreeze: true,
+        contextMenu: true,
+      }}
+      data={block(40, 30, coord)}
+      note={`Scroll sideways. The first two columns must hold their place against the row
+        headers while the rest move, and the numbers in them must stay 0 and 1 — a frozen
+        pane that keeps drawing but reads a shifted column index is the failure that looks
+        like success. Then right-click a header further right and freeze it: the column
+        should move to the end of the frozen block rather than being duplicated there,
+        because manualColumnFreeze reorders the index map and raises fixedColumnsStart
+        rather than copying anything. The older spelling fixedColumnsLeft is accepted by
+        both and resolves to the same setting.`}
+    />
+  );
+}
+
+export function ColumnWidths() {
+  return (
+    <Compare
+      height={260}
+      settings={{
+        height: 260,
+        width: "100%",
+        colHeaders: true,
+        rowHeaders: true,
+        colWidths: [50, 100, 200, 400],
+        stretchH: "last",
+        manualColumnResize: true,
+      }}
+      data={block(5, 4)}
+      note={`The first three columns should be 50, 100 and 200 pixels wide in both, and the
+        fourth should absorb whatever space is left over rather than sitting at its
+        declared 400. That is the interesting part: stretchH computes the stretch from the
+        declared widths, not from the widths it has already produced, so a grid that
+        measured its own output would grow the last column a little more on every render
+        and the panel would drift wider as you resize the window. Widen the browser and
+        watch whether the first three columns hold their sizes. The page's other half,
+        dragging the border between two column headers, is not demonstrable on the left:
+        manualColumnResize accepts an array and drives the same sizes through the API, but
+        the plugin has no pointer listeners, so no drag handle and no double-click autofit.`}
     />
   );
 }
@@ -336,59 +298,52 @@ export function ColumnVirtualization() {
   );
 }
 
-export function ColumnWidths() {
-  return (
-    <Compare
-      height={260}
-      settings={{
-        height: 260,
-        width: "100%",
-        colHeaders: true,
-        rowHeaders: true,
-        colWidths: [50, 100, 200, 400],
-        stretchH: "last",
-        manualColumnResize: true,
-      }}
-      data={block(5, 4)}
-      note={`The first three columns should be 50, 100 and 200 pixels wide in both, and the
-        fourth should absorb whatever space is left over rather than sitting at its
-        declared 400. That is the interesting part: stretchH computes the stretch from the
-        declared widths, not from the widths it has already produced, so a grid that
-        measured its own output would grow the last column a little more on every render
-        and the panel would drift wider as you resize the window. Widen the browser and
-        watch whether the first three columns hold their sizes. The page's other half,
-        dragging the border between two column headers, is not demonstrable on the left:
-        manualColumnResize accepts an array and drives the same sizes through the API, but
-        the plugin has no pointer listeners, so no drag handle and no double-click autofit.`}
-    />
-  );
-}
+export const ColumnMenu = () => (
+  <Compare
+    note="Both grids draw a button in every column header; click one in each. The menu that opens is the same widget as the context menu, so the shared items should match what the previous story showed. The difference to look for is underneath: `filters: true` is set here, and Handsontable answers by putting the whole filtering interface into the column menu — a condition select, a value list with checkboxes, and an OK/Cancel bar, which are the documented `filter_by_condition`, `filter_by_value` and `filter_action_bar` items. cellmoa's filter plugin is 220 lines of API with no DOM at all: none of those five keys exists in its source, so its column menu opens without them. Check the button itself too. cellmoa renders a bare `▾` with no accessible name, and Shift+Alt+Down from a cell and Ctrl+Enter from a focused header — the two shortcuts this page documents — are unbound."
+    settings={{
+      colHeaders: ["Region", "Owner", "Stage", "Value"],
+      rowHeaders: true,
+      dropdownMenu: true,
+      filters: true,
+    }}
+    data={[
+      ["North", "Ada", "Won", "1200"],
+      ["South", "Grace", "Open", "800"],
+      ["North", "Ada", "Open", "450"],
+      ["East", "Alan", "Lost", "90"],
+      ["South", "Grace", "Won", "2300"],
+    ]}
+    height={300}
+  />
+);
 
-export function ColumnComponent() {
+export function ColumnFilter() {
   return (
     <Compare
-      note={`The page documents HotColumn, a React component in @handsontable/react-wrapper:
-        declare a column as JSX and pass a React component as its renderer or editor. There
-        is no wrapper here, so the component form is genuinely absent. What the component
-        configures is not: every prop it takes is a key of the columns option, and both
-        grids are given the same one below — a width, a read-only column, a type, a class.
-        The two panels should be identical. The gap is the authoring style, not the
-        capability, and the way to see that is to have the configured result in front of
-        you rather than a sentence about it.`}
+      height={320}
       settings={{
-        colHeaders: ["Locked", "Amount", "Done", "Wide"],
+        height: 320,
+        colHeaders: ["Model", "Price", "Sell date", "In stock"],
         rowHeaders: true,
-        columns: [
-          { readOnly: true },
-          { type: "numeric" },
-          { type: "checkbox" },
-          { width: 180, className: "htRight" },
-        ],
+        filters: true,
+        dropdownMenu: true,
       }}
       data={[
-        ["locked", "1200", "true", "right aligned"],
-        ["locked", "84", "false", "right aligned"],
+        ["Trail Helmet", "1298.14", "2025-08-31", "true"],
+        ["Windbreaker Jacket", "178.90", "2025-05-10", "false"],
+        ["Cycling Cap", "288.10", "2025-09-15", "true"],
+        ["HL Mountain Frame", "94.49", "2025-01-17", "false"],
+        ["Racing Socks", "430.38", "2025-05-10", "true"],
+        ["Aero Bottle", "1571.13", "2025-05-24", "true"],
       ]}
+      note={`Open the arrow on a header on the right and a filter menu appears: a condition
+        list, a value list with checkboxes, an operator choice and an action bar. Open the
+        same header on the left and nothing opens — that is the finding, and it is worth
+        looking at rather than reading, which is why both grids are here. The filters plugin
+        is API only: filter(), addCondition() and clearConditions() all work and change what
+        the grid shows, but none of them has a menu attached, so the five documented menu
+        keys have nothing to be keys of. Everything else about the two panels should match.`}
     />
   );
 }

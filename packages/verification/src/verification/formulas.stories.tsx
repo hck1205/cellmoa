@@ -1,19 +1,21 @@
 /**
- * Two pages, and the largest architectural difference between the libraries.
+ * Formulas — the 2 pages the guide's
+ * sidebar lists under this heading, one story each, named as the sidebar
+ * names them.
  *
- * Handsontable does not calculate. It hands cells to HyperFormula, a separate
- * package you install and license yourself, and draws what comes back.
- * cellmoa's engine is not a plugin and cannot be switched off: the workbook is
- * the engine, formulas are first class, and `formulas: false` says so on the
- * console rather than pretending to disable anything. That divergence is
- * already argued in `docs/handsontable-parity.md`, so the thing to check here
- * is not the architecture but the arithmetic — both are claiming to be Excel,
- * and only one of them can be wrong about `=ROUND(2.5, 0)`.
+ * src/guide-toc.json is that sidebar, and coverage.mjs checks this file
+ * against it, so a page the reference adds shows up as a failure here rather
+ * than as a gap nobody noticed.
  */
 
 import { Compare } from "../Compare.js";
+import type Handsontable from "handsontable";
 
 export default { title: "Verification/Formulas" };
+
+function row(id: string, sku: string, qty: string): string[] {
+  return Object.assign([id, sku, qty], { id, sku, qty });
+}
 
 export const Installation = () => (
   <Compare

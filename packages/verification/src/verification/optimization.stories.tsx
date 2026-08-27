@@ -1,14 +1,20 @@
 /**
- * Making a large grid fast, and a bundle small.
+ * Optimization — the 3 pages the guide's
+ * sidebar lists under this heading, one story each, named as the sidebar
+ * names them.
  *
- * Two of these three are about what is in the DOM while you scroll, which is a
- * question only a browser answers. The third is about what is in the bundle,
- * which no grid can show you — and where cellmoa has nothing at all.
+ * src/guide-toc.json is that sidebar, and coverage.mjs checks this file
+ * against it, so a page the reference adds shows up as a failure here rather
+ * than as a gap nobody noticed.
  */
 
 import { Compare, NotAFeature, block } from "../Compare.js";
 
 export default { title: "Verification/Optimization" };
+
+function row(id: string, sku: string, qty: string): string[] {
+  return Object.assign([id, sku, qty], { id, sku, qty });
+}
 
 export const BatchOperations = () => (
   <Compare

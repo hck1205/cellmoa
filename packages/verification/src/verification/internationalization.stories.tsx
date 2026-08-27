@@ -1,31 +1,21 @@
 /**
- * The grid in a language that is not English, a locale that is not American,
- * a direction that is not left-to-right, and an input method that is not a
- * keyboard.
+ * Internationalization — the 4 pages the guide's
+ * sidebar lists under this heading, one story each, named as the sidebar
+ * names them.
  *
- * Three of the four are pure layout and can only be judged on screen: a menu
- * whose translated labels overflow their box, a grid that mirrors its columns
- * but not its scrollbar, an editor that opens on the wrong side of a cell.
- * The fourth needs a person with an IME switched on, and the story says so
- * rather than pretending otherwise.
- *
- * Handsontable's full bundle registers every plugin but no language, so each
- * story that names one hands it the dictionary first. cellmoa carries all 21
- * in `i18n/dictionaries.ts` and needs no equivalent — the same 21 language
- * codes, with keys extracted from Handsontable's own language files and any
- * gap filled from `en-US` rather than left blank.
- *
- * The pages are in the order the guide's own sidebar lists them.
+ * src/guide-toc.json is that sidebar, and coverage.mjs checks this file
+ * against it, so a page the reference adds shows up as a failure here rather
+ * than as a gap nobody noticed.
  */
 
-import { registerLanguageDictionary, arAR, deDE } from "handsontable/i18n";
-
 import { Compare, block } from "../Compare.js";
+import type Handsontable from "handsontable";
 
 export default { title: "Verification/Internationalization" };
 
-registerLanguageDictionary(deDE);
-registerLanguageDictionary(arAR);
+function row(id: string, sku: string, qty: string): string[] {
+  return Object.assign([id, sku, qty], { id, sku, qty });
+}
 
 export const Language = () => (
   <Compare

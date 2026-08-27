@@ -1,35 +1,53 @@
 /**
- * Cell functions: the renderer, the editor and the validator, taken one at a
- * time.
+ * Cell functions — the 5 pages the guide's
+ * sidebar lists under this heading, one story each, named as the sidebar
+ * names them.
  *
- * A cell type is a bundle of these three; this section is about setting them
- * separately, which is where the two libraries stop agreeing. The names and
- * the cascade match — `renderer`, `editor`, `validator`, resolved cell over
- * column over grid — but the *shapes* do not. The reference calls a renderer
- * with seven positional arguments and this grid calls it with one context
- * object; the reference's editor is a class extending `BaseEditor` and this
- * grid's is a function returning an editor instance. So a configuration that
- * names a built-in function by its alias ports unchanged, and one that supplies
- * its own does not port at all. Every story below is built on the part that
- * ports, with the part that does not stated in the note.
+ * src/guide-toc.json is that sidebar, and coverage.mjs checks this file
+ * against it, so a page the reference adds shows up as a failure here rather
+ * than as a gap nobody noticed.
  */
 
-import { Compare } from "../Compare.js";
+import { Compare, block } from "../Compare.js";
+import type Handsontable from "handsontable";
+
+export default { title: "Verification/Cell functions" };
+
+const heat = bothWays((td, value) => {
+  const number = Number(value);
+  td.textContent = value;
+  td.style.textAlign = "right";
+  td.style.background = "";
+  if (Number.isFinite(number)) {
+    const ratio = Math.min(Math.max(number / 100, 0), 1);
+    td.style.background = `rgb(${Math.round(230 + 25 * ratio)}, ${Math.round(
+      245 - 60 * ratio,
+    )}, ${Math.round(230 - 60 * ratio)})`;
+  }
+});
 
 /**
- * One renderer, answering to both calling conventions.
+ * A validator written to both calling conventions.
  *
- * The reference hands a renderer `(instance, td, row, col, prop, value,
- * cellProperties)`; this grid hands it a single `{ row, col, td, cell, meta }`.
- * Neither shape is wrong and neither is readable by the other, so a renderer
- * that is to run in both panels has to look at what it was given and pick the
- * `td` and the value out of it. That is the cost of the divergence, written
- * out rather than described.
- *
- * The return type is `string` because `renderer` is declared as the alias of a
- * registered renderer; a function is accepted at run time by both, and the
- * cast is what the type cannot say.
+ * The reference calls `validator(value, callback)` and reads the answer from
+ * the callback; this grid calls `validator(value, meta)` and reads the returned
+ * value. Answering both ways at once costs one line, and unlike the renderer
+ * the two conventions do not collide — a validator that both calls its second
+ * argument when it is callable and returns the verdict satisfies each of them.
  */
+
+function looksLikeAnIp(value: unknown, second: unknown): boolean {
+  const valid = /^(\d{1,3}\.){3}\d{1,3}$/.test(String(value ?? ""));
+  if (typeof second === "function") {
+    (second as (ok: boolean) => void)(valid);
+  }
+  return valid;
+}
+
+function row(id: string, sku: string, qty: string): string[] {
+  return Object.assign([id, sku, qty], { id, sku, qty });
+}
+
 function bothWays(
   paint: (td: HTMLTableCellElement, value: string) => void,
 ): string {
@@ -61,70 +79,7 @@ function bothWays(
 }
 
 /** A green-to-red wash over a percentage, drawn at render time. */
-const heat = bothWays((td, value) => {
-  const number = Number(value);
-  td.textContent = value;
-  td.style.textAlign = "right";
-  td.style.background = "";
-  if (Number.isFinite(number)) {
-    const ratio = Math.min(Math.max(number / 100, 0), 1);
-    td.style.background = `rgb(${Math.round(230 + 25 * ratio)}, ${Math.round(
-      245 - 60 * ratio,
-    )}, ${Math.round(230 - 60 * ratio)})`;
-  }
-});
 
-/**
- * A validator written to both calling conventions.
- *
- * The reference calls `validator(value, callback)` and reads the answer from
- * the callback; this grid calls `validator(value, meta)` and reads the returned
- * value. Answering both ways at once costs one line, and unlike the renderer
- * the two conventions do not collide — a validator that both calls its second
- * argument when it is callable and returns the verdict satisfies each of them.
- */
-function looksLikeAnIp(value: unknown, second: unknown): boolean {
-  const valid = /^(\d{1,3}\.){3}\d{1,3}$/.test(String(value ?? ""));
-  if (typeof second === "function") {
-    (second as (ok: boolean) => void)(valid);
-  }
-  return valid;
-}
-
-export default { title: "Verification/Cell functions" };
-
-/**
- * Choosing an editor without choosing a type.
- */
-export const CellEditor = () => (
-  <Compare
-    settings={{
-      colHeaders: [
-        "numeric, editor: text",
-        "text, editor: password",
-        "editor: false",
-        "readOnly: true",
-      ],
-      rowHeaders: true,
-      columns: [
-        { type: "numeric", editor: "text" },
-        { type: "text", editor: "password" },
-        { editor: false },
-        { readOnly: true },
-      ],
-    }}
-    data={[
-      ["1499", "hunter2", "not editable", "read only"],
-      ["29.99", "correct horse", "not editable", "read only"],
-      ["54.5", "battery staple", "not editable", "read only"],
-    ]}
-    note="Every built-in editor has an alias, and an alias is the one form of this setting that ports between the two libraries. The first column keeps the numeric renderer and validator and edits through the plain text editor; the second is a text column whose editor masks — the value is drawn in the clear and typed in the dark, which is only possible because the three functions are independent. Try to open the third and fourth: editor: false and readOnly: true both refuse the editor, and the reference's page draws the distinction between them — only readOnly adds the htDimmed class and only readOnly blocks paste and fill. Check that the fourth column is visibly dimmed in both and the third is not. What does not port is a custom editor: the reference wants a class extending BaseEditor, this grid wants a function returning an editor instance, and the lifecycle is the same while the shape is not. This grid also registers no checkbox editor at all, because a checkbox is toggled rather than typed into."
-  />
-);
-
-/**
- * The three functions, and the four layers they are resolved through.
- */
 export const CellFunctions = () => (
   <Compare
     settings={{
@@ -165,6 +120,7 @@ export const CellFunctions = () => (
 /**
  * What a renderer is allowed to do to a cell.
  */
+
 export const CellRenderer = () => (
   <Compare
     settings={{
@@ -190,6 +146,37 @@ export const CellRenderer = () => (
 /**
  * Rejecting a value, and the two independent things that happen next.
  */
+
+export const CellEditor = () => (
+  <Compare
+    settings={{
+      colHeaders: [
+        "numeric, editor: text",
+        "text, editor: password",
+        "editor: false",
+        "readOnly: true",
+      ],
+      rowHeaders: true,
+      columns: [
+        { type: "numeric", editor: "text" },
+        { type: "text", editor: "password" },
+        { editor: false },
+        { readOnly: true },
+      ],
+    }}
+    data={[
+      ["1499", "hunter2", "not editable", "read only"],
+      ["29.99", "correct horse", "not editable", "read only"],
+      ["54.5", "battery staple", "not editable", "read only"],
+    ]}
+    note="Every built-in editor has an alias, and an alias is the one form of this setting that ports between the two libraries. The first column keeps the numeric renderer and validator and edits through the plain text editor; the second is a text column whose editor masks — the value is drawn in the clear and typed in the dark, which is only possible because the three functions are independent. Try to open the third and fourth: editor: false and readOnly: true both refuse the editor, and the reference's page draws the distinction between them — only readOnly adds the htDimmed class and only readOnly blocks paste and fill. Check that the fourth column is visibly dimmed in both and the third is not. What does not port is a custom editor: the reference wants a class extending BaseEditor, this grid wants a function returning an editor instance, and the lifecycle is the same while the shape is not. This grid also registers no checkbox editor at all, because a checkbox is toggled rather than typed into."
+  />
+);
+
+/**
+ * The three functions, and the four layers they are resolved through.
+ */
+
 export const CellValidator = () => (
   <Compare
     settings={{
@@ -219,6 +206,7 @@ export const CellValidator = () => (
 /**
  * The declarative cell-definition page, which is a wrapper page.
  */
+
 export const CustomCells = () => (
   <Compare
     note={`The page is written around the framework wrappers — React's EditorComponent and

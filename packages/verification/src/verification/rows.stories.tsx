@@ -1,19 +1,11 @@
 /**
- * Rows.
+ * Rows — the 11 pages the guide's
+ * sidebar lists under this heading, one story each, named as the sidebar
+ * names them.
  *
- * Eleven guide pages about the vertical axis: which rows are on screen, in
- * what order, how tall, and how many at a time. Almost all of it is index
- * work — hiding, trimming, freezing, paging and sorting each take rows out of
- * the visual space or reorder it without touching a single value — so the
- * thing to look at is nearly always the row headers. If the two grids disagree
- * about which numbers appear beside which values, they disagree about the
- * index maps, and every feature built on those maps is affected.
- *
- * Two pages have nothing on our side to put beside the reference. `Row moving`
- * is a drag, and `manualRowMove` here has no pointer handlers at all — it is
- * `moveRows()` and nothing else. `Row parent-child` reads a `__children`
- * property out of the data source, and this library describes nesting with a
- * separate tree instead.
+ * src/guide-toc.json is that sidebar, and coverage.mjs checks this file
+ * against it, so a page the reference adds shows up as a failure here rather
+ * than as a gap nobody noticed.
  */
 
 import { Compare, block } from "../Compare.js";
@@ -21,8 +13,6 @@ import { Compare, block } from "../Compare.js";
 export default { title: "Verification/Rows" };
 
 const coord = (row: number, col: number) => `${row}, ${col}`;
-
-const months = ["January", "February", "March", "April", "May", "June"];
 
 const finance = [
   ["42000", "31000", "11000"],
@@ -32,6 +22,8 @@ const finance = [
   ["54800", "38900", "15900"],
   ["57300", "40100", "17200"],
 ];
+
+const months = ["January", "February", "March", "April", "May", "June"];
 
 const products = [
   ["Trail Helmet", "1298.14", "2025-08-31", "true"],
@@ -44,30 +36,8 @@ const products = [
   ["Speed Gloves", "635.13", "2025-11-17", "true"],
 ];
 
-export function RowFreezing() {
-  return (
-    <Compare
-      height={320}
-      settings={{
-        height: 320,
-        width: "100%",
-        colWidths: 100,
-        rowHeaders: true,
-        colHeaders: true,
-        fixedRowsTop: 2,
-        fixedRowsBottom: 1,
-      }}
-      data={block(60, 12, coord)}
-      note={`Scroll the body downwards in both panels. Rows 1 and 2 must stay under the
-        column header and row 60 must stay on the floor, keeping their own row-header
-        numbers, while everything between them moves. Freezing is drawn by splitting the
-        table into panes rather than by pinning elements, so what would count as a
-        difference is a frozen row that drifts with the body, a frozen row that shows
-        values from the wrong physical row, or a visible seam where a pane meets the
-        scrolling middle — each of those means one pane is being handed the wrong index
-        range, not that the setting was ignored.`}
-    />
-  );
+function row(id: string, sku: string, qty: string): string[] {
+  return Object.assign([id, sku, qty], { id, sku, qty });
 }
 
 export function RowHeaders() {
@@ -92,27 +62,42 @@ export function RowHeaders() {
   );
 }
 
-export function RowHeights() {
+export function RowParentChild() {
   return (
     <Compare
-      height={280}
+      height={320}
       settings={{
-        height: 280,
-        width: "100%",
-        colHeaders: true,
+        height: 320,
         rowHeaders: true,
-        minRowHeights: [60, 28, 44, 28, 60],
-        manualRowResize: true,
+        colHeaders: ["Category", "Nominee"],
+        contextMenu: true,
+        nestedRows: true,
+        columns: [{ data: "category" }, { data: "nominee" }],
+        data: [
+          {
+            category: "Best Rock Performance",
+            nominee: "",
+            __children: [
+              { category: "", nominee: "Twenty One Pilots" },
+              { category: "", nominee: "Coldplay" },
+            ],
+          },
+          {
+            category: "Best Metal Performance",
+            nominee: "",
+            __children: [
+              { category: "", nominee: "August Burns Red" },
+              { category: "", nominee: "Ghost" },
+            ],
+          },
+        ],
       }}
-      data={block(5, 5)}
-      note={`Rows 1, 3 and 5 should be visibly taller than rows 2 and 4, by the same
-        amounts on both sides. Despite the name, minRowHeights is the guide's current
-        spelling for per-row heights and not a floor, so a grid that read it as a minimum
-        and then measured content would draw five equal rows — that is what a difference
-        here would mean. The page's other half, dragging the border between two row
-        headers, cannot be shown: manualRowResize is accepted and drives the same sizes
-        through the API, but the plugin registers no pointer listeners, so no drag handle
-        appears on the left. That gap is recorded, not new.`}
+      note={`The same nested data on both sides. The tree should draw the same: parent rows
+        with a collapse arrow, children indented beneath. What to check is the context menu,
+        which the reference fills with the four nesting entries — insert child, detach from
+        parent, and the two row-insert entries that respect the tree — and which here has
+        the ordinary row entries only, so a child cannot be created by hand. Collapsing and
+        expanding work on both.`}
     />
   );
 }
@@ -170,89 +155,53 @@ export function RowMoving() {
   );
 }
 
-export function RowParentChild() {
+export function RowFreezing() {
   return (
     <Compare
       height={320}
       settings={{
         height: 320,
+        width: "100%",
+        colWidths: 100,
         rowHeaders: true,
-        colHeaders: ["Category", "Nominee"],
-        contextMenu: true,
-        nestedRows: true,
-        columns: [{ data: "category" }, { data: "nominee" }],
-        data: [
-          {
-            category: "Best Rock Performance",
-            nominee: "",
-            __children: [
-              { category: "", nominee: "Twenty One Pilots" },
-              { category: "", nominee: "Coldplay" },
-            ],
-          },
-          {
-            category: "Best Metal Performance",
-            nominee: "",
-            __children: [
-              { category: "", nominee: "August Burns Red" },
-              { category: "", nominee: "Ghost" },
-            ],
-          },
-        ],
+        colHeaders: true,
+        fixedRowsTop: 2,
+        fixedRowsBottom: 1,
       }}
-      note={`The same nested data on both sides. The tree should draw the same: parent rows
-        with a collapse arrow, children indented beneath. What to check is the context menu,
-        which the reference fills with the four nesting entries — insert child, detach from
-        parent, and the two row-insert entries that respect the tree — and which here has
-        the ordinary row entries only, so a child cannot be created by hand. Collapsing and
-        expanding work on both.`}
+      data={block(60, 12, coord)}
+      note={`Scroll the body downwards in both panels. Rows 1 and 2 must stay under the
+        column header and row 60 must stay on the floor, keeping their own row-header
+        numbers, while everything between them moves. Freezing is drawn by splitting the
+        table into panes rather than by pinning elements, so what would count as a
+        difference is a frozen row that drifts with the body, a frozen row that shows
+        values from the wrong physical row, or a visible seam where a pane meets the
+        scrolling middle — each of those means one pane is being handed the wrong index
+        range, not that the setting was ignored.`}
     />
   );
 }
 
-export function RowPrePopulating() {
-  return (
-    <Compare
-      height={260}
-      settings={{
-        height: 260,
-        colHeaders: ["Name", "Team", "Role"],
-        rowHeaders: true,
-        minSpareRows: 1,
-      }}
-      data={[
-        ["Ana García", "Engineering", "Senior Engineer"],
-        ["James Okafor", "Marketing", "Product Manager"],
-        ["Li Wei", "Engineering", "Staff Engineer"],
-      ]}
-      note={`Both grids should show exactly one empty row under the third name. Type into
-        it: a fourth name should land in row 4 and one new empty row should appear beneath,
-        never two. The count is taken from the extent of the data rather than from the
-        current number of rows for that reason — a grid that measured itself instead would
-        add a row on every render and grow without being touched, which is what a
-        difference here would look like after a few keystrokes rather than immediately.`}
-    />
-  );
-}
-
-export function RowTrimming() {
+export function RowHeights() {
   return (
     <Compare
       height={280}
       settings={{
         height: 280,
+        width: "100%",
         colHeaders: true,
         rowHeaders: true,
-        trimRows: [1, 2, 5],
+        minRowHeights: [60, 28, 44, 28, 60],
+        manualRowResize: true,
       }}
-      data={block(8, 5)}
-      note={`Physical rows 1, 2 and 5 are trimmed, so both grids should show A1, A4, A5,
-        A7 and A8 under row headers numbered 1 to 5. The renumbering is the point and is
-        what separates this page from Row hiding: a trimmed row leaves the visual dataset
-        entirely, so the rows below it shift up, whereas a hidden row keeps its number and
-        leaves a gap in the sequence. If the left grid shows headers 1, 4, 5, 7, 8 it has
-        implemented trimming as hiding, and every index the caller receives afterwards
-        will be off by the number of trimmed rows above it.`}
+      data={block(5, 5)}
+      note={`Rows 1, 3 and 5 should be visibly taller than rows 2 and 4, by the same
+        amounts on both sides. Despite the name, minRowHeights is the guide's current
+        spelling for per-row heights and not a floor, so a grid that read it as a minimum
+        and then measured content would draw five equal rows — that is what a difference
+        here would mean. The page's other half, dragging the border between two row
+        headers, cannot be shown: manualRowResize is accepted and drives the same sizes
+        through the API, but the plugin registers no pointer listeners, so no drag handle
+        appears on the left. That gap is recorded, not new.`}
     />
   );
 }
@@ -278,6 +227,34 @@ export function RowVirtualization() {
         the renderer about the visible range. The page's escape hatch, renderAllRows: true,
         draws every row and is the configuration to reach for when the browser's own find
         has to see the whole grid.`}
+    />
+  );
+}
+
+export function RowsSorting() {
+  return (
+    <Compare
+      height={300}
+      settings={{
+        height: 300,
+        colHeaders: ["Model", "Price", "Sell date", "In stock"],
+        rowHeaders: true,
+        columnSorting: {
+          indicator: true,
+          headerAction: true,
+          initialConfig: { column: 0, sortOrder: "desc" },
+        },
+      }}
+      data={products}
+      note={`Click the Model header in both panels. The rows should reorder, an arrow
+        should appear in that header, and a second and third click should give descending
+        and then no sort at all. This is worth watching rather than reading: the header
+        click was routed through a code path no real browser ever reached, so the feature
+        passed its unit tests and did nothing on screen. Then click Price, where a
+        difference is likelier — these are text cells holding numbers, and a grid sorting
+        them as strings puts 1080.70 above 178.90. The initialConfig above asks for Model
+        descending on load; if only the right-hand grid arrives sorted, the plugin read the
+        setting before the data reached the workbook rather than failing to read it.`}
     />
   );
 }
@@ -313,30 +290,49 @@ export function RowsPagination() {
   );
 }
 
-export function RowsSorting() {
+export function RowTrimming() {
   return (
     <Compare
-      height={300}
+      height={280}
       settings={{
-        height: 300,
-        colHeaders: ["Model", "Price", "Sell date", "In stock"],
+        height: 280,
+        colHeaders: true,
         rowHeaders: true,
-        columnSorting: {
-          indicator: true,
-          headerAction: true,
-          initialConfig: { column: 0, sortOrder: "desc" },
-        },
+        trimRows: [1, 2, 5],
       }}
-      data={products}
-      note={`Click the Model header in both panels. The rows should reorder, an arrow
-        should appear in that header, and a second and third click should give descending
-        and then no sort at all. This is worth watching rather than reading: the header
-        click was routed through a code path no real browser ever reached, so the feature
-        passed its unit tests and did nothing on screen. Then click Price, where a
-        difference is likelier — these are text cells holding numbers, and a grid sorting
-        them as strings puts 1080.70 above 178.90. The initialConfig above asks for Model
-        descending on load; if only the right-hand grid arrives sorted, the plugin read the
-        setting before the data reached the workbook rather than failing to read it.`}
+      data={block(8, 5)}
+      note={`Physical rows 1, 2 and 5 are trimmed, so both grids should show A1, A4, A5,
+        A7 and A8 under row headers numbered 1 to 5. The renumbering is the point and is
+        what separates this page from Row hiding: a trimmed row leaves the visual dataset
+        entirely, so the rows below it shift up, whereas a hidden row keeps its number and
+        leaves a gap in the sequence. If the left grid shows headers 1, 4, 5, 7, 8 it has
+        implemented trimming as hiding, and every index the caller receives afterwards
+        will be off by the number of trimmed rows above it.`}
+    />
+  );
+}
+
+export function RowPrePopulating() {
+  return (
+    <Compare
+      height={260}
+      settings={{
+        height: 260,
+        colHeaders: ["Name", "Team", "Role"],
+        rowHeaders: true,
+        minSpareRows: 1,
+      }}
+      data={[
+        ["Ana García", "Engineering", "Senior Engineer"],
+        ["James Okafor", "Marketing", "Product Manager"],
+        ["Li Wei", "Engineering", "Staff Engineer"],
+      ]}
+      note={`Both grids should show exactly one empty row under the third name. Type into
+        it: a fourth name should land in row 4 and one new empty row should appear beneath,
+        never two. The count is taken from the extent of the data rather than from the
+        current number of rows for that reason — a grid that measured itself instead would
+        add a row on every render and grow without being touched, which is what a
+        difference here would look like after a few keystrokes rather than immediately.`}
     />
   );
 }

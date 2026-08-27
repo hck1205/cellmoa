@@ -1,0 +1,512 @@
+[
+  {
+    "section": "Getting started",
+    "pages": [
+      {
+        "slug": "index",
+        "title": "Introduction"
+      },
+      {
+        "slug": "demo",
+        "title": "Demo"
+      },
+      {
+        "slug": "installation",
+        "title": "Installation"
+      },
+      {
+        "slug": "configuration-options",
+        "title": "Configuration options"
+      },
+      {
+        "slug": "grid-size",
+        "title": "Grid size"
+      },
+      {
+        "slug": "custom-id-class-style",
+        "title": "Custom ID, class, and style"
+      },
+      {
+        "slug": "license-key",
+        "title": "License key"
+      }
+    ]
+  },
+  {
+    "section": "AI Tools",
+    "pages": [
+      {
+        "slug": "skills-for-claude-code",
+        "title": "Skills for Claude Code"
+      },
+      {
+        "slug": "ai-theme-builder",
+        "title": "AI Theme Builder"
+      },
+      {
+        "slug": "ai-docs-assistant",
+        "title": "AI Docs Assistant"
+      }
+    ]
+  },
+  {
+    "section": "Styling",
+    "pages": [
+      {
+        "slug": "themes",
+        "title": "Themes"
+      },
+      {
+        "slug": "handsontable-design-system",
+        "title": "Design System"
+      },
+      {
+        "slug": "theme-customization",
+        "title": "Theme Customization"
+      },
+      {
+        "slug": "legacy-style",
+        "title": "Legacy Style"
+      }
+    ]
+  },
+  {
+    "section": "Columns",
+    "pages": [
+      {
+        "slug": "column-header",
+        "title": "Column headers"
+      },
+      {
+        "slug": "column-groups",
+        "title": "Column groups"
+      },
+      {
+        "slug": "column-hiding",
+        "title": "Column hiding"
+      },
+      {
+        "slug": "column-moving",
+        "title": "Column moving"
+      },
+      {
+        "slug": "column-freezing",
+        "title": "Column freezing"
+      },
+      {
+        "slug": "column-width",
+        "title": "Column widths"
+      },
+      {
+        "slug": "column-summary",
+        "title": "Column summary"
+      },
+      {
+        "slug": "column-virtualization",
+        "title": "Column virtualization"
+      },
+      {
+        "slug": "column-menu",
+        "title": "Column menu"
+      },
+      {
+        "slug": "column-filter",
+        "title": "Column filter"
+      }
+    ]
+  },
+  {
+    "section": "Rows",
+    "pages": [
+      {
+        "slug": "row-header",
+        "title": "Row headers"
+      },
+      {
+        "slug": "row-parent-child",
+        "title": "Row parent-child"
+      },
+      {
+        "slug": "row-hiding",
+        "title": "Row hiding"
+      },
+      {
+        "slug": "row-moving",
+        "title": "Row moving"
+      },
+      {
+        "slug": "row-freezing",
+        "title": "Row freezing"
+      },
+      {
+        "slug": "row-height",
+        "title": "Row heights"
+      },
+      {
+        "slug": "row-virtualization",
+        "title": "Row virtualization"
+      },
+      {
+        "slug": "rows-sorting",
+        "title": "Rows sorting"
+      },
+      {
+        "slug": "rows-pagination",
+        "title": "Rows pagination"
+      },
+      {
+        "slug": "row-trimming",
+        "title": "Row trimming"
+      },
+      {
+        "slug": "row-prepopulating",
+        "title": "Row pre-populating"
+      }
+    ]
+  },
+  {
+    "section": "Cell features",
+    "pages": [
+      {
+        "slug": "selection",
+        "title": "Selection"
+      },
+      {
+        "slug": "merge-cells",
+        "title": "Merge cells"
+      },
+      {
+        "slug": "conditional-formatting",
+        "title": "Conditional formatting"
+      },
+      {
+        "slug": "text-alignment",
+        "title": "Text alignment"
+      },
+      {
+        "slug": "disabled-cells",
+        "title": "Disabled cells"
+      },
+      {
+        "slug": "comments",
+        "title": "Comments"
+      },
+      {
+        "slug": "autofill-values",
+        "title": "Autofill values"
+      },
+      {
+        "slug": "formatting-cells",
+        "title": "Formatting cells"
+      }
+    ]
+  },
+  {
+    "section": "Cell functions",
+    "pages": [
+      {
+        "slug": "cell-function",
+        "title": "Cell functions"
+      },
+      {
+        "slug": "cell-renderer",
+        "title": "Cell renderer"
+      },
+      {
+        "slug": "cell-editor",
+        "title": "Cell editor"
+      },
+      {
+        "slug": "cell-validator",
+        "title": "Cell validator"
+      },
+      {
+        "slug": "custom-cells",
+        "title": "Custom Cells"
+      }
+    ]
+  },
+  {
+    "section": "Cell types",
+    "pages": [
+      {
+        "slug": "cell-type",
+        "title": "Cell type"
+      },
+      {
+        "slug": "numeric-cell-type",
+        "title": "Numeric cell type"
+      },
+      {
+        "slug": "date-cell-type",
+        "title": "Date cell type"
+      },
+      {
+        "slug": "time-cell-type",
+        "title": "Time cell type"
+      },
+      {
+        "slug": "checkbox-cell-type",
+        "title": "Checkbox cell type"
+      },
+      {
+        "slug": "select-cell-type",
+        "title": "Select cell type"
+      },
+      {
+        "slug": "dropdown-cell-type",
+        "title": "Dropdown cell type"
+      },
+      {
+        "slug": "autocomplete-cell-type",
+        "title": "Autocomplete cell type"
+      },
+      {
+        "slug": "multiselect-cell-type",
+        "title": "MultiSelect cell type"
+      },
+      {
+        "slug": "password-cell-type",
+        "title": "Password cell type"
+      },
+      {
+        "slug": "handsontable-cell-type",
+        "title": "Handsontable cell type"
+      }
+    ]
+  },
+  {
+    "section": "Formulas",
+    "pages": [
+      {
+        "slug": "formulas-installation",
+        "title": "Installation"
+      },
+      {
+        "slug": "formula-calculation",
+        "title": "Formula calculation"
+      }
+    ]
+  },
+  {
+    "section": "Server-side data",
+    "pages": [
+      {
+        "slug": "server-side-data",
+        "title": "Server-side data"
+      },
+      {
+        "slug": "server-side-data-migration",
+        "title": "Migrate to server-side data"
+      },
+      {
+        "slug": "server-side-data-configuration",
+        "title": "Server-side configuration"
+      },
+      {
+        "slug": "server-side-data-crud",
+        "title": "Server-side CRUD"
+      },
+      {
+        "slug": "server-side-data-fetching",
+        "title": "Server-side fetching and examples"
+      }
+    ]
+  },
+  {
+    "section": "Data management",
+    "pages": [
+      {
+        "slug": "binding-to-data",
+        "title": "Binding to data"
+      },
+      {
+        "slug": "saving-data",
+        "title": "Saving data"
+      },
+      {
+        "slug": "events-and-hooks",
+        "title": "Events and hooks"
+      },
+      {
+        "slug": "export-to-excel",
+        "title": "Export to Excel"
+      },
+      {
+        "slug": "export-to-csv",
+        "title": "Export to CSV"
+      },
+      {
+        "slug": "basic-clipboard",
+        "title": "Clipboard"
+      }
+    ]
+  },
+  {
+    "section": "Accessories and menus",
+    "pages": [
+      {
+        "slug": "context-menu",
+        "title": "Context menu"
+      },
+      {
+        "slug": "drag-to-scroll",
+        "title": "Drag to scroll"
+      },
+      {
+        "slug": "undo-redo",
+        "title": "Undo and redo"
+      },
+      {
+        "slug": "icon-pack",
+        "title": "Icon pack"
+      },
+      {
+        "slug": "empty-data-state",
+        "title": "Empty Data State"
+      },
+      {
+        "slug": "dialog",
+        "title": "Dialog"
+      },
+      {
+        "slug": "loading",
+        "title": "Loading"
+      },
+      {
+        "slug": "notification",
+        "title": "Notification"
+      },
+      {
+        "slug": "layout-slots",
+        "title": "Layout slots"
+      }
+    ]
+  },
+  {
+    "section": "Internationalization",
+    "pages": [
+      {
+        "slug": "language",
+        "title": "Language"
+      },
+      {
+        "slug": "locale",
+        "title": "Locale"
+      },
+      {
+        "slug": "layout-direction",
+        "title": "Layout direction"
+      },
+      {
+        "slug": "ime-support",
+        "title": "IME support"
+      }
+    ]
+  },
+  {
+    "section": "Accessibility and navigation",
+    "pages": [
+      {
+        "slug": "keyboard-shortcuts",
+        "title": "Keyboard shortcuts"
+      },
+      {
+        "slug": "custom-shortcuts",
+        "title": "Custom shortcuts"
+      },
+      {
+        "slug": "focus-scopes",
+        "title": "Focus scopes"
+      },
+      {
+        "slug": "searching-values",
+        "title": "Searching values"
+      },
+      {
+        "slug": "accessibility",
+        "title": "Accessibility"
+      },
+      {
+        "slug": "accessibility-conformance-report",
+        "title": "Accessibility conformance report (VPAT)"
+      }
+    ]
+  },
+  {
+    "section": "Tools and building",
+    "pages": [
+      {
+        "slug": "packages",
+        "title": "Packages"
+      },
+      {
+        "slug": "modules",
+        "title": "Modules"
+      },
+      {
+        "slug": "typescript-types",
+        "title": "TypeScript types"
+      },
+      {
+        "slug": "custom-plugins",
+        "title": "Custom plugins"
+      },
+      {
+        "slug": "custom-builds",
+        "title": "Custom builds"
+      },
+      {
+        "slug": "testing",
+        "title": "Testing"
+      }
+    ]
+  },
+  {
+    "section": "Optimization",
+    "pages": [
+      {
+        "slug": "batch-operations",
+        "title": "Batch operations"
+      },
+      {
+        "slug": "performance",
+        "title": "Performance"
+      },
+      {
+        "slug": "bundle-size",
+        "title": "Bundle size"
+      }
+    ]
+  },
+  {
+    "section": "Security",
+    "pages": [
+      {
+        "slug": "security",
+        "title": "Security"
+      }
+    ]
+  },
+  {
+    "section": "Technical specification",
+    "pages": [
+      {
+        "slug": "supported-browsers",
+        "title": "Supported browsers"
+      },
+      {
+        "slug": "software-license",
+        "title": "Software license"
+      },
+      {
+        "slug": "third-party-licenses",
+        "title": "Third-party licenses"
+      },
+      {
+        "slug": "documentation-license",
+        "title": "Documentation license"
+      }
+    ]
+  }
+]

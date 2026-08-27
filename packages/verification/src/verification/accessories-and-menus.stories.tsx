@@ -1,72 +1,42 @@
 /**
- * The furniture around the table: the two menus, the scroll that follows a
- * drag past the edge, undo, the empty-table overlay, the slots the grid hangs
- * its own UI in, and the two export formats.
+ * Accessories and menus — the 9 pages the guide's
+ * sidebar lists under this heading, one story each, named as the sidebar
+ * names them.
  *
- * Almost none of this is testable off-screen. A menu is a floating element
- * positioned against a button; an empty-data overlay is a box that has to
- * cover the table and nothing else; a slot is a strip of DOM whose whole job
- * is to be in the right place. jsdom measures all of it as zero, so the only
- * honest check is to look.
- *
- * Two things to carry through the whole section. First, **neither cellmoa
- * menu has any keyboard**: `menu.ts` registers no `keydown` listener at all,
- * so Shift+F10, Ctrl+Shift+\, Shift+Alt+Down, the arrow keys, Home/End,
- * Page Up/Down, Enter and Escape all do nothing. Every menu story below is a
- * mouse-only story on the left and a keyboard-and-mouse story on the right,
- * and that is a gap, not a decision. Second, the pages are in the order the
- * guide's own sidebar lists them, which puts the two export pages last.
+ * src/guide-toc.json is that sidebar, and coverage.mjs checks this file
+ * against it, so a page the reference adds shows up as a failure here rather
+ * than as a gap nobody noticed.
  */
 
-import type { ExportFile, Notification as CmNotification } from "@cellmoa/grid";
-import { registerRenderer as registerCellmoaRenderer } from "@cellmoa/grid";
-import { registerRenderer as registerHotRenderer } from "handsontable/renderers";
-import { registerLanguageDictionary, jaJP } from "handsontable/i18n";
-
 import { Compare, NotAFeature, block } from "../Compare.js";
+import type {
+  Dialog as CmDialog,
+  Loading as CmLoading,
+  Notification as CmNotification,
+} from "@cellmoa/grid";
+import type Handsontable from "handsontable";
 
 export default { title: "Verification/Accessories and menus" };
 
-// Handsontable's full bundle registers every plugin but no language, so a
-// story about a translated string has to hand it the dictionary itself.
-// cellmoa carries all 21 in `i18n/dictionaries.ts` and needs no equivalent.
-registerLanguageDictionary(jaJP);
+const alert = {
+  template: {
+    type: "alert" as const,
+    title: "Unsaved changes",
+    description: "Three cells have been edited since the last save.",
+    buttons: [
+      { text: "Discard", type: "secondary" as const },
+      { text: "Save", type: "primary" as const },
+    ],
+  },
+  background: "semi-transparent" as const,
+  contentBackground: true,
+  closable: true,
+  a11y: { role: "dialog", ariaLabel: "Unsaved changes" },
+};
 
-/**
- * A flag that is drawn, not typed.
- *
- * Registered under the same name in both registries so the settings the two
- * grids receive stay identical — the bodies differ because the renderer
- * contracts differ, which is itself the thing the story is about.
- */
-const FLAG_ON =
-  '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M6 3h11l-2 4 2 4H8v10H6z"/></svg>';
-const FLAG_OFF =
-  '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="none" stroke="currentColor" d="M6.5 3.5h9.5l-2 3.5 2 3.5H6.5zM6.5 3.5v17"/></svg>';
-
-function flagButton(doc: Document, on: boolean): HTMLButtonElement {
-  const button = doc.createElement("button");
-  button.type = "button";
-  button.innerHTML = on ? FLAG_ON : FLAG_OFF;
-  // The name goes on the control, never on the decorative `<svg>`.
-  button.setAttribute(
-    "aria-label",
-    on ? "Flagged. Click to clear." : "Not flagged. Click to flag.",
-  );
-  button.style.cssText =
-    "border:0;background:none;cursor:pointer;padding:0;line-height:1";
-  return button;
+function row(id: string, sku: string, qty: string): string[] {
+  return Object.assign([id, sku, qty], { id, sku, qty });
 }
-
-registerCellmoaRenderer("flag", ({ td, cell }) => {
-  td.textContent = "";
-  td.appendChild(flagButton(td.ownerDocument, cell?.text === "yes"));
-});
-
-registerHotRenderer("flag", (_instance, td, _row, _col, _prop, value) => {
-  td.textContent = "";
-  td.appendChild(flagButton(td.ownerDocument, value === "yes"));
-});
 
 export const ContextMenu = () => (
   <Compare
@@ -87,26 +57,6 @@ export const ContextMenu = () => (
       },
     }}
     data={block(6, 5)}
-  />
-);
-
-export const ColumnMenu = () => (
-  <Compare
-    note="Both grids draw a button in every column header; click one in each. The menu that opens is the same widget as the context menu, so the shared items should match what the previous story showed. The difference to look for is underneath: `filters: true` is set here, and Handsontable answers by putting the whole filtering interface into the column menu — a condition select, a value list with checkboxes, and an OK/Cancel bar, which are the documented `filter_by_condition`, `filter_by_value` and `filter_action_bar` items. cellmoa's filter plugin is 220 lines of API with no DOM at all: none of those five keys exists in its source, so its column menu opens without them. Check the button itself too. cellmoa renders a bare `▾` with no accessible name, and Shift+Alt+Down from a cell and Ctrl+Enter from a focused header — the two shortcuts this page documents — are unbound."
-    settings={{
-      colHeaders: ["Region", "Owner", "Stage", "Value"],
-      rowHeaders: true,
-      dropdownMenu: true,
-      filters: true,
-    }}
-    data={[
-      ["North", "Ada", "Won", "1200"],
-      ["South", "Grace", "Open", "800"],
-      ["North", "Ada", "Open", "450"],
-      ["East", "Alan", "Lost", "90"],
-      ["South", "Grace", "Won", "2300"],
-    ]}
-    height={300}
   />
 );
 
@@ -156,24 +106,6 @@ export const IconPack = () => (
   />
 );
 
-export const HowToUseIconsInCells = () => (
-  <Compare
-    note="The first column is drawn by a custom renderer registered under the name `flag` in both libraries' renderer registries, so the settings the two grids receive are byte-identical: `columns: [{ renderer: 'flag' }, …]`. The icon should appear filled where the value is `yes` and outlined otherwise, and it should survive scrolling, since both grids reuse cell elements between renders — an icon that duplicates or disappears as you scroll means the renderer is appending instead of replacing. The accessibility point is the one the page makes: the `<svg>` is `aria-hidden` and the name lives on the `<button>` around it, which you can confirm with Ladle's a11y addon in either panel. The renderer contracts themselves differ and cannot be made to match. cellmoa hands a renderer one object — `{ row, col, td, cell, meta }` — while Handsontable passes seven positional arguments; and cellmoa takes only a registered name in `renderer`, where Handsontable also accepts an inline function. Porting a renderer means rewriting its signature, which is worth knowing before you count this page as parity."
-    settings={{
-      colHeaders: ["Flag", "Item", "Qty"],
-      rowHeaders: true,
-      columns: [{ renderer: "flag" }, {}, {}],
-    }}
-    data={[
-      ["yes", "Harbor Goods", "142"],
-      ["no", "Alpine Supply Co.", "0"],
-      ["yes", "Vertex Industries", "67"],
-      ["no", "Meridian Works", "31"],
-    ]}
-    height={220}
-  />
-);
-
 export const EmptyDataState = () => (
   <Compare
     note="Both grids are loaded with no rows at all and set to Japanese, so the overlay has to come from a dictionary rather than from a hard-coded string. Look for a centred title and a description in Japanese in both panels, covering the table and nothing outside it, with the column headers still legible above. English text on either side means the plugin is not reading the dictionary. cellmoa carries seven `EmptyDataState:*` keys — the five Handsontable documents plus a title and description for the loading state — translated in all 21 locales; the plugin hard-coded English until recently, which is exactly the kind of defect that a green jsdom suite never sees. What this story cannot show is the filtered variant: the overlay's second face, with its **Reset filters** button, needs a filter that hides every row, and cellmoa has no filter UI to set one with. Handsontable's `emptyDataState` is the same option on both sides otherwise."
@@ -185,6 +117,103 @@ export const EmptyDataState = () => (
     }}
     data={[]}
     height={240}
+  />
+);
+
+export const Dialog = () => (
+  <Compare
+    note="The same options object opens a dialog over both grids a moment after mount. Four things to look at. The backdrop: `background: 'semi-transparent'` should let the table show through dimmed, where `'solid'` would hide it — a backdrop that does not paint at all is the defect this story exists to catch, and it was real here. The box: `template` should render the title, the description and two buttons with the primary one visibly primary, without the caller assembling any of it. The modality: click a cell underneath and type — nothing should reach the grid while the dialog is up, then press Escape and check the keyboard comes back. And the name: the `a11y` block should put a `dialog` role, `aria-modal` and an accessible name on the overlay, which Ladle's a11y addon will read out of either panel. One divergence to know about, since it is not visible here: Handsontable's `show()` with no arguments falls back to whatever the `dialog` option was configured with, and cellmoa's does not — it opens an empty box. Passing the options to `show()`, as both do here, works on either side."
+    settings={{ colHeaders: true, rowHeaders: true, dialog: true }}
+    data={block(6, 4)}
+    height={280}
+    afterMount={{
+      cellmoa: (grid) => {
+        setTimeout(() => grid.getPlugin<CmDialog>("dialog")?.show(alert), 700);
+      },
+      handsontable: (hot) => {
+        setTimeout(() => hot.getPlugin("dialog").show(alert), 700);
+      },
+    }}
+  />
+);
+
+export const Loading = () => (
+  <Compare
+    note="Both grids are put into a loading state a moment after mount and left there. The overlay should cover the whole grid root — headers, rows and the strip below the table — because a pager you can still click while the data is loading will ask for a page nobody is waiting for. Check the spinner actually animates rather than sitting still, and that the phrase is Japanese: the grid is set to `ja-JP`, and both libraries take the default from a dictionary key (`LOADING_TITLE` there, `Loading:title` here). English text means the plugin hard-coded it. Two differences are worth knowing. Handsontable's overlay takes an `icon`, a `title` and a `description`; cellmoa's takes one `message` and draws its own spinner, so a caller who wants three lines cannot have them. And cellmoa's is reference-counted rather than a flag — two things loading at once take it up twice, and the first to finish does not pull the overlay out from under the second, which is a difference in behaviour you can only see by starting a second load before the first ends."
+    settings={{
+      colHeaders: true,
+      rowHeaders: true,
+      dialog: true,
+      loading: true,
+      language: "ja-JP",
+    }}
+    data={block(6, 4)}
+    height={260}
+    afterMount={{
+      cellmoa: (grid) => {
+        setTimeout(() => grid.getPlugin<CmLoading>("loading")?.show(), 700);
+      },
+      handsontable: (hot) => {
+        setTimeout(() => hot.getPlugin("loading").show(), 700);
+      },
+    }}
+  />
+);
+
+export const Notification = () => (
+  <Compare
+    note="Two toasts open in each grid a moment after mount: an error with `duration: 0`, which must stay until it is dismissed, and an informational one at the other corner. Look at where they land — `top-end` and `bottom-start` are corners the caller chose, and a toast asked for one corner and drawn in another is covering something the caller moved it away from. Check they stack rather than replace one another, and that the persistent error does not quietly vanish after four seconds. cellmoa read `type` and `timeout` and ignored the documented `variant` and `duration`, which meant exactly that: a serious error, asked to stay, disappearing. It now reads `variant`/`duration`/`position`/`title` as documented and still answers to the two old names as aliases, so both spellings work. What cellmoa does not have is the keyboard route the page describes: F6 moves focus into Handsontable's notification region and Tab walks the controls across visible toasts, and there is no F6 binding anywhere in cellmoa's source, so its toast buttons are reachable by mouse only. The `aria-live` wiring is there on both — assertive for errors, polite otherwise — which the a11y addon can confirm."
+    settings={{ colHeaders: true, rowHeaders: true, notification: true }}
+    data={block(6, 4)}
+    height={260}
+    afterMount={{
+      cellmoa: (grid) => {
+        const toast = grid.getPlugin<CmNotification>("notification");
+        setTimeout(() => {
+          toast?.showMessage({
+            title: "Could not save",
+            message: "The server refused the write. Nothing was lost.",
+            variant: "error",
+            duration: 0,
+            position: "top-end",
+            // The callback is required by Handsontable's type; taking the
+            // action is what dismisses the toast on both sides.
+            actions: [
+              { label: "Retry", type: "primary", callback: () => undefined },
+            ],
+          });
+          toast?.showMessage({
+            message: "Sorted by Region.",
+            variant: "info",
+            duration: 0,
+            position: "bottom-start",
+          });
+        }, 700);
+      },
+      handsontable: (hot) => {
+        const toast = hot.getPlugin("notification");
+        setTimeout(() => {
+          toast.showMessage({
+            title: "Could not save",
+            message: "The server refused the write. Nothing was lost.",
+            variant: "error",
+            duration: 0,
+            position: "top-end",
+            // The callback is required by Handsontable's type; taking the
+            // action is what dismisses the toast on both sides.
+            actions: [
+              { label: "Retry", type: "primary", callback: () => undefined },
+            ],
+          });
+          toast.showMessage({
+            message: "Sorted by Region.",
+            variant: "info",
+            duration: 0,
+            position: "bottom-start",
+          });
+        }, 700);
+      },
+    }}
   />
 );
 
@@ -223,123 +252,6 @@ export const LayoutSlots = () => (
             .getLayoutManager()
             .register("summary", summary, { side: "bottom", weight: 100 });
         }, 300);
-      },
-    }}
-  />
-);
-
-export const ExportToExcel = () => (
-  <Compare
-    note="A moment after mount each grid is asked for an `.xlsx` blob and reports what it got in a toast. This is the one place in the section where the two are built differently on purpose. Handsontable writes the workbook in the browser with ExcelJS, which you must install and hand it as `exportFile: { engines: { xlsx: ExcelJS } }`; nothing here does, so its toast should say the format is unavailable, and that is correct behaviour rather than a failure. cellmoa asks its engine to save, because the engine is where the formulas, the number formats and the defined names already live — rebuilding the workbook from the rendered DOM, which is how the reference reads styling, would quietly drop every one of them. So expect a byte count on the left and a refusal on the right. What that costs is real and should be said: the reference's DOM-reading export carries background colours and borders that a caller set purely in CSS, and an engine-side export cannot see those at all."
-    settings={{
-      colHeaders: ["Item", "Qty", "Total"],
-      rowHeaders: true,
-      notification: true,
-      exportFile: true,
-    }}
-    data={[
-      ["Widget", "3", "=B1*10"],
-      ["Gasket", "7", "=B2*10"],
-      ["Flange", "2", "=B3*10"],
-    ]}
-    height={220}
-    afterMount={{
-      cellmoa: (grid) => {
-        setTimeout(() => {
-          const toast = grid.getPlugin<CmNotification>("notification");
-          try {
-            const blob = grid
-              .getPlugin<ExportFile>("exportFile")
-              ?.exportAsBlob("xlsx");
-            toast?.showMessage({
-              title: "xlsx",
-              message: `built by the engine: ${blob ? blob.size : 0} bytes`,
-              variant: "success",
-              duration: 0,
-              position: "top-end",
-            });
-          } catch (cause: unknown) {
-            toast?.showMessage({
-              title: "xlsx",
-              message: String(cause),
-              variant: "error",
-              duration: 0,
-              position: "top-end",
-            });
-          }
-        }, 800);
-      },
-      handsontable: (hot) => {
-        setTimeout(() => {
-          const toast = hot.getPlugin("notification");
-          try {
-            const blob = hot.getPlugin("exportFile").exportAsBlob("xlsx");
-            toast.showMessage({
-              title: "xlsx",
-              message: `built in the browser: ${blob.size} bytes`,
-              variant: "success",
-              duration: 0,
-              position: "top-end",
-            });
-          } catch (cause: unknown) {
-            toast.showMessage({
-              title: "xlsx",
-              message: String(cause),
-              variant: "error",
-              duration: 0,
-              position: "top-end",
-            });
-          }
-        }, 800);
-      },
-    }}
-  />
-);
-
-export const ExportToCsv = () => (
-  <Compare
-    note="The first column holds three values a spreadsheet would execute if it read them out of a CSV: one leading `@`, one leading `+`, one leading tab. A moment after mount each grid exports itself with `sanitizeValues: true` and puts the first two lines of the result in a toast, with the line break shown as ⏎. Read the toasts against each other. Every dangerous value should come out prefixed with an apostrophe and wrapped in quotes, and — this is the part worth checking rather than assuming — *every* field should be quoted once sanitizing is on, because a file where half the fields are quoted and half are not is a file whose readers disagree about where a field begins. cellmoa had no `sanitizeValues` at all until recently and shipped `=cmd|'/c calc'!A1` straight through; the option now exists with the same three forms the reference documents, off by default in both, since escaping changes what the file says and a grid holding its own data is entitled to a faithful export."
-    settings={{
-      colHeaders: ["Payload", "Note"],
-      rowHeaders: true,
-      notification: true,
-      exportFile: true,
-    }}
-    data={[
-      ["@SUM(1+1)", "leading at-sign"],
-      ["+1-1", "leading plus"],
-      ["\tcmd", "leading tab"],
-      ["plain, with a comma", "quoted for the delimiter"],
-    ]}
-    height={240}
-    afterMount={{
-      cellmoa: (grid) => {
-        setTimeout(() => {
-          const csv = grid
-            .getPlugin<ExportFile>("exportFile")
-            ?.exportAsString("csv", { colHeaders: true, sanitizeValues: true });
-          grid.getPlugin<CmNotification>("notification")?.showMessage({
-            title: "csv, sanitized",
-            message: (csv ?? "").split("\r\n").slice(0, 2).join(" ⏎ "),
-            variant: "info",
-            duration: 0,
-            position: "top-end",
-          });
-        }, 800);
-      },
-      handsontable: (hot) => {
-        setTimeout(() => {
-          const csv = hot
-            .getPlugin("exportFile")
-            .exportAsString("csv", { colHeaders: true, sanitizeValues: true });
-          hot.getPlugin("notification").showMessage({
-            title: "csv, sanitized",
-            message: csv.split("\r\n").slice(0, 2).join(" ⏎ "),
-            variant: "info",
-            duration: 0,
-            position: "top-end",
-          });
-        }, 800);
       },
     }}
   />

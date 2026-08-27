@@ -1,10 +1,32 @@
 /**
- * What reaches the DOM, and what is allowed to.
+ * Security — the 1 page the guide's
+ * sidebar lists under this heading, one story each, named as the sidebar
+ * names them.
+ *
+ * src/guide-toc.json is that sidebar, and coverage.mjs checks this file
+ * against it, so a page the reference adds shows up as a failure here rather
+ * than as a gap nobody noticed.
  */
 
 import { Compare } from "../Compare.js";
 
 export default { title: "Verification/Security" };
+
+const alert = {
+  template: {
+    type: "alert" as const,
+    title: "Unsaved changes",
+    description: "Three cells have been edited since the last save.",
+    buttons: [
+      { text: "Discard", type: "secondary" as const },
+      { text: "Save", type: "primary" as const },
+    ],
+  },
+  background: "semi-transparent" as const,
+  contentBackground: true,
+  closable: true,
+  a11y: { role: "dialog", ariaLabel: "Unsaved changes" },
+};
 
 export const Security = () => (
   <Compare
