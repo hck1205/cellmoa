@@ -303,6 +303,17 @@ export class View {
   }
 
   #onScroll = (): void => {
+    // Announced on the event rather than on the frame: a handler watching the
+    // scroll offset wants every step, and coalescing is about how often to
+    // draw, not about how often something happened.
+    const vertical = this.scroller.scrollTop !== this.#lastScrollTop;
+    const horizontal = this.scroller.scrollLeft !== this.#lastScrollLeft;
+    this.#lastScrollTop = this.scroller.scrollTop;
+    this.#lastScrollLeft = this.scroller.scrollLeft;
+    if (vertical || horizontal) {
+      this.#model.scrolled?.({ vertical, horizontal });
+    }
+
     // Rendering on the next frame rather than on the event coalesces the burst
     // a wheel produces into one draw.
     if (this.#frame !== null) {
@@ -313,6 +324,9 @@ export class View {
       this.render();
     });
   };
+
+  #lastScrollTop = 0;
+  #lastScrollLeft = 0;
 
   #onWheel = (event: WheelEvent): void => {
     if (this.#model.preventWheel?.()) {

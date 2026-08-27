@@ -191,6 +191,7 @@ export class Dialog extends BasePlugin {
     const box = this.#overlay?.querySelector('.cm-dialog');
     if (box instanceof HTMLElement) {
       box.focus();
+      this.grid.hooks.notify('afterDialogFocus', box);
     }
   }
 

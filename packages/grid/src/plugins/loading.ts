@@ -45,6 +45,13 @@ export class Loading extends BasePlugin {
 
   /** Shows the overlay, or notes another caller if it is already up. */
   show(options: LoadingOptions = {}): void {
+    // Announced on the transition rather than on every call: `during` nests, so
+    // a page that starts three fetches raises the overlay once and should say
+    // so once. `beforeLoadingShow` can refuse the first one.
+    const first = this.#depth === 0;
+    if (first && this.grid.hooks.allows('beforeLoadingShow', options) === false) {
+      return;
+    }
     this.#depth += 1;
     const view = this.grid.view;
     if (!view) {
@@ -69,6 +76,9 @@ export class Loading extends BasePlugin {
       this.#element = element;
     }
     this.update(options);
+    if (first) {
+      this.grid.hooks.notify('afterLoadingShow', options);
+    }
   }
 
   /**
@@ -87,10 +97,14 @@ export class Loading extends BasePlugin {
 
   /** Notes that one caller has finished, hiding the overlay when all have. */
   hide(): void {
+    if (this.#depth === 1 && this.grid.hooks.allows('beforeLoadingHide') === false) {
+      return;
+    }
     this.#depth = Math.max(this.#depth - 1, 0);
     if (this.#depth === 0) {
       this.#element?.remove();
       this.#element = null;
+      this.grid.hooks.notify('afterLoadingHide');
     }
   }
 

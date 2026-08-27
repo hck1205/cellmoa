@@ -186,3 +186,121 @@ describe('manual resize fires its hooks', () => {
     expect(grid.getColWidth(1)).toBe(before);
   });
 });
+
+describe('selecting whole rows, columns and everything fires its own hooks', () => {
+  it('fires beforeSelectRows and afterSelectRows with the range', async () => {
+    const { grid } = await mountGrid({ startRows: 5, startCols: 3 });
+    const fired = record(grid, ['beforeSelectRows', 'afterSelectRows']);
+
+    grid.selectRows(1, 3);
+
+    expect(fired.map((f) => f.name)).toEqual(['beforeSelectRows', 'afterSelectRows']);
+    expect(fired[1]?.args).toEqual([1, 3]);
+  });
+
+  it('reports refusal through the return value, not only by not selecting', async () => {
+    // The signature has always said `boolean` and always returned `true`,
+    // which is a promise of information it never gave.
+    const { grid } = await mountGrid({ startRows: 5, startCols: 3 });
+    grid.addHook('beforeSelectRows', () => false);
+
+    expect(grid.selectRows(1, 3)).toBe(false);
+    expect(grid.getSelectedLast()).toBeUndefined();
+  });
+
+  it('fires the column hooks for a column selection', async () => {
+    const { grid } = await mountGrid({ startRows: 3, startCols: 5 });
+    const fired = record(grid, ['afterSelectColumns', 'afterSelectRows']);
+
+    grid.selectColumns(2);
+
+    expect(fired.map((f) => f.name)).toEqual(['afterSelectColumns']);
+  });
+
+  it('fires beforeSelectAll and afterSelectAll, and lets the before one refuse', async () => {
+    const { grid } = await mountGrid({ startRows: 3, startCols: 3 });
+    const fired = record(grid, ['beforeSelectAll', 'afterSelectAll']);
+
+    grid.selectAll();
+    expect(fired.map((f) => f.name)).toEqual(['beforeSelectAll', 'afterSelectAll']);
+
+    grid.deselectCell();
+    grid.addHook('beforeSelectAll', () => false);
+    grid.selectAll();
+    expect(grid.getSelectedLast()).toBeUndefined();
+  });
+
+  it('still fires the general afterSelection beside the specific one', async () => {
+    // The specific hooks are additions, not replacements: a handler on
+    // `afterSelection` must keep hearing about a row selection.
+    const { grid } = await mountGrid({ startRows: 4, startCols: 3 });
+    const fired = record(grid, ['afterSelection', 'afterSelectRows']);
+
+    grid.selectRows(1);
+
+    expect(fired.map((f) => f.name).sort()).toEqual(['afterSelectRows', 'afterSelection']);
+  });
+});
+
+describe('the loading overlay fires its hooks once per transition', () => {
+  it('announces going up and coming down', async () => {
+    const { grid } = await mountGrid({ startRows: 3, startCols: 3, loading: true });
+    const fired = record(grid, ['beforeLoadingShow', 'afterLoadingShow', 'afterLoadingHide']);
+    const loading = grid.getPlugin('loading') as unknown as {
+      show(options?: unknown): void;
+      hide(): void;
+    };
+
+    loading.show({ message: 'one moment' });
+    loading.hide();
+
+    expect(fired.map((f) => f.name)).toEqual([
+      'beforeLoadingShow',
+      'afterLoadingShow',
+      'afterLoadingHide',
+    ]);
+  });
+
+  it('says it once however deeply the overlay is nested', async () => {
+    // `during` nests, so three fetches raise one overlay — and should report
+    // one, not three.
+    const { grid } = await mountGrid({ startRows: 3, startCols: 3, loading: true });
+    const fired = record(grid, ['afterLoadingShow', 'afterLoadingHide']);
+    const loading = grid.getPlugin('loading') as unknown as {
+      show(options?: unknown): void;
+      hide(): void;
+    };
+
+    loading.show();
+    loading.show();
+    loading.hide();
+    expect(fired.map((f) => f.name)).toEqual(['afterLoadingShow'], 'still up');
+
+    loading.hide();
+    expect(fired.map((f) => f.name)).toEqual(['afterLoadingShow', 'afterLoadingHide']);
+  });
+});
+
+describe('a menu asks what it should contain', () => {
+  it('lets afterContextMenuDefaultOptions add to the vocabulary', async () => {
+    const { grid } = await mountGrid({ startRows: 3, startCols: 3, contextMenu: true });
+    let sawDefaults = false;
+    grid.addHook('afterContextMenuDefaultOptions', (predefined: Record<string, unknown>) => {
+      sawDefaults = typeof predefined === 'object' && predefined !== null;
+    });
+
+    (grid.getPlugin('contextMenu') as unknown as { getItems(): unknown[] }).getItems();
+
+    expect(sawDefaults).toBe(true);
+  });
+
+  it('lets beforeContextMenuSetItems have the last word on the list', async () => {
+    const { grid } = await mountGrid({ startRows: 3, startCols: 3, contextMenu: true });
+    grid.addHook('beforeContextMenuSetItems', () => [{ key: 'only', name: 'Only this' }]);
+
+    const items = (grid.getPlugin('contextMenu') as unknown as { getItems(): Array<{ key: string }> })
+      .getItems();
+
+    expect(items.map((item) => item.key)).toEqual(['only']);
+  });
+});

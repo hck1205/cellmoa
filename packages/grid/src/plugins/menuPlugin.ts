@@ -76,11 +76,26 @@ export abstract class MenuPlugin extends BasePlugin {
    * the settings forbid cannot be reached through `executeCommand` either.
    */
   getItems(): MenuItem[] {
-    return buildMenu(
-      (this.grid.getSettings() as Record<string, unknown>)[this.setting],
+    // `after*DefaultOptions` runs before the settings are applied, so a
+    // handler can add a command to the menu's vocabulary rather than only
+    // reorder what the settings already asked for. The reference hands over an
+    // object whose `items` array is mutated; the equivalent here is the record
+    // of predefined items, which a handler can add to or delete from — and
+    // which it can also replace by returning a new one.
+    const predefined = this.grid.hooks.run(
+      `after${this.hookPrefix}DefaultOptions`,
       predefinedItems(this.grid),
+    );
+
+    const items = buildMenu(
+      (this.grid.getSettings() as Record<string, unknown>)[this.setting],
+      predefined,
       this.defaults,
     ).filter((item) => !resolve(item.hidden, false));
+
+    // `before*SetItems` is the last word on what the menu holds: it sees the
+    // finished list, after the settings and after `hidden` has been resolved.
+    return this.grid.hooks.run(`before${this.hookPrefix}SetItems`, items);
   }
 
   /** Opens the menu at a point. */

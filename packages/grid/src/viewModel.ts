@@ -77,6 +77,15 @@ export interface ViewModel {
   /** Swallow the wheel, for a page that scrolls the grid itself. */
   preventWheel?(): boolean;
   /**
+   * The view has scrolled, and along which axes.
+   *
+   * The view has no other way back to the grid, and `afterScroll` and its two
+   * per-axis siblings have to be announced from wherever the scroll is noticed.
+   * Which axes moved is computed here rather than by the handler, because the
+   * previous offsets are the view's to remember.
+   */
+  scrolled?(axes: { vertical: boolean; horizontal: boolean }): void;
+  /**
    * The theme, as the classes it wants and the properties it sets.
    *
    * Properties as well as classes, so a theme registered at run time works

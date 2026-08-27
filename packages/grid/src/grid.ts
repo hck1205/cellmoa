@@ -1921,20 +1921,43 @@ if ('data' in settings) {
     return true;
   }
 
+  /**
+   * Selects whole rows.
+   *
+   * The `boolean` says whether the selection happened, which is the point of
+   * `beforeSelectRows` being able to refuse it. It used to return `true`
+   * unconditionally — a signature promising information it never gave — and
+   * neither of this method's own hooks fired at all, so a handler registered
+   * on `afterSelectRows` heard nothing while the generic `afterSelection` went
+   * off beside it.
+   */
   selectRows(from: number, to: number = from): boolean {
+    if (this.hooks.allows('beforeSelectRows', from, to) === false) {
+      return false;
+    }
     this.#selection.selectRows(from, to);
+    this.hooks.notify('afterSelectRows', from, to);
     this.#afterSelection();
     return true;
   }
 
+  /** Selects whole columns. See `selectRows` for what the boolean means. */
   selectColumns(from: number, to: number = from): boolean {
+    if (this.hooks.allows('beforeSelectColumns', from, to) === false) {
+      return false;
+    }
     this.#selection.selectColumns(from, to);
+    this.hooks.notify('afterSelectColumns', from, to);
     this.#afterSelection();
     return true;
   }
 
   selectAll(): void {
+    if (this.hooks.allows('beforeSelectAll') === false) {
+      return;
+    }
     this.#selection.selectAll();
+    this.hooks.notify('afterSelectAll');
     this.#afterSelection();
   }
 
@@ -3162,6 +3185,15 @@ if ('data' in settings) {
       renderRowHeader: (th, row) => {
         this.#markHeader(th, { row });
         this.hooks.notify('afterGetRowHeader', row, th);
+      },
+      scrolled: ({ vertical, horizontal }) => {
+        this.hooks.notify('afterScroll');
+        if (vertical) {
+          this.hooks.notify('afterScrollVertically');
+        }
+        if (horizontal) {
+          this.hooks.notify('afterScrollHorizontally');
+        }
       },
       ariaTags: () => this.getSettings().ariaTags !== false,
       fixedRowsBottom: () => (this.getSettings().fixedRowsBottom as number) ?? 0,

@@ -150,6 +150,9 @@ export class CustomBorders extends BasePlugin {
       }
     }
     this.grid.render();
+    // Every path that changes a border ends here or in clearBorders, so those
+    // are the two places the change is worth announcing from.
+    this.grid.hooks.notify('afterCustomBordersUpdate', this.getBorders());
   }
 
   /** Takes the borders off the selection, or off everything. */
@@ -159,6 +162,7 @@ export class CustomBorders extends BasePlugin {
         this.grid.removeCellMeta(row, col, 'border');
       }
       this.grid.render();
+      this.grid.hooks.notify('afterCustomBordersUpdate', this.getBorders());
       return;
     }
     this.setBorders('none');
