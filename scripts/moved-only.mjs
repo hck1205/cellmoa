@@ -29,6 +29,10 @@ function membersOf(path) {
   const text = readFileSync(path, 'utf8');
   const file = ts.createSourceFile(path, text, ts.ScriptTarget.ES2022, true);
   const cls = file.statements.find((s) => ts.isClassDeclaration(s) && s.name?.text === CLASS);
+  if (!cls) {
+    console.error(`${path}: no class called ${CLASS} (set MOVED_ONLY_CLASS to change it)`);
+    process.exit(2);
+  }
   const out = new Map();
   for (const m of cls.members) {
     const n = m.name;
@@ -40,8 +44,23 @@ function membersOf(path) {
   return out;
 }
 
-const before = membersOf(process.argv[2]);
-const after = membersOf(process.argv[3]);
+const [beforePath, afterPath] = process.argv.slice(2);
+if (!beforePath) {
+  console.error('usage: moved-only.mjs <before.ts> [after.ts]');
+  process.exit(2);
+}
+
+// One file is the documented "just count what you can see" mode, which is how
+// you check the parser agrees with you before trusting it to compare anything.
+// It read argv[3] unconditionally and crashed, so the mode never worked.
+if (!afterPath) {
+  const members = membersOf(beforePath);
+  console.log(`${members.size} members of ${CLASS} in ${beforePath}`);
+  process.exit(0);
+}
+
+const before = membersOf(beforePath);
+const after = membersOf(afterPath);
 const problems = [];
 for (const [name, code] of before) {
   if (!after.has(name)) problems.push(`lost: ${name}`);

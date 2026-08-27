@@ -181,7 +181,7 @@ fn read_sides(args: &Args) -> Result<(Table, Table), Fault> {
             std::io::stdin()
                 .read_to_string(&mut text)
                 .map_err(|e| Fault::Io(format!("stdin: {e}")))?;
-            return crate::tabular::read(&text, reading(args, format));
+            return crate::tabular::read(&text, reading(args, format)?);
         }
         let format = match args.value("from") {
             Some(named) => Format::parse(named)?,
@@ -191,7 +191,7 @@ fn read_sides(args: &Args) -> Result<(Table, Table), Fault> {
                 ))
             })?,
         };
-        crate::tabular::read(&crate::exit::read(path)?, reading(args, format))
+        crate::tabular::read(&crate::exit::read(path)?, reading(args, format)?)
     };
 
     Ok((read(left_path, right_path)?, read(right_path, left_path)?))
@@ -200,13 +200,14 @@ fn read_sides(args: &Args) -> Result<(Table, Table), Fault> {
 /// Headers are on unless `--no-headers` turns them off — the opposite default
 /// from `convert`, because reconciliation is by column name and a file with no
 /// names is the unusual case here.
-fn reading(args: &Args, format: Format) -> crate::tabular::Reading {
+///
+/// This returns a Result because `--delimiter` can be wrong, and it used to
+/// swallow that: `diff --delimiter wat` ignored the flag and went on to report
+/// a difference, while `convert --delimiter wat` said the delimiter was wrong.
+/// One mistake answered two ways is worse than either answer.
+fn reading(args: &Args, format: Format) -> Result<crate::tabular::Reading, Fault> {
     let headers = !(args.has("no-headers") || args.has("no_headers"));
-    crate::tabular::Reading {
-        format,
-        headers,
-        delimiter: crate::input::delimiter(args).unwrap_or(None),
-    }
+    Ok(crate::tabular::Reading { format, headers, delimiter: crate::input::delimiter(args)? })
 }
 
 fn summary_line(result: &Reconciliation) -> String {
