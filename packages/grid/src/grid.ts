@@ -442,7 +442,11 @@ if ('data' in settings) {
 
   /** Removes a setting from one cell, so it inherits again. */
   removeCellMeta(row: number, col: number, key?: string): void {
+    if (this.hooks.allows('beforeRemoveCellMeta', row, col, key) === false) {
+      return;
+    }
     this.#meta.removeCell(row, col, key);
+    this.hooks.notify('afterRemoveCellMeta', row, col, key);
   }
 
   // --- data ----------------------------------------------------------------
@@ -867,6 +871,7 @@ if ('data' in settings) {
       }
     }
     this.render();
+    this.hooks.notify('afterCellAlignment', range, className);
   }
 
   /** Replaces everything with the given rows. */
@@ -1088,6 +1093,10 @@ if ('data' in settings) {
     this.#data.undo();
     this.#syncDimensions();
     this.hooks.notify('afterUndo');
+    // Both stacks move on an undo — one loses an entry, the other gains one —
+    // which is what an enabled/disabled toolbar button is watching for.
+    this.hooks.notify('afterUndoStackChange');
+    this.hooks.notify('afterRedoStackChange');
     this.render();
   }
 
@@ -1099,6 +1108,8 @@ if ('data' in settings) {
     this.#data.redo();
     this.#syncDimensions();
     this.hooks.notify('afterRedo');
+    this.hooks.notify('afterUndoStackChange');
+    this.hooks.notify('afterRedoStackChange');
     this.render();
   }
 
@@ -1469,7 +1480,11 @@ if ('data' in settings) {
 
   /** Re-reads the container's size and draws again. */
   refreshDimensions(): void {
+    if (this.hooks.allows('beforeRefreshDimensions') === false) {
+      return;
+    }
     this.render();
+    this.hooks.notify('afterRefreshDimensions');
   }
 
   /** Brings the focused cell into view. */
@@ -3074,6 +3089,35 @@ if ('data' in settings) {
       view.root.focus();
       this.hooks.notify('afterOnCellMouseDown', event, coords);
     });
+
+    // The rest of the pointer events a caller can listen for. Only mousedown
+    // was announced, so a handler on `afterOnCellMouseUp` — the pair a drag
+    // selection is finished by — heard nothing at all.
+    // Written out rather than built from a prefix. A grep for
+    // `afterOnCellMouseUp` should find where it is announced, and
+    // scripts/parity.mjs — which decides a hook is reachable by looking for
+    // its name — cannot tell `` `before${hook}` `` from any other before-hook,
+    // so building the names would have marked all hundred of them live.
+    for (const [name, before, after] of [
+      ['mouseup', 'beforeOnCellMouseUp', 'afterOnCellMouseUp'],
+      ['mouseover', 'beforeOnCellMouseOver', 'afterOnCellMouseOver'],
+      ['mouseout', 'beforeOnCellMouseOut', 'afterOnCellMouseOut'],
+      ['contextmenu', 'beforeOnCellContextMenu', 'afterOnCellContextMenu'],
+    ] as const) {
+      view.root.addEventListener(name, (event) => {
+        if (!this.#listening) {
+          return;
+        }
+        const coords = view.cellAt(event.target);
+        if (!coords) {
+          return;
+        }
+        if (this.hooks.allows(before, event, coords) === false) {
+          return;
+        }
+        this.hooks.notify(after, event, coords);
+      });
+    }
 
     view.root.addEventListener('dblclick', (event) => {
       const coords = view.cellAt(event.target);

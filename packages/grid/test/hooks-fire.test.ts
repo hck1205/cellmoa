@@ -304,3 +304,92 @@ describe('a menu asks what it should contain', () => {
     expect(items.map((item) => item.key)).toEqual(['only']);
   });
 });
+
+describe('the pointer events other than mousedown are announced', () => {
+  it('fires beforeOnCellMouseUp and afterOnCellMouseUp with the event and the cell', async () => {
+    // Only mousedown was announced, so a handler on the event a drag selection
+    // *finishes* with heard nothing.
+    const { grid } = await mountGrid({ startRows: 3, startCols: 3 });
+    const fired = record(grid, ['beforeOnCellMouseUp', 'afterOnCellMouseUp']);
+    const cell = grid.view!.root.querySelector('td[data-row="1"][data-col="1"]');
+
+    cell?.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+
+    expect(fired.map((f) => f.name)).toEqual(['beforeOnCellMouseUp', 'afterOnCellMouseUp']);
+    expect(fired[1]?.args[1]).toMatchObject({ row: 1, col: 1 });
+  });
+
+  it('fires the over and out hooks', async () => {
+    const { grid } = await mountGrid({ startRows: 3, startCols: 3 });
+    const fired = record(grid, ['afterOnCellMouseOver', 'afterOnCellMouseOut']);
+    const cell = grid.view!.root.querySelector('td[data-row="0"][data-col="0"]');
+
+    cell?.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    cell?.dispatchEvent(new MouseEvent('mouseout', { bubbles: true }));
+
+    expect(fired.map((f) => f.name)).toEqual(['afterOnCellMouseOver', 'afterOnCellMouseOut']);
+  });
+
+  it('does not announce a pointer event over something that is not a cell', async () => {
+    const { grid } = await mountGrid({ startRows: 3, startCols: 3, colHeaders: true });
+    const fired = record(grid, ['afterOnCellMouseUp']);
+
+    grid.view!.root
+      .querySelector('th')
+      ?.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+
+    expect(fired).toEqual([]);
+  });
+});
+
+describe('the smaller notifications', () => {
+  it('announces a removed cell meta and lets the before hook refuse', async () => {
+    const { grid } = await mountGrid({ startRows: 3, startCols: 3 });
+    grid.setCellMeta(0, 0, 'className', 'marked');
+    const fired = record(grid, ['beforeRemoveCellMeta', 'afterRemoveCellMeta']);
+
+    grid.removeCellMeta(0, 0, 'className');
+    expect(fired.map((f) => f.name)).toEqual(['beforeRemoveCellMeta', 'afterRemoveCellMeta']);
+
+    grid.setCellMeta(0, 1, 'className', 'kept');
+    grid.addHook('beforeRemoveCellMeta', () => false);
+    grid.removeCellMeta(0, 1, 'className');
+    expect(grid.getCellMeta(0, 1)['className']).toBe('kept');
+  });
+
+  it('announces a refresh, and lets the before hook stop it', async () => {
+    const { grid } = await mountGrid({ startRows: 3, startCols: 3 });
+    const fired = record(grid, ['beforeRefreshDimensions', 'afterRefreshDimensions']);
+
+    grid.refreshDimensions();
+
+    expect(fired.map((f) => f.name)).toEqual([
+      'beforeRefreshDimensions',
+      'afterRefreshDimensions',
+    ]);
+  });
+
+  it('announces an alignment change with the range and the class', async () => {
+    const { grid } = await mountGrid({ startRows: 3, startCols: 3 });
+    const fired = record(grid, ['afterCellAlignment']);
+
+    grid.setAlignment({ start: { row: 0, col: 0 }, end: { row: 1, col: 1 } }, 'htRight');
+
+    expect(fired).toHaveLength(1);
+    expect(fired[0]?.args[1]).toBe('htRight');
+  });
+
+  it('announces both stacks moving on an undo and on a redo', async () => {
+    // A toolbar button watches these to know whether to grey itself out, and
+    // an undo moves both stacks — one loses an entry, the other gains one.
+    const { grid } = await mountGrid({ startRows: 3, startCols: 3 });
+    grid.setDataAtCell(0, 0, 'first');
+    const fired = record(grid, ['afterUndoStackChange', 'afterRedoStackChange']);
+
+    grid.undo();
+    expect(fired.map((f) => f.name)).toEqual(['afterUndoStackChange', 'afterRedoStackChange']);
+
+    grid.redo();
+    expect(fired).toHaveLength(4);
+  });
+});

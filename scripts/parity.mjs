@@ -190,9 +190,21 @@ function hookReachability() {
   // generous is the right direction here, because the cost of calling a live
   // hook dead is that nobody believes the table.
   const patterns = [];
+  const vague = [];
   for (const [, literal] of body.matchAll(/hooks\.(?:run|notify|allows)\(\s*`([^`]+)`/g)) {
-    const source = literal
-      .split(/\$\{[^}]*\}/)
+    const parts = literal.split(/\$\{[^}]*\}/);
+    // A template that is a prefix and nothing else — `` `before${hook}` `` —
+    // matches every hook starting with that prefix, which for "before" is all
+    // hundred of them. Counting those as reachable would make this number
+    // meaningless in the flattering direction, which is the worse one. A
+    // template earns its keep by having something after the interpolation, or
+    // a distinctive enough prefix on its own.
+    const specific = parts.length > 1 && (parts.at(-1) !== '' || parts[0].length >= 8);
+    if (!specific) {
+      vague.push(literal);
+      continue;
+    }
+    const source = parts
       .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
       .join('\\w*');
     patterns.push(new RegExp(`^${source}$`));
@@ -202,7 +214,7 @@ function hookReachability() {
     (name) =>
       !patterns.some((pattern) => pattern.test(name)) && !new RegExp(`\\b${name}\\b`).test(body),
   );
-  return { declared: names.length, reachable: names.length - dead.length, dead };
+  return { declared: names.length, reachable: names.length - dead.length, dead, vague };
 }
 
 const hooks = hookReachability();
@@ -215,7 +227,12 @@ const report = {
     missing: methodsMissing,
     divergent: DIVERGENT,
   },
-  hooks: { declared: hooks.declared, reachable: hooks.reachable, dead: hooks.dead },
+  hooks: {
+    declared: hooks.declared,
+    reachable: hooks.reachable,
+    dead: hooks.dead,
+    vague: hooks.vague,
+  },
 };
 
 if (process.argv.includes('--json')) {
@@ -239,6 +256,12 @@ if (process.argv.includes('--json')) {
   }
   const { declared: hd, reachable: hr } = report.hooks;
   console.log(`hooks     ${hr}/${hd} reachable  (${hd - hr} declared that nothing can fire)`);
+  // A template too vague to identify a hook is not counted, and saying so
+  // beats leaving someone to wonder why the name they just wired up is still
+  // on the dead list.
+  for (const literal of report.hooks.vague) {
+    console.log(`          \`${literal}\` names no hook in particular; write the names out`);
+  }
 }
 
 const failing = unread.length + methodsMissing.length + hooks.dead.length;
