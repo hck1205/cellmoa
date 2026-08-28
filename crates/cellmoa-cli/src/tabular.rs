@@ -72,6 +72,24 @@ pub struct Table {
 }
 
 impl Table {
+    /// A table with named columns and no rows yet.
+    ///
+    /// The `&[&str]` to `Vec<String>` conversion was written out at every site
+    /// that builds one — twice in the reconciliation reports and once in each
+    /// of three test modules — which is five copies of a line whose only job is
+    /// to be uninteresting.
+    pub fn headed(headers: &[&str]) -> Table {
+        Table {
+            headers: Some(headers.iter().map(|h| (*h).to_string()).collect()),
+            rows: Vec::new(),
+        }
+    }
+
+    /// Adds a row, taking whatever converts into a string.
+    pub fn push<T: ToString>(&mut self, row: impl IntoIterator<Item = T>) {
+        self.rows.push(row.into_iter().map(|cell| cell.to_string()).collect());
+    }
+
     /// The widest row, counting the headers. Used by the writers, which need a
     /// rectangle even when the input was ragged.
     #[allow(dead_code)]

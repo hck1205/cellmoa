@@ -95,7 +95,19 @@ fn open(args: &Args, path: &str) -> Result<Engine, Fault> {
     // different problems for whoever is reading the exit code, so they get
     // different codes rather than a shared "could not load".
     let package = Package::open(path).map_err(|e| classify_open(path, &e))?;
-    let mut engine = Engine::from_workbook(package.workbook);
+    let mut engine = determined(Engine::from_workbook(package.workbook), args)?;
+    engine.rebuild();
+    Ok(engine)
+}
+
+/// Pins the two things that would otherwise make a run unrepeatable.
+///
+/// `RAND` and `NOW` are the reason a spreadsheet can give two answers to the
+/// same question, and both commands that build an engine want to be able to
+/// stop that. It was written out in both, which is two places for the same
+/// error message to drift.
+pub(super) fn determined(engine: Engine, args: &Args) -> Result<Engine, Fault> {
+    let mut engine = engine;
     if let Some(seed) = args.value("seed") {
         let seed: u64 =
             seed.parse().map_err(|_| Fault::Usage(format!("`--seed {seed}` is not a number")))?;
@@ -106,7 +118,6 @@ fn open(args: &Args, path: &str) -> Result<Engine, Fault> {
             now.parse().map_err(|_| Fault::Usage(format!("`--now {now}` is not a number")))?;
         engine = engine.with_now_serial(now);
     }
-    engine.rebuild();
     Ok(engine)
 }
 

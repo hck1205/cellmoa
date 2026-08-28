@@ -151,16 +151,7 @@ fn load_stdin(args: &Args) -> Result<Engine, Fault> {
 
     let mut engine = Engine::new();
     let sheet = engine.add_sheet("Sheet1");
-    if let Some(seed) = args.value("seed") {
-        let seed: u64 =
-            seed.parse().map_err(|_| Fault::Usage(format!("`--seed {seed}` is not a number")))?;
-        engine = engine.with_seed(seed);
-    }
-    if let Some(now) = args.value("now") {
-        let now: f64 =
-            now.parse().map_err(|_| Fault::Usage(format!("`--now {now}` is not a number")))?;
-        engine = engine.with_now_serial(now);
-    }
+    engine = determined(engine, args)?;
 
     let edits: Vec<(CellAddr, String)> = table
         .rows

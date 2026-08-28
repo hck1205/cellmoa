@@ -182,13 +182,7 @@ impl Engine {
     /// the sheet: far enough from the data that it cannot reference itself, and
     /// a definite position for the implicit intersection rule to work from.
     pub fn evaluate(&self, sheet: SheetId, formula: &str) -> Result<Value, String> {
-        let expr = parse(formula).map_err(|e| e.to_string())?;
-        let at = CellRef::new(
-            cellmoa_core::reference::MAX_COLS - 1,
-            cellmoa_core::reference::MAX_ROWS - 1,
-        );
-        let mut ctx =
-            EvalCtx::new(&self.doc.workbook, sheet, at).with_seed(self.seed).with_now(self.now);
+        let (expr, mut ctx) = self.detached(sheet, formula)?;
         Ok(eval_to_value(&mut ctx, &expr))
     }
 
@@ -199,15 +193,28 @@ impl Engine {
     /// answer with a height, and a caller that means to spill it needs the
     /// whole rectangle rather than its top-left corner.
     pub fn evaluate_array(&self, sheet: SheetId, formula: &str) -> Result<Array, String> {
+        let (expr, mut ctx) = self.detached(sheet, formula)?;
+        Ok(crate::eval::eval(&mut ctx, &expr).to_array(&self.doc.workbook))
+    }
+
+    /// Parses a formula and builds a context to evaluate it in, away from any
+    /// cell.
+    ///
+    /// The corner is the point of it: the formula is evaluated as though it sat
+    /// in the bottom-right of the sheet, far enough from the data that it
+    /// cannot reference itself, and a definite position for the implicit
+    /// intersection rule to work from. Both public forms need exactly this,
+    /// and having it written twice meant the two could come to disagree about
+    /// where "away from the data" is.
+    fn detached(&self, sheet: SheetId, formula: &str) -> Result<(Expr, EvalCtx<'_>), String> {
         let expr = parse(formula).map_err(|e| e.to_string())?;
         let at = CellRef::new(
             cellmoa_core::reference::MAX_COLS - 1,
             cellmoa_core::reference::MAX_ROWS - 1,
         );
-        let mut ctx =
+        let ctx =
             EvalCtx::new(&self.doc.workbook, sheet, at).with_seed(self.seed).with_now(self.now);
-        let operand = crate::eval::eval(&mut ctx, &expr);
-        Ok(operand.to_array(&self.doc.workbook))
+        Ok((expr, ctx))
     }
 
     /// Applies several edits as one commit, then recalculates once.

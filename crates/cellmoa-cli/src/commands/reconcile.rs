@@ -283,38 +283,26 @@ fn as_json_report(result: &Reconciliation, settings: &Settings<'_>, args: &Args)
 }
 
 fn as_csv_report(result: &Reconciliation) -> Result<String, Fault> {
-    let mut table = Table {
-        headers: Some(
-            ["status", "key", "column", "left", "right", "delta", "within_tolerance"]
-                .iter()
-                .map(|s| s.to_string())
-                .collect(),
-        ),
-        rows: Vec::new(),
-    };
+    let mut table =
+        Table::headed(&["status", "key", "column", "left", "right", "delta", "within_tolerance"]);
     for outcome in &result.outcomes {
         if outcome.diffs.is_empty() {
-            table.rows.push(vec![
-                outcome.status.name().to_string(),
-                outcome.key.clone(),
-                String::new(),
-                String::new(),
-                String::new(),
-                String::new(),
-                String::new(),
-            ]);
+            // Five empty columns rather than a short row: a CSV reader counts
+            // fields, and a row that stops early moves every value after it.
+            table.push([outcome.status.name(), &outcome.key, "", "", "", "", ""]);
             continue;
         }
         // One row per disagreeing column, so a spreadsheet can filter on it.
         for diff in &outcome.diffs {
-            table.rows.push(vec![
-                outcome.status.name().to_string(),
-                outcome.key.clone(),
-                diff.column.clone(),
-                diff.left.clone(),
-                diff.right.clone(),
-                diff.delta.map(|d| d.to_string()).unwrap_or_default(),
-                diff.within_tolerance.to_string(),
+            let delta = diff.delta.map(|d| d.to_string()).unwrap_or_default();
+            table.push([
+                outcome.status.name(),
+                &outcome.key,
+                &diff.column,
+                &diff.left,
+                &diff.right,
+                &delta,
+                &diff.within_tolerance.to_string(),
             ]);
         }
     }
@@ -429,15 +417,7 @@ fn save_ambiguous(
         .as_ref()
         .and_then(|headers| crate::reshape::resolve(headers, settings.key).ok())
         .unwrap_or(0);
-    let mut table = Table {
-        headers: Some(
-            ["left_key", "candidate_count", "candidate_keys"]
-                .iter()
-                .map(|s| s.to_string())
-                .collect(),
-        ),
-        rows: Vec::new(),
-    };
+    let mut table = Table::headed(&["left_key", "candidate_count", "candidate_keys"]);
     for outcome in result.outcomes.iter().filter(|o| o.status == Status::Ambiguous) {
         let keys: Vec<String> = outcome
             .candidates

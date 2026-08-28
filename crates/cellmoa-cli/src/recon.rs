@@ -489,10 +489,11 @@ mod tests {
     use super::*;
 
     fn table(headers: &[&str], rows: &[&[&str]]) -> Table {
-        Table {
-            headers: Some(headers.iter().map(|h| h.to_string()).collect()),
-            rows: rows.iter().map(|r| r.iter().map(|c| c.to_string()).collect()).collect(),
+        let mut table = Table::headed(headers);
+        for row in rows {
+            table.push(row.iter().copied());
         }
+        table
     }
 
     fn settings(key: &str) -> Settings<'_> {
