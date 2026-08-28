@@ -503,24 +503,34 @@ if ('data' in settings) {
     return shown === null || shown === undefined ? '' : String(shown);
   }
 
-  /** The displayed text of a cell. */
-  getDataAtCell(row: number, col: number): string {
-    const physical = this.#physical(row, col);
-    if (!physical) {
-      return '';
-    }
-    this.#ensure(physical.row, physical.row, physical.col, physical.col);
-    return this.#displayValue(row, col, this.#data.text(physical.row, physical.col));
-  }
-
-  /** Everything about a cell, or `null` when it holds nothing. */
-  getCell(row: number, col: number): CellData | null {
+  /**
+   * A cell's physical position, with the workbook made ready to be read there.
+   *
+   * Three readers wanted the same two steps — resolve the visual coordinates to
+   * physical ones, then fetch the block that holds them — and each spelled the
+   * fetch as `#ensure(p.row, p.row, p.col, p.col)`. Four arguments naming two
+   * values is a transposition waiting to happen, and it only shows up as one
+   * cell reading blank on a server-backed grid.
+   */
+  #loaded(row: number, col: number): { row: number; col: number } | null {
     const physical = this.#physical(row, col);
     if (!physical) {
       return null;
     }
     this.#ensure(physical.row, physical.row, physical.col, physical.col);
-    return this.#data.get(physical.row, physical.col);
+    return physical;
+  }
+
+  /** The displayed text of a cell. */
+  getDataAtCell(row: number, col: number): string {
+    const at = this.#loaded(row, col);
+    return at ? this.#displayValue(row, col, this.#data.text(at.row, at.col)) : '';
+  }
+
+  /** Everything about a cell, or `null` when it holds nothing. */
+  getCell(row: number, col: number): CellData | null {
+    const at = this.#loaded(row, col);
+    return at ? this.#data.get(at.row, at.col) : null;
   }
 
   /** What an editor should start with: the formula if there is one. */
@@ -552,12 +562,8 @@ if ('data' in settings) {
    * meaning what the documentation says it means.
    */
   #sourceAt(row: number, col: number): string {
-    const physical = this.#physical(row, col);
-    if (!physical) {
-      return '';
-    }
-    this.#ensure(physical.row, physical.row, physical.col, physical.col);
-    return this.#data.editableValue(physical.row, physical.col);
+    const at = this.#loaded(row, col);
+    return at ? this.#data.editableValue(at.row, at.col) : '';
   }
 
   /** Every visible cell, row by row. */
@@ -3067,10 +3073,7 @@ if ('data' in settings) {
         }
         return;
       }
-      if (this.#editor) {
-        this.closeEditor(true);
-      }
-      if (this.hooks.allows('beforeOnCellMouseDown', event, coords) === false) {
+      if (!this.#mayTakeMouseDown(event, coords)) {
         return;
       }
       const mouseEvent = event as MouseEvent;
@@ -3175,11 +3178,24 @@ if ('data' in settings) {
    * fire either way so that a plugin listening for a header click — sorting is
    * the one that matters — is actually called.
    */
-  #onHeaderMouseDown(event: MouseEvent, coords: { row: number; col: number }): void {
+  /**
+   * Commits any open edit, then asks whether this click may be handled.
+   *
+   * The order is the point, and it is why this is one function rather than two
+   * lines in each caller: a path that asked the hook first and closed the
+   * editor after would hand a handler a grid that still had an editor open,
+   * and a path that forgot to close it at all would leave the edit hanging
+   * over whatever the click selected.
+   */
+  #mayTakeMouseDown(event: Event, coords: { row: number; col: number }): boolean {
     if (this.#editor) {
       this.closeEditor(true);
     }
-    if (this.hooks.allows('beforeOnCellMouseDown', event, coords) === false) {
+    return this.hooks.allows('beforeOnCellMouseDown', event, coords) !== false;
+  }
+
+  #onHeaderMouseDown(event: MouseEvent, coords: { row: number; col: number }): void {
+    if (!this.#mayTakeMouseDown(event, coords)) {
       return;
     }
     if (coords.row === -1 && coords.col >= 0) {

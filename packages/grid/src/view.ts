@@ -234,16 +234,30 @@ export class View {
     this.wrapper.remove();
   }
 
-  /** The cell an element belongs to, or `null` when it is not in one. */
-  cellAt(target: EventTarget | null): { row: number; col: number } | null {
+  /**
+   * The elements between `target` and the grid's root, innermost first.
+   *
+   * Both of the questions below — which cell is this, which header is this —
+   * are answered by walking up from whatever the event hit until something
+   * carries the coordinates. Only the answer differs, so only the answer is
+   * written twice.
+   */
+  *#upToRoot(target: EventTarget | null): Generator<HTMLElement> {
     let node = target as HTMLElement | null;
     while (node && node !== this.root) {
+      yield node;
+      node = node.parentElement;
+    }
+  }
+
+  /** The cell an element belongs to, or `null` when it is not in one. */
+  cellAt(target: EventTarget | null): { row: number; col: number } | null {
+    for (const node of this.#upToRoot(target)) {
       const row = node.dataset?.row;
       const col = node.dataset?.col;
       if (row !== undefined && col !== undefined) {
         return { row: Number(row), col: Number(col) };
       }
-      node = node.parentElement;
     }
     return null;
   }
@@ -261,8 +275,7 @@ export class View {
    * header too.
    */
   headerAt(target: EventTarget | null): { row: number; col: number } | null {
-    let node = target as HTMLElement | null;
-    while (node && node !== this.root) {
+    for (const node of this.#upToRoot(target)) {
       const row = node.dataset?.row;
       const col = node.dataset?.col;
       if (row !== undefined && col !== undefined) {
@@ -275,7 +288,6 @@ export class View {
       if (row !== undefined && node.tagName === 'TH') {
         return { row: Number(row), col: -1 };
       }
-      node = node.parentElement;
     }
     return null;
   }
