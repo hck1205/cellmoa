@@ -63,16 +63,6 @@ function flagButton(doc: Document, on: boolean): HTMLButtonElement {
   return button;
 }
 
-registerCellmoaRenderer("flag", ({ td, cell }) => {
-  td.textContent = "";
-  td.appendChild(flagButton(td.ownerDocument, cell?.text === "yes"));
-});
-
-registerHotRenderer("flag", (_instance, td, _row, _col, _prop, value) => {
-  td.textContent = "";
-  td.appendChild(flagButton(td.ownerDocument, value === "yes"));
-});
-
 const FLAG_ON =
   '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M6 3h11l-2 4 2 4H8v10H6z"/></svg>';
 

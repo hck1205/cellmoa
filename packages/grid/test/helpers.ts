@@ -72,3 +72,28 @@ export async function mountGrid(options: MountOptions = {}): Promise<Mounted> {
 export async function makeGrid(options: MountOptions = {}): Promise<Grid> {
   return (await mountGrid(options)).grid;
 }
+
+/**
+ * A clipboard event jsdom will let a plugin read from.
+ *
+ * jsdom builds no `clipboardData`, so every clipboard test has to supply one.
+ * Three test files each had their own — two identical, and a third that took a
+ * map of MIME types rather than a string. The general one subsumes the others,
+ * so a string is taken as `text/plain` and anything richer is spelled out.
+ */
+export function clipboardEvent(
+  type: string,
+  content: string | Record<string, string> = {},
+): ClipboardEvent {
+  const flavours = typeof content === 'string' ? { 'text/plain': content } : content;
+  const store = new Map(Object.entries(flavours).filter(([, value]) => value !== ''));
+  const event = new Event(type, { bubbles: true, cancelable: true }) as ClipboardEvent;
+  Object.defineProperty(event, 'clipboardData', {
+    value: {
+      getData: (format: string) => store.get(format) ?? '',
+      setData: (format: string, value: string) => store.set(format, value),
+    },
+    configurable: true,
+  });
+  return event;
+}

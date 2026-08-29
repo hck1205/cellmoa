@@ -2,27 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type { CopyPaste } from '../src/plugins/index.js';
 import { parsePastedValue } from '../src/plugins/index.js';
 import { pasteExtent, parseClipboardText } from '../src/plugins/copyPaste.js';
-import { mountGrid } from './helpers.js';
+import { clipboardEvent, mountGrid } from './helpers.js';
 
 const clipboardOf = (grid: Awaited<ReturnType<typeof mountGrid>>['grid']) =>
   grid.getPlugin('copyPaste') as unknown as CopyPaste;
-
-/** A `ClipboardEvent` jsdom will accept, with a data transfer we can inspect. */
-function clipboardEvent(type: string, text = ''): ClipboardEvent {
-  const store = new Map<string, string>();
-  if (text !== '') {
-    store.set('text/plain', text);
-  }
-  const event = new Event(type, { bubbles: true, cancelable: true }) as ClipboardEvent;
-  Object.defineProperty(event, 'clipboardData', {
-    value: {
-      getData: (format: string) => store.get(format) ?? '',
-      setData: (format: string, value: string) => store.set(format, value),
-    },
-    configurable: true,
-  });
-  return event;
-}
 
 describe('reading the clipboard text', () => {
   it('keeps a field that was quoted down to nothing', () => {

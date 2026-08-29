@@ -9,7 +9,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Autofill, CopyPaste, ExportFile } from '../src/plugins/index.js';
 import { escapeCsvValue } from '../src/plugins/exportFile.js';
-import { makeGrid, mountGrid } from './helpers.js';
+import { clipboardEvent, makeGrid, mountGrid } from './helpers.js';
 
 const clipboardOf = (grid: Awaited<ReturnType<typeof mountGrid>>['grid']) =>
   grid.getPlugin('copyPaste') as unknown as CopyPaste;
@@ -19,20 +19,6 @@ const exporterOf = (grid: Awaited<ReturnType<typeof mountGrid>>['grid']) =>
 
 const autofillOf = (grid: Awaited<ReturnType<typeof mountGrid>>['grid']) =>
   grid.getPlugin('autofill') as unknown as Autofill;
-
-/** A `ClipboardEvent` jsdom will accept, carrying whichever flavours are given. */
-function clipboardEvent(type: string, flavours: Record<string, string> = {}): ClipboardEvent {
-  const store = new Map<string, string>(Object.entries(flavours));
-  const event = new Event(type, { bubbles: true, cancelable: true }) as ClipboardEvent;
-  Object.defineProperty(event, 'clipboardData', {
-    value: {
-      getData: (format: string) => store.get(format) ?? '',
-      setData: (format: string, value: string) => store.set(format, value),
-    },
-    configurable: true,
-  });
-  return event;
-}
 
 /**
  * The name a download would have been saved under.

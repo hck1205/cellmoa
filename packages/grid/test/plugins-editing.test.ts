@@ -9,29 +9,12 @@ import {
   toClipboardHtml,
   toClipboardText,
 } from '../src/plugins/index.js';
-import { mountGrid } from './helpers.js';
+import { clipboardEvent, mountGrid } from './helpers.js';
 import type { MountOptions } from './helpers.js';
 
 /** This suite's table, whose size several of its assertions count on. */
 const makeGrid = (settings: MountOptions = {}) =>
   mountGrid({ startRows: 6, startCols: 4, ...settings }).then((m) => m.grid);
-
-/** A `ClipboardEvent` jsdom will accept, with a data transfer we can inspect. */
-function clipboardEvent(type: string, text = ''): ClipboardEvent {
-  const store = new Map<string, string>();
-  if (text !== '') {
-    store.set('text/plain', text);
-  }
-  const event = new Event(type, { bubbles: true, cancelable: true }) as ClipboardEvent;
-  Object.defineProperty(event, 'clipboardData', {
-    value: {
-      getData: (format: string) => store.get(format) ?? '',
-      setData: (format: string, value: string) => store.set(format, value),
-    },
-    configurable: true,
-  });
-  return event;
-}
 
 describe('the clipboard text format', () => {
   it('splits on tabs and newlines', () => {
