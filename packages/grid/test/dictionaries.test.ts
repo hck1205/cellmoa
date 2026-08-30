@@ -13,7 +13,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { DICTIONARIES, DEFAULT_LANGUAGE } from '../src/i18n/index.js';
+import { DICTIONARIES, DEFAULT_LANGUAGE, phrase, registerLanguage } from '../src/i18n/index.js';
 import { PHRASE } from '../src/i18n/keys.js';
 
 const entries = Object.entries(DICTIONARIES);
@@ -83,5 +83,53 @@ describe('the dictionaries', () => {
         expect(placeholders(value), `${language} ${key}`).toEqual(placeholders(source));
       }
     }
+  });
+
+  it('keeps a language\u2019s own words rather than the English it is filled in from', () => {
+    // Every dictionary is built as `{ ...english, ...theirs }`, so the English
+    // phrases fill any gap. That makes a completeness check meaningless — the
+    // constructor guarantees it — and hides the failure that actually matters:
+    // written the other way round, `{ ...theirs, ...english }`, every key is
+    // still there and every one of the twenty translations is silently English.
+    //
+    // So the rule is not "no key is missing" but "the translation won". A
+    // language is expected to differ from English on most of what it defines;
+    // asking for a clear majority states that without naming any one string.
+    const english = DICTIONARIES[DEFAULT_LANGUAGE] ?? {};
+    for (const [language, dictionary] of entries) {
+      if (language === DEFAULT_LANGUAGE) continue;
+      const keys = Object.keys(english);
+      const translated = keys.filter(
+        (key) => JSON.stringify(dictionary[key]) !== JSON.stringify(english[key]),
+      );
+      expect(
+        translated.length,
+        `${language} matches English on ${keys.length - translated.length} of ${keys.length} phrases \u2014 is it being filled in over its own words?`,
+      ).toBeGreaterThan(keys.length / 2);
+    }
+  });
+});
+
+describe('a phrase that a language does not have', () => {
+  it('falls back to the default language rather than showing the key', () => {
+    // A caller registering one phrase gets the other hundred and seven in
+    // English rather than a grid full of raw keys, because `registerLanguage`
+    // fills in from the default too. That is the normal shape of a caller's own
+    // dictionary, and nothing else in the suite passes a partial one.
+    registerLanguage('xx-XX', { 'Common:ok': 'Ja' });
+    expect(phrase('xx-XX', 'Common:ok')).toBe('Ja');
+    expect(phrase('xx-XX', PHRASE.contextMenuUndo)).toBe(
+      phrase(DEFAULT_LANGUAGE, PHRASE.contextMenuUndo),
+    );
+  });
+
+  it('shows the key when no language has it, rather than nothing at all', () => {
+    expect(phrase(DEFAULT_LANGUAGE, 'Nobody:knows.this')).toBe('Nobody:knows.this');
+  });
+
+  it('falls back to the default language for a language nobody registered', () => {
+    expect(phrase('zz-ZZ', PHRASE.contextMenuUndo)).toBe(
+      phrase(DEFAULT_LANGUAGE, PHRASE.contextMenuUndo),
+    );
   });
 });
