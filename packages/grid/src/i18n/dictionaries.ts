@@ -16,7 +16,7 @@ export type Phrase = string | [string, string];
 export type Dictionary = Record<string, Phrase>;
 
 /** ar-AR */
-export const DICTIONARY_AR_AR: Dictionary = {
+const DICTIONARY_AR_AR: Dictionary = {
   "Common:ok": "موافق",
   "Common:cancel": "إلغاء",
   "ContextMenu:items.noItems": "لا توجد خيارات متوفرة",
@@ -141,7 +141,7 @@ export const DICTIONARY_AR_AR: Dictionary = {
 };
 
 /** cs-CZ */
-export const DICTIONARY_CS_CZ: Dictionary = {
+const DICTIONARY_CS_CZ: Dictionary = {
   "Common:ok": "OK",
   "Common:cancel": "Storno",
   "ContextMenu:items.noItems": "Žádné volby nejsou dostupné",
@@ -266,7 +266,7 @@ export const DICTIONARY_CS_CZ: Dictionary = {
 };
 
 /** de-CH */
-export const DICTIONARY_DE_CH: Dictionary = {
+const DICTIONARY_DE_CH: Dictionary = {
   "Common:ok": "OK",
   "Common:cancel": "Abbrechen",
   "ContextMenu:items.insertRowAbove": "Zeile einfügen oberhalb",
@@ -390,7 +390,7 @@ export const DICTIONARY_DE_CH: Dictionary = {
 };
 
 /** de-DE */
-export const DICTIONARY_DE_DE: Dictionary = {
+const DICTIONARY_DE_DE: Dictionary = {
   "Common:ok": "OK",
   "Common:cancel": "Abbrechen",
   "ContextMenu:items.insertRowAbove": "Zeile einfügen oberhalb",
@@ -514,7 +514,7 @@ export const DICTIONARY_DE_DE: Dictionary = {
 };
 
 /** en-US */
-export const DICTIONARY_EN_US: Dictionary = {
+const DICTIONARY_EN_US: Dictionary = {
   "Common:ok": "OK",
   "Common:cancel": "Cancel",
   "ContextMenu:items.noItems": "No available options",
@@ -653,7 +653,7 @@ export const DICTIONARY_EN_US: Dictionary = {
 };
 
 /** es-MX */
-export const DICTIONARY_ES_MX: Dictionary = {
+const DICTIONARY_ES_MX: Dictionary = {
   "Common:ok": "OK",
   "Common:cancel": "Cancelar",
   "ContextMenu:items.insertRowAbove": "Insertar fila arriba",
@@ -789,7 +789,7 @@ export const DICTIONARY_ES_MX: Dictionary = {
 };
 
 /** fa-IR */
-export const DICTIONARY_FA_IR: Dictionary = {
+const DICTIONARY_FA_IR: Dictionary = {
   "Common:ok": "تایید",
   "Common:cancel": "لغو",
   "ContextMenu:items.noItems": "هیچ گزینه ای در دسترس نیست",
@@ -928,7 +928,7 @@ export const DICTIONARY_FA_IR: Dictionary = {
 };
 
 /** fr-FR */
-export const DICTIONARY_FR_FR: Dictionary = {
+const DICTIONARY_FR_FR: Dictionary = {
   "Common:ok": "OK",
   "Common:cancel": "Annuler",
   "ContextMenu:items.insertRowAbove": "Insérer une ligne en haut",
@@ -1052,7 +1052,7 @@ export const DICTIONARY_FR_FR: Dictionary = {
 };
 
 /** hr-HR */
-export const DICTIONARY_HR_HR: Dictionary = {
+const DICTIONARY_HR_HR: Dictionary = {
   "Common:ok": "U redu",
   "Common:cancel": "Odustani",
   "ContextMenu:items.noItems": "Nema dostupnih mogućnosti",
@@ -1191,7 +1191,7 @@ export const DICTIONARY_HR_HR: Dictionary = {
 };
 
 /** it-IT */
-export const DICTIONARY_IT_IT: Dictionary = {
+const DICTIONARY_IT_IT: Dictionary = {
   "Common:ok": "OK",
   "Common:cancel": "Annulla",
   "ContextMenu:items.insertRowAbove": "Inserisci riga sopra",
@@ -1324,7 +1324,7 @@ export const DICTIONARY_IT_IT: Dictionary = {
 };
 
 /** ja-JP */
-export const DICTIONARY_JA_JP: Dictionary = {
+const DICTIONARY_JA_JP: Dictionary = {
   "Common:ok": "OK",
   "Common:cancel": "キャンセル",
   "ContextMenu:items.insertRowAbove": "行を上に挿入",
@@ -1460,7 +1460,7 @@ export const DICTIONARY_JA_JP: Dictionary = {
 };
 
 /** ko-KR */
-export const DICTIONARY_KO_KR: Dictionary = {
+const DICTIONARY_KO_KR: Dictionary = {
   "Common:ok": "확인",
   "Common:cancel": "취소",
   "ContextMenu:items.insertRowAbove": "위쪽에 행 삽입",
@@ -1584,7 +1584,7 @@ export const DICTIONARY_KO_KR: Dictionary = {
 };
 
 /** lv-LV */
-export const DICTIONARY_LV_LV: Dictionary = {
+const DICTIONARY_LV_LV: Dictionary = {
   "Common:ok": "Labi",
   "Common:cancel": "Atcelt",
   "ContextMenu:items.noItems": "Nav pieejamu opciju",
@@ -1721,7 +1721,7 @@ export const DICTIONARY_LV_LV: Dictionary = {
 };
 
 /** nb-NO */
-export const DICTIONARY_NB_NO: Dictionary = {
+const DICTIONARY_NB_NO: Dictionary = {
   "Common:ok": "OK",
   "Common:cancel": "Avbryt",
   "ContextMenu:items.insertRowAbove": "Sett inn over",
@@ -1845,7 +1845,7 @@ export const DICTIONARY_NB_NO: Dictionary = {
 };
 
 /** nl-NL */
-export const DICTIONARY_NL_NL: Dictionary = {
+const DICTIONARY_NL_NL: Dictionary = {
   "Common:ok": "OK",
   "Common:cancel": "Annuleren",
   "ContextMenu:items.insertRowAbove": "Rij boven invoegen",
@@ -1981,7 +1981,7 @@ export const DICTIONARY_NL_NL: Dictionary = {
 };
 
 /** pl-PL */
-export const DICTIONARY_PL_PL: Dictionary = {
+const DICTIONARY_PL_PL: Dictionary = {
   "Common:ok": "OK",
   "Common:cancel": "Anuluj",
   "ContextMenu:items.noItems": "Brak dostępnych opcji",
@@ -2120,7 +2120,7 @@ export const DICTIONARY_PL_PL: Dictionary = {
 };
 
 /** pt-BR */
-export const DICTIONARY_PT_BR: Dictionary = {
+const DICTIONARY_PT_BR: Dictionary = {
   "Common:ok": "OK",
   "Common:cancel": "Cancelar",
   "ContextMenu:items.insertRowAbove": "Inserir linha acima",
@@ -2244,7 +2244,7 @@ export const DICTIONARY_PT_BR: Dictionary = {
 };
 
 /** ru-RU */
-export const DICTIONARY_RU_RU: Dictionary = {
+const DICTIONARY_RU_RU: Dictionary = {
   "Common:ok": "OK",
   "Common:cancel": "Отмена",
   "ContextMenu:items.insertRowAbove": "Вставить строку выше",
@@ -2368,7 +2368,7 @@ export const DICTIONARY_RU_RU: Dictionary = {
 };
 
 /** sr-SP */
-export const DICTIONARY_SR_SP: Dictionary = {
+const DICTIONARY_SR_SP: Dictionary = {
   "Common:ok": "U redu",
   "Common:cancel": "Otkaži",
   "ContextMenu:items.noItems": "Nema dostupnih opcija",
@@ -2505,7 +2505,7 @@ export const DICTIONARY_SR_SP: Dictionary = {
 };
 
 /** zh-CN */
-export const DICTIONARY_ZH_CN: Dictionary = {
+const DICTIONARY_ZH_CN: Dictionary = {
   "Common:ok": "确认",
   "Common:cancel": "取消",
   "ContextMenu:items.insertRowAbove": "上方插入行",
@@ -2632,7 +2632,7 @@ export const DICTIONARY_ZH_CN: Dictionary = {
 };
 
 /** zh-TW */
-export const DICTIONARY_ZH_TW: Dictionary = {
+const DICTIONARY_ZH_TW: Dictionary = {
   "Common:ok": "確認",
   "Common:cancel": "取消",
   "ContextMenu:items.insertRowAbove": "上方插入列",

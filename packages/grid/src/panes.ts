@@ -49,7 +49,7 @@ export interface Pane {
 }
 
 /** The slice of the sheet one pane draws, and which headers come with it. */
-export interface PaneArea {
+interface PaneArea {
   firstRow: number;
   lastRow: number;
   firstCol: number;

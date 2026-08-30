@@ -13,6 +13,7 @@
 
 
 import type { CellRenderer } from './cellTypes/types.js';
+import type { Sanitizer } from './sanitize.js';
 import type { HookHandler } from './hooks.js';
 import type { RegisteredTheme } from './themes/index.js';
 
@@ -450,7 +451,7 @@ export interface GridSettings {
    * may contain. `source` says where the content is going, so one function can
    * be stricter about a paste than about a cell it rendered itself.
    */
-  sanitizer?: (content: string, source: 'innerHTML' | 'CopyPaste.paste' | 'Dialog') => string;
+  sanitizer?: Sanitizer;
 
   numericFormat?: Intl.NumberFormatOptions;
   /** `Intl.DateTimeFormatOptions`, for the same reason. */

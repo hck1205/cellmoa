@@ -16,7 +16,7 @@ import { BasePlugin, registerPlugin } from './base.js';
  * was there moves down or to the right of what arrives, which is how a paste
  * inserts rather than replaces.
  */
-export type PasteMode = 'overwrite' | 'shift_down' | 'shift_right';
+type PasteMode = 'overwrite' | 'shift_down' | 'shift_right';
 
 /**
  * What a copy takes.

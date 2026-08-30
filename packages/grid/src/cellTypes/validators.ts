@@ -53,7 +53,7 @@ export const numericValidator: CellValidator = (value, meta) => {
  * same reading the editor takes — see `isStrictList`. A flexible list is not
  * unvalidated: a value outside it is exactly what the type is for.
  */
-export function listValidator(type: string, source?: unknown): CellValidator {
+function listValidator(type: string, source?: unknown): CellValidator {
   return (value, meta) => {
     const empty = emptyCheck(value, meta);
     if (empty) {

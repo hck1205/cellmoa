@@ -210,25 +210,17 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_error_literal(&mut self, start: usize) -> Result<TokKind, ParseError> {
-        const LITERALS: [CellError; 10] = [
-            CellError::Div0,
-            CellError::Name,
-            CellError::Null,
-            CellError::Num,
-            CellError::Ref,
-            CellError::Value,
-            CellError::Cycle,
-            CellError::Spill,
-            CellError::Calc,
-            // `#N/A` is checked last: it is a prefix of nothing, but keeping the
-            // longer literals first makes the intent explicit.
-            CellError::NA,
-        ];
+        // `CellError::ALL`, rather than a second copy of the same ten names:
+        // a variant added to one list and not the other would have gone
+        // unnoticed. Order does not matter here — no literal is a prefix of
+        // another, `#N/A` and `#NAME?` included, since they differ at the
+        // third byte — so the shared list's order is as good as any.
+        let literals = CellError::ALL;
         // Every literal is ASCII, so the comparison is done on bytes. Slicing
         // the `str` instead would abort the process on input like `#NUM…`,
         // where the length of the literal falls inside a multi-byte character.
         let rest = &self.src.as_bytes()[start..];
-        for err in LITERALS {
+        for err in literals {
             let lit = err.as_str();
             if rest.get(..lit.len()).is_some_and(|head| head.eq_ignore_ascii_case(lit.as_bytes())) {
                 self.advance_bytes(lit.len());

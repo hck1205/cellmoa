@@ -86,7 +86,7 @@ const formatters = new Map<string, Intl.NumberFormat>();
  * own rendering is used, which is what makes an unformatted grid show exactly
  * what the workbook holds.
  */
-export function formatNumeric(
+function formatNumeric(
   text: string,
   value: unknown,
   meta: RenderContext['meta'],

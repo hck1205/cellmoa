@@ -406,32 +406,8 @@ pub const FUNCTIONS: &[Function] = &[
         }
         Err(e) => Operand::error(e),
     }),
-    f("LARGE", 2, Some(2), |ctx, a| {
-        args!(k = arg_num(ctx, a, 1));
-        match sorted_numbers(ctx, &a[..1]) {
-            Ok(values) => {
-                let k = k.trunc() as usize;
-                if k < 1 || k > values.len() {
-                    return Operand::error(CellError::Num);
-                }
-                number(values[values.len() - k])
-            }
-            Err(e) => Operand::error(e),
-        }
-    }),
-    f("SMALL", 2, Some(2), |ctx, a| {
-        args!(k = arg_num(ctx, a, 1));
-        match sorted_numbers(ctx, &a[..1]) {
-            Ok(values) => {
-                let k = k.trunc() as usize;
-                if k < 1 || k > values.len() {
-                    return Operand::error(CellError::Num);
-                }
-                number(values[k - 1])
-            }
-            Err(e) => Operand::error(e),
-        }
-    }),
+    f("LARGE", 2, Some(2), |ctx, a| kth(ctx, a, End::Largest)),
+    f("SMALL", 2, Some(2), |ctx, a| kth(ctx, a, End::Smallest)),
     // --- spread -------------------------------------------------------------
     f("VAR.S", 1, None, |ctx, a| spread(ctx, a, 1, false, false)),
     f("VAR", 1, None, |ctx, a| spread(ctx, a, 1, false, false)),
@@ -618,6 +594,35 @@ pub const FUNCTIONS: &[Function] = &[
 ];
 
 /// The shared body of the variance and standard-deviation family.
+/// Which end of the sorted values `kth` counts from.
+enum End {
+    Largest,
+    Smallest,
+}
+
+/// The k-th value from one end of a sorted set — `LARGE` and `SMALL`.
+///
+/// The two differ by the index they finally read and nothing else: the same
+/// argument, the same sort, the same out-of-range rule. Written out twice, a
+/// fix to the range check had two places to reach and would silently have been
+/// applied to one.
+fn kth(ctx: &EvalCtx, args: &[Operand], end: End) -> Operand {
+    args!(k = arg_num(ctx, args, 1));
+    match sorted_numbers(ctx, &args[..1]) {
+        Ok(values) => {
+            let k = k.trunc() as usize;
+            if k < 1 || k > values.len() {
+                return Operand::error(CellError::Num);
+            }
+            number(match end {
+                End::Largest => values[values.len() - k],
+                End::Smallest => values[k - 1],
+            })
+        }
+        Err(e) => Operand::error(e),
+    }
+}
+
 fn spread(
     ctx: &EvalCtx,
     args: &[Operand],

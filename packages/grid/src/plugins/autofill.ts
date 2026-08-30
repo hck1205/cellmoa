@@ -39,7 +39,7 @@ export function extendSeries(source: string[], length: number): string[] {
 }
 
 /** The same fill, with each value's distance from its source. */
-export function fillFrom(source: string[], length: number): Filled[] {
+function fillFrom(source: string[], length: number): Filled[] {
   const numbers = source.map((value) => Number(value));
   const allNumeric = source.length > 0 && numbers.every((n) => Number.isFinite(n) && source.length > 0);
 

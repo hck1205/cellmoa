@@ -47,7 +47,22 @@ export {
   SETTING_NAMES,
   isSettingName,
 } from './settings.js';
-export type { CellData, CellType, Coords, GridSettings } from './settings.js';
+export type {
+  CellData,
+  CellType,
+  // The type of the `cells` setting, and the type `isSettingName` narrows to.
+  // Both were spelled out in settings.ts and reachable from nowhere, so a
+  // TypeScript caller writing a `cells` function or using the guard had a type
+  // they could not name.
+  CellsFunction,
+  Coords,
+  GridSettings,
+  SettingName,
+} from './settings.js';
+// What a caller has to implement to supply their own `sanitizer`. The settings
+// used to spell the signature out again rather than referring to this, so the
+// two could have come to disagree about which sources exist.
+export type { SanitizeSource, Sanitizer } from './sanitize.js';
 
 export {
   cellTypeNames,

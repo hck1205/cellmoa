@@ -50,7 +50,7 @@ export type AlterRequest =
   | 'insert_col_end';
 
 /** How far past the given index an action lands. */
-export interface NormalizedAlter {
+interface NormalizedAlter {
   action: AlterAction;
   /** `1` for the "below"/"end" spellings, which insert after the index. */
   offset: number;
