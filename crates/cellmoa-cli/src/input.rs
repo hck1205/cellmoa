@@ -29,6 +29,28 @@ pub fn delimiter(args: &Args) -> Result<Option<char>, Fault> {
     }
 }
 
+/// Everything on stdin, as text.
+///
+/// The same six lines lived in `reconcile` too, down to the `stdin: ` prefix on
+/// the error. That prefix is what a user sees when a pipe dies mid-read, and a
+/// second copy of it is a second thing to keep in step for no reason.
+pub fn stdin_text() -> Result<String, Fault> {
+    use std::io::Read;
+    let mut text = String::new();
+    std::io::stdin().read_to_string(&mut text).map_err(|e| Fault::Io(format!("stdin: {e}")))?;
+    Ok(text)
+}
+
+/// The format a filename implies, or the message telling the user to say.
+///
+/// Also duplicated in `reconcile`, wording included. Two copies of a sentence
+/// the user reads is how the same situation comes to be explained two ways.
+pub fn format_from_name(path: &str) -> Result<Format, Fault> {
+    Format::from_extension(path).ok_or_else(|| {
+        Fault::Usage(format!("cannot tell the format of {path:?} from its name; pass `--from`"))
+    })
+}
+
 /// Reads a table from `path`, or from stdin when `path` is `None` or `-`.
 ///
 /// The format comes from `--from` when given. Otherwise a filename may imply
@@ -40,11 +62,7 @@ pub fn table(args: &Args, path: Option<&str>) -> Result<Table, Fault> {
     let format = match args.value("from") {
         Some(named) => Format::parse(named)?,
         None => match path {
-            Some(path) => Format::from_extension(path).ok_or_else(|| {
-                Fault::Usage(format!(
-                    "cannot tell the format of {path:?} from its name; pass `--from`"
-                ))
-            })?,
+            Some(path) => format_from_name(path)?,
             None => {
                 return Err(Fault::Usage("reading from stdin needs `--from <format>`".to_string()))
             }
@@ -53,14 +71,7 @@ pub fn table(args: &Args, path: Option<&str>) -> Result<Table, Fault> {
 
     let text = match path {
         Some(path) => crate::exit::read(path)?,
-        None => {
-            use std::io::Read;
-            let mut text = String::new();
-            std::io::stdin()
-                .read_to_string(&mut text)
-                .map_err(|e| Fault::Io(format!("stdin: {e}")))?;
-            text
-        }
+        None => stdin_text()?,
     };
     crate::tabular::read(
         &text,

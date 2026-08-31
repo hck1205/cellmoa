@@ -48,6 +48,12 @@ pub(super) fn peek_command(args: &Args) -> Outcome {
 
     let format = match args.value("from") {
         Some(named) => Format::parse(named)?,
+        // Deliberately lenient, where `input::format_from_name` refuses: peek
+        // shows a file, it does not transform one. Guessing wrong here costs
+        // the user a glance at a badly split table, and they can say `--from`;
+        // guessing wrong in `convert` or `diff` writes the mistake to disk.
+        // The reference documents the extensions it knows and is silent on the
+        // rest, so this is our choice rather than its rule.
         None => Format::from_extension(path).unwrap_or(Format::Csv),
     };
 

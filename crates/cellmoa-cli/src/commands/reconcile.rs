@@ -176,20 +176,12 @@ fn read_sides(args: &Args) -> Result<(Table, Table), Fault> {
     let read = |path: &str, other: &str| -> Result<Table, Fault> {
         if path == "-" {
             let format = inferred(other)?;
-            use std::io::Read;
-            let mut text = String::new();
-            std::io::stdin()
-                .read_to_string(&mut text)
-                .map_err(|e| Fault::Io(format!("stdin: {e}")))?;
+            let text = crate::input::stdin_text()?;
             return crate::tabular::read(&text, reading(args, format)?);
         }
         let format = match args.value("from") {
             Some(named) => Format::parse(named)?,
-            None => Format::from_extension(path).ok_or_else(|| {
-                Fault::Usage(format!(
-                    "cannot tell the format of {path:?} from its name; pass `--from`"
-                ))
-            })?,
+            None => crate::input::format_from_name(path)?,
         };
         crate::tabular::read(&crate::exit::read(path)?, reading(args, format)?)
     };

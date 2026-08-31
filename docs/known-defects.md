@@ -248,3 +248,22 @@ Found by `packages/verification/divergence.mjs`, which compares the values the
 two panels show. It is the same family as the `$1,200.00` note above and a
 worse case: there the column said nothing about its type, and here it says
 exactly what it is and is not listened to.
+
+## The same filename gets two answers from two commands
+
+`cellmoa peek data.qqq` reads the file as CSV and prints it. `cellmoa diff
+data.qqq other.csv --key a` refuses with `cannot tell the format of
+"data.qqq" from its name; pass --from`. Same file, same CLI, two answers.
+
+The leniency is deliberate and now says so at `commands/inspect.rs`: peek
+shows a file, and a bad guess there costs a glance at a badly split table,
+where the same guess in `convert` writes the mistake to disk. The reference
+documents the extensions peek knows — `.csv`, `.tsv`, `.tab`, `.txt`,
+`.xlsx`, `.ods`, `.sheet` — and says nothing about anything else, so the
+fallback is our choice and not its rule.
+
+What is left unresolved is that a user meets both behaviours without being
+told which command is which. The options are to make peek refuse too (loses
+a genuinely useful convenience), or to have it say on stderr that it guessed
+— which is what it already does for `--sheet`, so there is a precedent in
+the same command. The second is probably right; it is not done.
