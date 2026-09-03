@@ -725,9 +725,17 @@ if ('data' in settings) {
       throw error;
     }
     this.#syncDimensions();
+    // `null` for a load, an array for everything else — the reference's
+    // contract, declared as `CellChange[] | null` in its own types. The usual
+    // handler starts `if (!changes) return;` to skip the load and sync each
+    // real edit; sending it an array here means that guard never trips, and a
+    // five-by-five grid loading one value reports twenty-five changes, of
+    // which twenty-four are empty becoming empty.
     this.hooks.run(
       'afterChange',
-      before.filter((change): change is CellChange => change !== null),
+      source === 'loadData'
+        ? null
+        : before.filter((change): change is CellChange => change !== null),
       source,
     );
     this.render();
@@ -1333,6 +1341,10 @@ if ('data' in settings) {
    * evaluates to an empty string is not, because something is there.
    */
   isEmptyRow(row: number): boolean {
+    const own = this.getSettings().isEmptyRow;
+    if (typeof own === 'function') {
+      return own.call(this, row);
+    }
     for (let col = 0; col < this.countCols(); col += 1) {
       if (this.#sourceAt(row, col) !== '') {
         return false;
@@ -1342,6 +1354,10 @@ if ('data' in settings) {
   }
 
   isEmptyCol(col: number): boolean {
+    const own = this.getSettings().isEmptyCol;
+    if (typeof own === 'function') {
+      return own.call(this, col);
+    }
     for (let row = 0; row < this.countRows(); row += 1) {
       if (this.#sourceAt(row, col) !== '') {
         return false;

@@ -12,6 +12,7 @@
  */
 
 
+import type { Grid } from './grid.js';
 import type { CellRenderer } from './cellTypes/types.js';
 import type { Sanitizer } from './sanitize.js';
 import type { HookHandler } from './hooks.js';
@@ -167,6 +168,7 @@ export const SETTING_NAMES = [
   'layoutDirection', 'licenseKey', 'loading', 'locale',
   'manualColumnFreeze', 'manualColumnMove', 'manualColumnResize', 'manualRowMove',
   'manualRowResize', 'maxCols', 'maxRows', 'maxSelections',
+  'isEmptyCol', 'isEmptyRow',
   'mergeCells', 'minCols', 'minRowHeights', 'minRows',
   'minSpareCols', 'minSpareRows', 'moveCells', 'multiColumnSorting',
   'navigableHeaders', 'nestedHeaders', 'nestedRows', 'noWordWrapClassName',
@@ -451,6 +453,17 @@ export interface GridSettings {
    * may contain. `source` says where the content is going, so one function can
    * be stricter about a paste than about a cell it rendered itself.
    */
+  /**
+   * What counts as an empty row or column, when the default does not.
+   *
+   * The default asks whether every cell's source value is `''`. A grid whose
+   * rows carry an id, or a spacer column, is never empty by that rule, and
+   * `minSpareRows` and the empty-data state both read it — so the reference
+   * lets the caller answer instead. `this` is the grid.
+   */
+  isEmptyRow?: (this: Grid, row: number) => boolean;
+  isEmptyCol?: (this: Grid, col: number) => boolean;
+
   sanitizer?: Sanitizer;
 
   numericFormat?: Intl.NumberFormatOptions;

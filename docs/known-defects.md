@@ -267,3 +267,43 @@ told which command is which. The options are to make peek refuse too (loses
 a genuinely useful convenience), or to have it say on stderr that it guessed
 — which is what it already does for `--sheet`, so there is a precedent in
 the same command. The second is probably right; it is not done.
+
+## Three names the reference declares and this does not
+
+`scripts/api-audit.mjs` reads `handsontable@18`'s own `.d.ts` files — the copy
+installed for the verification stories — and compares them with what this
+grid has. As of writing:
+
+| | present |
+|---|---|
+| `HotInstance` methods | 135 / 135 |
+| `GridSettings` settings | 151 / 153 |
+| hooks | 241 / 242 |
+
+The three that are missing:
+
+- **`afterChangesObserved`** — a hook. Adding the name is easy and would be
+  worse than leaving it out: nothing here would fire it, so it would join
+  the hooks that exist only as strings. It needs the change-observation it
+  reports on before it means anything.
+- **`handsontable`** — the settings object a `handsontable` cell type hands
+  to the grid nested inside a cell. The cell type is registered; what is
+  missing is the option that configures the inner grid.
+- **`getValue`** — a cell-level function the reference calls to read a value
+  in place of the cell's own, used by `columnSummary` and by the nested
+  `handsontable` type.
+
+Two of the three are the same feature, so the nested-grid cell type is the
+one piece of the reference's API surface genuinely absent rather than
+incomplete.
+
+The audit was wrong four times before it was right, each time in the
+flattering direction — every wrong version reported either no gap or a gap
+that was not there. It read whole `.d.ts` files rather than one named
+interface, and called four methods missing that Handsontable puts on
+`GridHelperInstance` and `ViewportScrollerInstance`. It read our
+`GridSettings` interface rather than `SETTING_NAMES`, and called eleven
+settings missing that the grid has always read. It counted every hook as a
+missing setting. And its first version matched nothing at all and reported
+`0/0 present`, which looked like a pass. It now refuses to answer when a
+parse returns fewer than twenty names.
