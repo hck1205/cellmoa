@@ -11,11 +11,35 @@
  */
 import { describe, expect, it } from 'vitest';
 import { makeGrid } from './helpers.js';
-// @ts-expect-error - the verification package's copy, on purpose: there is one
-// installed Handsontable in the repo and this is where it lives.
-import Handsontable from '/home/user/cellmoa/packages/verification/node_modules/handsontable/base.mjs';
-// @ts-expect-error - same
-import { registerAllModules } from '/home/user/cellmoa/packages/verification/node_modules/handsontable/registry.mjs';
+
+/**
+ * The reference, if this checkout has it.
+ *
+ * There is one installed Handsontable in the repo and it belongs to the
+ * verification package, which this package does not depend on. Importing it
+ * statically by path made every test in this file unresolvable — and so the
+ * whole file fail — in a checkout where `packages/verification` has not had
+ * `npm install` run. The import is dynamic and optional now, so the
+ * expectations below still run and the cross-check says it was skipped
+ * instead of quietly not happening.
+ */
+async function reference(): Promise<{ Handsontable: HotFactory; register: () => void } | null> {
+  const base = '../../verification/node_modules/handsontable';
+  try {
+    const [core, registry] = await Promise.all([
+      import(/* @vite-ignore */ `${base}/base.mjs`),
+      import(/* @vite-ignore */ `${base}/registry.mjs`),
+    ]);
+    return { Handsontable: core.default, register: registry.registerAllModules };
+  } catch {
+    return null;
+  }
+}
+
+type HotFactory = new (
+  element: HTMLElement,
+  settings: Record<string, unknown>,
+) => { setDataAtCell: (row: number, col: number, value: string) => void };
 
 class NoopObserver {
   observe() {}
@@ -26,21 +50,25 @@ class NoopObserver {
 /** `[source, changes]` for every firing, from whichever grid. */
 type Firing = [string, number | null];
 
-function fromReference(): Firing[] {
+async function fromReference(): Promise<Firing[] | null> {
+  const hot = await reference();
+  if (!hot) {
+    return null;
+  }
   const g = globalThis as unknown as Record<string, unknown>;
   g.ResizeObserver ??= NoopObserver;
   g.IntersectionObserver ??= NoopObserver;
-  registerAllModules();
+  hot.register();
   const el = document.createElement('div');
   document.body.append(el);
   const seen: Firing[] = [];
-  const hot = new Handsontable(el, {
+  const grid = new hot.Handsontable(el, {
     data: [['a']],
     licenseKey: 'non-commercial-and-evaluation',
     afterChange: (changes: unknown[] | null, source: string) =>
       seen.push([source, changes === null ? null : changes.length]),
   });
-  hot.setDataAtCell(0, 0, 'b');
+  grid.setDataAtCell(0, 0, 'b');
   return seen;
 }
 
@@ -56,12 +84,29 @@ async function fromOurs(): Promise<Firing[]> {
 }
 
 describe('afterChange, against the reference', () => {
-  it('hands the load `null` and the edit an array, in both', async () => {
+  it('hands the load `null` and the edit an array', async () => {
     // We used to send an array on the load: every cell of the default
     // five-by-five grid, twenty-four of them empty becoming empty. The usual
     // handler opens `if (!changes) return;` to skip exactly this firing, so
     // the guard never tripped and a load looked like twenty-five edits.
-    expect(await fromOurs()).toEqual(fromReference());
+    //
+    // Written out rather than only compared against the reference, so that a
+    // checkout without Handsontable still holds the contract to something.
+    expect(await fromOurs()).toEqual([
+      ['loadData', null],
+      ['edit', 1],
+    ]);
+  });
+
+  it('agrees with the reference, where the reference is installed', async () => {
+    const theirs = await fromReference();
+    if (theirs === null) {
+      // Not a pass dressed up as one: the expectation above ran either way,
+      // and this says plainly that the comparison did not happen.
+      console.log('handsontable is not installed here; the cross-check was skipped');
+      return;
+    }
+    expect(await fromOurs()).toEqual(theirs);
     // Constructing a real Handsontable under jsdom takes a few seconds.
   }, 30_000);
 
