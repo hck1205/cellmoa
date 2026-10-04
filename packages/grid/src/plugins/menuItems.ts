@@ -14,7 +14,7 @@ import { PHRASE } from '../i18n/keys.js';
 // would go quietly out of date the first time one of these methods is renamed.
 import type { Comments } from './comments.js';
 import type { ColumnSorting } from './columnSorting.js';
-import type { CopyPaste } from './copyPaste.js';
+import type { CopyMode, CopyPaste } from './copyPaste.js';
 import type { ExportFile } from './exportFile.js';
 import type { HiddenColumns, HiddenRows } from './hiding.js';
 import type { ManualColumnFreeze } from './manualMove.js';
@@ -37,6 +37,9 @@ export const ITEM = {
   readOnly: 'make_read_only',
   alignment: 'alignment',
   copy: 'copy',
+  copyWithColumnHeaders: 'copy_with_column_headers',
+  copyWithColumnGroupHeaders: 'copy_with_column_group_headers',
+  copyColumnHeadersOnly: 'copy_column_headers_only',
   cut: 'cut',
   mergeCells: 'mergeCells',
   freezeColumn: 'freeze_column',
@@ -122,9 +125,37 @@ function startCol(range: MenuSelection): number {
   return Math.min(range.start.col, range.end.col);
 }
 
+/**
+ * Whether the cell in the corner of a range is read-only.
+ *
+ * The tick and the toggle both have to read the same cell, or the item would
+ * show one state and apply the other.
+ */
+function readOnlyAt(grid: Grid, range: MenuSelection): boolean {
+  return grid.getCellMeta(topRow(range), startCol(range))['readOnly'] === true;
+}
+
 /** Whether a plugin is present and switched on. */
 function enabled(grid: Grid, name: string): boolean {
   return grid.getPlugin(name)?.isPluginEnabled() === true;
+}
+
+/**
+ * A command that acts on the first selected rectangle.
+ *
+ * Nearly every item here is one, and a menu can be run with nothing selected —
+ * `executeCommand` takes a key, not a selection — so each of them had the same
+ * four lines of guard in front of the one line that mattered.
+ */
+function onRange(
+  run: (range: MenuSelection) => void,
+): (key: string, ranges: MenuSelection[]) => void {
+  return (_key, ranges) => {
+    const range = first(ranges);
+    if (range) {
+      run(range);
+    }
+  };
 }
 
 /**
@@ -141,79 +172,56 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
   const items: Record<string, MenuItem> = {
     [ITEM.rowAbove]: {
       key: ITEM.rowAbove,
+      hidden: () => grid.getSettings().allowInsertRow === false,
       name: () => grid.getTranslatedPhrase(PHRASE.rowAbove),
       disabled: nothingSelected,
-      callback: (_key, ranges) => {
-        const range = first(ranges);
-        if (range) {
-          grid.alter('insert_row', topRow(range), rowsIn(range));
-        }
-      },
+      callback: onRange((range) => grid.alter('insert_row', topRow(range), rowsIn(range))),
     },
     [ITEM.rowBelow]: {
       key: ITEM.rowBelow,
+      hidden: () => grid.getSettings().allowInsertRow === false,
       name: () => grid.getTranslatedPhrase(PHRASE.rowBelow),
       disabled: nothingSelected,
-      callback: (_key, ranges) => {
-        const range = first(ranges);
-        if (range) {
-          grid.alter('insert_row', topRow(range) + rowsIn(range), rowsIn(range));
-        }
-      },
+      callback: onRange((range) => {
+        grid.alter('insert_row', topRow(range) + rowsIn(range), rowsIn(range));
+      }),
     },
     [ITEM.columnLeft]: {
       key: ITEM.columnLeft,
+      hidden: () => grid.getSettings().allowInsertColumn === false,
       name: () => grid.getTranslatedPhrase(PHRASE.columnLeft),
       disabled: nothingSelected,
-      callback: (_key, ranges) => {
-        const range = first(ranges);
-        if (range) {
-          grid.alter('insert_col', startCol(range), colsIn(range));
-        }
-      },
+      callback: onRange((range) => grid.alter('insert_col', startCol(range), colsIn(range))),
     },
     [ITEM.columnRight]: {
       key: ITEM.columnRight,
+      hidden: () => grid.getSettings().allowInsertColumn === false,
       name: () => grid.getTranslatedPhrase(PHRASE.columnRight),
       disabled: nothingSelected,
-      callback: (_key, ranges) => {
-        const range = first(ranges);
-        if (range) {
-          grid.alter('insert_col', startCol(range) + colsIn(range), colsIn(range));
-        }
-      },
+      callback: onRange((range) => {
+        grid.alter('insert_col', startCol(range) + colsIn(range), colsIn(range));
+      }),
     },
     [ITEM.removeRow]: {
       key: ITEM.removeRow,
+      hidden: () => grid.getSettings().allowRemoveRow === false,
       name: () => grid.getTranslatedPhrase(PHRASE.removeRow, rowsIn(first(selection()) ?? EMPTY)),
       disabled: nothingSelected,
-      callback: (_key, ranges) => {
-        const range = first(ranges);
-        if (range) {
-          grid.alter('remove_row', topRow(range), rowsIn(range));
-        }
-      },
+      callback: onRange((range) => grid.alter('remove_row', topRow(range), rowsIn(range))),
     },
     [ITEM.removeColumn]: {
       key: ITEM.removeColumn,
-      name: () => grid.getTranslatedPhrase(PHRASE.removeColumn, colsIn(first(selection()) ?? EMPTY)),
+      hidden: () => grid.getSettings().allowRemoveColumn === false,
+      name: () =>
+        grid.getTranslatedPhrase(PHRASE.removeColumn, colsIn(first(selection()) ?? EMPTY)),
       disabled: nothingSelected,
-      callback: (_key, ranges) => {
-        const range = first(ranges);
-        if (range) {
-          grid.alter('remove_col', startCol(range), colsIn(range));
-        }
-      },
+      callback: onRange((range) => grid.alter('remove_col', startCol(range), colsIn(range))),
     },
     [ITEM.clearColumn]: {
       key: ITEM.clearColumn,
       name: () => grid.getTranslatedPhrase(PHRASE.clearColumn),
       disabled: nothingSelected,
-      callback: (_key, ranges) => {
-        const range = first(ranges);
-        if (!range) {
-          return;
-        }
+      callback: onRange((range) => {
         const changes: Array<[number, number, string]> = [];
         for (let col = startCol(range); col < startCol(range) + colsIn(range); col += 1) {
           for (let row = 0; row < grid.countRows(); row += 1) {
@@ -221,7 +229,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
           }
         }
         grid.setDataAtCells(changes, 'contextMenu');
-      },
+      }),
     },
     [ITEM.undo]: {
       key: ITEM.undo,
@@ -241,21 +249,17 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
       disabled: nothingSelected,
       checked: () => {
         const range = first(selection());
-        return range !== null && grid.getCellMeta(topRow(range), startCol(range))['readOnly'] === true;
+        return range !== null && readOnlyAt(grid, range);
       },
-      callback: (_key, ranges) => {
-        const range = first(ranges);
-        if (!range) {
-          return;
-        }
-        const already = grid.getCellMeta(topRow(range), startCol(range))['readOnly'] === true;
+      callback: onRange((range) => {
+        const already = readOnlyAt(grid, range);
         for (let row = topRow(range); row < topRow(range) + rowsIn(range); row += 1) {
           for (let col = startCol(range); col < startCol(range) + colsIn(range); col += 1) {
             grid.setCellMeta(row, col, 'readOnly', !already);
           }
         }
         grid.render();
-      },
+      }),
     },
     [ITEM.alignment]: {
       key: ITEM.alignment,
@@ -279,12 +283,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
             : {
                 key,
                 name: () => grid.getTranslatedPhrase(name),
-                callback: (_k: string, ranges: MenuSelection[]) => {
-                  const range = first(ranges);
-                  if (range) {
-                    grid.setAlignment(range, className);
-                  }
-                },
+                callback: onRange((range) => grid.setAlignment(range, className)),
               },
         ),
       },
@@ -317,6 +316,36 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
         grid.emptySelectedCells('cut');
       },
     };
+
+    /**
+     * The three copies that carry headers.
+     *
+     * Each is disabled when the headers it would carry are not there — a
+     * grid with no column headers has nothing to copy with them, and an
+     * entry that runs and produces the same text as plain copy is worse
+     * than one that is visibly unavailable.
+     */
+    const withHeaders = (key: string, mode: CopyMode, phrase: string): MenuItem => ({
+      key,
+      name: () => grid.getTranslatedPhrase(phrase),
+      disabled: () => nothingSelected() || !clipboard.isHeaderModeAllowed(mode),
+      callback: () => void navigator.clipboard?.writeText(clipboard.getCopyableText(mode)),
+    });
+    items[ITEM.copyWithColumnHeaders] = withHeaders(
+      ITEM.copyWithColumnHeaders,
+      'with-column-headers',
+      PHRASE.copyWithHeaders,
+    );
+    items[ITEM.copyWithColumnGroupHeaders] = withHeaders(
+      ITEM.copyWithColumnGroupHeaders,
+      'with-all-column-headers',
+      PHRASE.copyWithGroupHeaders,
+    );
+    items[ITEM.copyColumnHeadersOnly] = withHeaders(
+      ITEM.copyColumnHeadersOnly,
+      'column-headers-only',
+      PHRASE.copyHeadersOnly,
+    );
   }
 
   if (enabled(grid, 'mergeCells')) {
@@ -342,23 +371,13 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
       key: ITEM.freezeColumn,
       name: () => grid.getTranslatedPhrase(PHRASE.freezeColumn),
       disabled: nothingSelected,
-      callback: (_key, ranges) => {
-        const range = first(ranges);
-        if (range) {
-          freeze.freezeColumn(startCol(range));
-        }
-      },
+      callback: onRange((range) => freeze.freezeColumn(startCol(range))),
     };
     items[ITEM.unfreezeColumn] = {
       key: ITEM.unfreezeColumn,
       name: () => grid.getTranslatedPhrase(PHRASE.unfreezeColumn),
       disabled: nothingSelected,
-      callback: (_key, ranges) => {
-        const range = first(ranges);
-        if (range) {
-          freeze.unfreezeColumn(startCol(range));
-        }
-      },
+      callback: onRange((range) => freeze.unfreezeColumn(startCol(range))),
     };
   }
 
@@ -368,13 +387,10 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
       key: ITEM.hiddenRowsHide,
       name: () => grid.getTranslatedPhrase(PHRASE.hideRow),
       disabled: nothingSelected,
-      callback: (_key, ranges) => {
-        const range = first(ranges);
-        if (range) {
-          const rows = Array.from({ length: rowsIn(range) }, (_, i) => topRow(range) + i);
-          hidden.hide(rows);
-        }
-      },
+      callback: onRange((range) => {
+        const rows = Array.from({ length: rowsIn(range) }, (_, i) => topRow(range) + i);
+        hidden.hide(rows);
+      }),
     };
     items[ITEM.hiddenRowsShow] = {
       key: ITEM.hiddenRowsShow,
@@ -389,13 +405,10 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
       key: ITEM.hiddenColumnsHide,
       name: () => grid.getTranslatedPhrase(PHRASE.hideColumn),
       disabled: nothingSelected,
-      callback: (_key, ranges) => {
-        const range = first(ranges);
-        if (range) {
-          const cols = Array.from({ length: colsIn(range) }, (_, i) => startCol(range) + i);
-          hidden.hide(cols);
-        }
-      },
+      callback: onRange((range) => {
+        const cols = Array.from({ length: colsIn(range) }, (_, i) => startCol(range) + i);
+        hidden.hide(cols);
+      }),
     };
     items[ITEM.hiddenColumnsShow] = {
       key: ITEM.hiddenColumnsShow,
@@ -417,12 +430,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
         );
       },
       disabled: nothingSelected,
-      callback: (_key, ranges) => {
-        const range = first(ranges);
-        if (range) {
-          comments.show(topRow(range), startCol(range));
-        }
-      },
+      callback: onRange((range) => comments.show(topRow(range), startCol(range))),
     };
     items[ITEM.removeComment] = {
       key: ITEM.removeComment,
@@ -431,12 +439,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
         const range = first(selection());
         return range === null || !comments.getComment(topRow(range), startCol(range));
       },
-      callback: (_key, ranges) => {
-        const range = first(ranges);
-        if (range) {
-          comments.removeComment(topRow(range), startCol(range));
-        }
-      },
+      callback: onRange((range) => comments.removeComment(topRow(range), startCol(range))),
     };
   }
 
@@ -455,12 +458,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
         key,
         name,
         disabled: nothingSelected,
-        callback: (_k, ranges) => {
-          const range = first(ranges);
-          if (range) {
-            sorting.sort({ column: startCol(range), sortOrder: order });
-          }
-        },
+        callback: onRange((range) => sorting.sort({ column: startCol(range), sortOrder: order })),
       };
     }
   }
@@ -475,7 +473,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
           {
             key: 'export_file:csv',
             name: () => grid.getTranslatedPhrase(PHRASE.exportCsv),
-            callback: () => exporter.downloadFile('csv', { columnHeaders: true }),
+            callback: () => exporter.downloadFile('csv', { colHeaders: true }),
           },
           {
             key: 'export_file:xlsx',
@@ -493,12 +491,7 @@ export function predefinedItems(grid: Grid): Record<string, MenuItem> {
       key: ITEM.provenance,
       name: 'Where did this come from?',
       disabled: nothingSelected,
-      callback: (_key, ranges) => {
-        const range = first(ranges);
-        if (range) {
-          provenance.show(topRow(range), startCol(range));
-        }
-      },
+      callback: onRange((range) => provenance.show(topRow(range), startCol(range))),
     };
   }
 

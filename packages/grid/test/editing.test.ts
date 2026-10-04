@@ -11,11 +11,15 @@ function key(grid: Grid, k: string, modifiers: Partial<KeyboardEventInit> = {}):
 }
 
 describe('the cell type registry', () => {
-  it('registers every type Handsontable ships', () => {
+  it('registers every type Handsontable ships, under every name it ships it as', () => {
+    // The reference registers `intl-date`, `intl-time` and `multiselect`, and
+    // `multiSelect` besides for the spelling it shipped with first. A name that
+    // does not resolve is not an error anyone sees — the column just falls back
+    // to the text renderer — so each documented spelling is pinned here.
     expect(cellTypeNames()).toEqual([
       'autocomplete', 'checkbox', 'date', 'dropdown', 'handsontable',
-      'intlDate', 'intlTime', 'multiSelect', 'numeric', 'password',
-      'select', 'text', 'time',
+      'intl-date', 'intl-time', 'intlDate', 'intlTime', 'multiSelect',
+      'multiselect', 'numeric', 'password', 'select', 'text', 'time',
     ]);
   });
 
@@ -55,6 +59,13 @@ describe('validators', () => {
     expect((await validate('blue', meta)).valid).toBe(false);
     // Not strict means anything goes.
     expect((await validate('blue', { ...meta, strict: false })).valid).toBe(true);
+  });
+
+  it('checks a list given as selectOptions, which is where the editor reads it', async () => {
+    const validate = getValidator('select')!;
+    const meta = { selectOptions: ['red', 'green'] };
+    expect((await validate('red', meta)).valid).toBe(true);
+    expect((await validate('blue', meta)).valid).toBe(false);
   });
 
   it('checks dates and times loosely enough to match the parser', async () => {

@@ -26,20 +26,21 @@ abstract class ManualResize extends BasePlugin {
     }
   }
 
-  /** Resizes one index. Passing `null` restores the default. */
+  /**
+   * Resizes one index. Passing `null` restores the default.
+   *
+   * The before/after hooks used to be announced here, which meant the
+   * documented way to resize — `grid.setColWidth` — fired nothing, and only a
+   * caller who had gone looking for the plugin ever saw one. They live on the
+   * grid methods now; this goes through them, so the size is still recorded as
+   * chosen and automatic sizing leaves it alone, and it fires once.
+   */
   setSize(index: number, size: number | null): void {
-    const capitalised = this.axis === 'row' ? 'Row' : 'Column';
-    if (this.grid.hooks.allows(`before${capitalised}Resize`, size, index) === false) {
-      return;
-    }
-    // Through the grid rather than straight to the size map, so the width is
-    // recorded as chosen and automatic sizing leaves it alone.
     if (this.axis === 'row') {
       this.grid.setRowHeight(index, size);
     } else {
       this.grid.setColWidth(index, size);
     }
-    this.grid.hooks.run(`after${capitalised}Resize`, undefined, size, index);
   }
 
   /** The sizes that differ from the default, for saving a layout. */
@@ -74,20 +75,36 @@ export class ManualColumnResize extends ManualResize {
 }
 
 /**
- * Sizing a row to its tallest cell.
+ * The half of automatic sizing that does not depend on the axis.
  *
- * A row grows only when something in it wraps or holds a line break — the
- * ordinary case is one line, and measuring every cell to conclude that would
- * cost more than it saves.
+ * `AutoRowSize` and `AutoColumnSize` had the same lifecycle written out twice:
+ * the same enabled test, the same pair of hooks, the same set of indexes to
+ * put back on the way out. `ManualResize` above already solves that shape with
+ * an abstract axis, and these two simply had not used it.
+ *
+ * What differs is the measuring, which is why `recalculate` is the one thing
+ * left abstract.
  */
-export class AutoRowSize extends BasePlugin {
-  static override readonly pluginName: string = 'autoRowSize';
+abstract class AutoSize extends BasePlugin {
+  /** Sizing reads the sizes, the headers and the data, so any change may move it. */
+  static override get settingKeys(): boolean {
+    return true;
+  }
 
-  /** Rows this plugin sized itself. */
-  #measured = new Set<number>();
+  protected abstract get axis(): 'row' | 'column';
+
+  /** Resizes everything this plugin is responsible for. */
+  abstract recalculate(): void;
+
+  protected get sizes() {
+    return this.axis === 'row' ? this.grid.rowSizes : this.grid.columnSizes;
+  }
+
+  /** The indexes this plugin sized itself, so it can undo exactly those. */
+  protected readonly measured = new Set<number>();
 
   override isEnabled(): boolean {
-    const settings = this.grid.getSettings().autoRowSize;
+    const settings = this.grid.getSettings()[this.pluginName];
     return settings !== false && settings !== undefined;
   }
 
@@ -97,10 +114,27 @@ export class AutoRowSize extends BasePlugin {
   }
 
   protected override onDisable(): void {
-    for (const row of this.#measured) {
-      this.grid.rowSizes.setSize(row, null);
+    // Only what this plugin set: a width the caller chose by hand is not this
+    // plugin's to forget.
+    for (const index of this.measured) {
+      this.sizes.setSize(index, null);
     }
-    this.#measured.clear();
+    this.measured.clear();
+  }
+}
+
+/**
+ * Sizing a row to its tallest cell.
+ *
+ * A row grows only when something in it wraps or holds a line break — the
+ * ordinary case is one line, and measuring every cell to conclude that would
+ * cost more than it saves.
+ */
+export class AutoRowSize extends AutoSize {
+  static override readonly pluginName: string = 'autoRowSize';
+
+  protected override get axis(): 'row' | 'column' {
+    return 'row';
   }
 
   /** How many lines the tallest cell in a row takes. */
@@ -129,13 +163,13 @@ export class AutoRowSize extends BasePlugin {
       }
       const height = Math.min(Math.max(this.calculateRowHeight(row), min), max);
       this.grid.rowSizes.setSize(row, height);
-      this.#measured.add(row);
+      this.measured.add(row);
     }
     this.grid.render();
   }
 }
 
-registerPlugin(AutoRowSize as never);
+registerPlugin(AutoRowSize);
 
 /**
  * Spreading the columns to fill the container.
@@ -147,6 +181,11 @@ registerPlugin(AutoRowSize as never);
  */
 export class StretchColumns extends BasePlugin {
   static override readonly pluginName: string = 'stretchColumns';
+
+  /** Sizing reads the widths, the heights and the data, so any change may move it. */
+  static override get settingKeys(): boolean {
+    return true;
+  }
 
   /**
    * The widths the columns had before any stretching.
@@ -228,7 +267,7 @@ export class StretchColumns extends BasePlugin {
   }
 }
 
-registerPlugin(StretchColumns as never);
+registerPlugin(StretchColumns);
 
 /**
  * Sizing a column to its widest cell.
@@ -238,31 +277,15 @@ registerPlugin(StretchColumns as never);
  * estimate below is close enough to be useful and cheap enough to run on every
  * change.
  */
-export class AutoColumnSize extends BasePlugin {
+export class AutoColumnSize extends AutoSize {
   static override readonly pluginName: string = 'autoColumnSize';
 
   /** How wide one character is, roughly, at the default font. */
   static readonly CHARACTER_WIDTH = 7;
   static readonly PADDING = 12;
 
-  /** Columns this plugin sized itself, so it can undo them cleanly. */
-  #measured = new Set<number>();
-
-  override isEnabled(): boolean {
-    const settings = this.grid.getSettings().autoColumnSize;
-    return settings !== false && settings !== undefined;
-  }
-
-  protected override onEnable(): void {
-    this.addHook('afterChange', () => this.recalculate());
-    this.recalculate();
-  }
-
-  protected override onDisable(): void {
-    for (const column of this.#measured) {
-      this.grid.columnSizes.setSize(column, null);
-    }
-    this.#measured.clear();
+  protected override get axis(): 'row' | 'column' {
+    return 'column';
   }
 
   /** The width a column needs to show its widest value. */
@@ -291,12 +314,12 @@ export class AutoColumnSize extends BasePlugin {
       }
       const width = Math.min(Math.max(this.calculateColumnWidth(column), min), max);
       this.grid.columnSizes.setSize(column, width);
-      this.#measured.add(column);
+      this.measured.add(column);
     }
     this.grid.render();
   }
 }
 
-registerPlugin(ManualRowResize as never);
-registerPlugin(ManualColumnResize as never);
-registerPlugin(AutoColumnSize as never);
+registerPlugin(ManualRowResize);
+registerPlugin(ManualColumnResize);
+registerPlugin(AutoColumnSize);

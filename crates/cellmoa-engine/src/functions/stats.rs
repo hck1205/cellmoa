@@ -120,6 +120,25 @@ fn variance(values: &[f64], ddof: usize) -> Result<f64, CellError> {
 
 /// The values of an argument list as `AVERAGEA` and friends see them: text
 /// counts as zero and booleans as 0 or 1, rather than being skipped.
+/// The sum of `((v - mean) / stddev)^power` over the values.
+///
+/// SKEW, SKEW.P and KURT differ only in the power, in whether the standard
+/// deviation is of the sample or the population, and in what they do with the
+/// total afterwards. Everything before that — the mean, the deviation, and the
+/// refusal to divide by a deviation of zero — was written three times, and the
+/// zero check is exactly the sort of thing a fourth one would be written
+/// without.
+fn standardised_moments(values: &[f64], ddof: usize, power: i32) -> Result<f64, CellError> {
+    let m = mean(values);
+    let s = variance(values, ddof).map(f64::sqrt)?;
+    if s == 0.0 {
+        // Every value is the mean, so no value has a distance from it to speak
+        // of — a shape statistic has nothing to describe.
+        return Err(CellError::Div0);
+    }
+    Ok(values.iter().map(|v| ((v - m) / s).powi(power)).sum())
+}
+
 fn collect_numbers_counting_text(ctx: &EvalCtx, args: &[Operand]) -> Result<Vec<f64>, CellError> {
     let mut out = Vec::new();
     let mut error = None;
@@ -169,6 +188,23 @@ fn co_moment(xs: &[f64], ys: &[f64]) -> (f64, f64, f64) {
     let sxx: f64 = xs.iter().map(|x| (x - mx).powi(2)).sum();
     let syy: f64 = ys.iter().map(|y| (y - my).powi(2)).sum();
     (sxy, sxx, syy)
+}
+
+/// The least-squares line through paired samples, as slope and intercept.
+///
+/// SLOPE, INTERCEPT and FORECAST are three readings of one fit, and Excel takes
+/// the dependent variable first in all three. Fitting in one place is what stops
+/// them disagreeing — a user who works out `SLOPE * x + INTERCEPT` by hand
+/// should land on exactly what FORECAST says — and it leaves only one guard to
+/// keep for the x that has no spread and so has no line to fit.
+fn least_squares(ctx: &EvalCtx, ys: &Operand, xs: &Operand) -> Result<(f64, f64), CellError> {
+    let (ys, xs) = paired(ctx, ys, xs)?;
+    let (sxy, sxx, _) = co_moment(&xs, &ys);
+    if sxx == 0.0 {
+        return Err(CellError::Div0);
+    }
+    let slope = sxy / sxx;
+    Ok((slope, mean(&ys) - slope * mean(&xs)))
 }
 
 /// The percentile of a sorted list, interpolating between neighbours.
@@ -370,32 +406,8 @@ pub const FUNCTIONS: &[Function] = &[
         }
         Err(e) => Operand::error(e),
     }),
-    f("LARGE", 2, Some(2), |ctx, a| {
-        args!(k = arg_num(ctx, a, 1));
-        match sorted_numbers(ctx, &a[..1]) {
-            Ok(values) => {
-                let k = k.trunc() as usize;
-                if k < 1 || k > values.len() {
-                    return Operand::error(CellError::Num);
-                }
-                number(values[values.len() - k])
-            }
-            Err(e) => Operand::error(e),
-        }
-    }),
-    f("SMALL", 2, Some(2), |ctx, a| {
-        args!(k = arg_num(ctx, a, 1));
-        match sorted_numbers(ctx, &a[..1]) {
-            Ok(values) => {
-                let k = k.trunc() as usize;
-                if k < 1 || k > values.len() {
-                    return Operand::error(CellError::Num);
-                }
-                number(values[k - 1])
-            }
-            Err(e) => Operand::error(e),
-        }
-    }),
+    f("LARGE", 2, Some(2), |ctx, a| kth(ctx, a, End::Largest)),
+    f("SMALL", 2, Some(2), |ctx, a| kth(ctx, a, End::Smallest)),
     // --- spread -------------------------------------------------------------
     f("VAR.S", 1, None, |ctx, a| spread(ctx, a, 1, false, false)),
     f("VAR", 1, None, |ctx, a| spread(ctx, a, 1, false, false)),
@@ -424,51 +436,34 @@ pub const FUNCTIONS: &[Function] = &[
     }),
     f("SKEW", 1, None, |ctx, a| match collect_numbers(ctx, a) {
         Ok(values) if values.len() < 3 => Operand::error(CellError::Div0),
-        Ok(values) => {
-            let n = values.len() as f64;
-            let m = mean(&values);
-            let Ok(s) = variance(&values, 1).map(f64::sqrt) else {
-                return Operand::error(CellError::Div0);
-            };
-            if s == 0.0 {
-                return Operand::error(CellError::Div0);
+        Ok(values) => match standardised_moments(&values, 1, 3) {
+            Ok(total) => {
+                let n = values.len() as f64;
+                number(n / ((n - 1.0) * (n - 2.0)) * total)
             }
-            let total: f64 = values.iter().map(|v| ((v - m) / s).powi(3)).sum();
-            number(n / ((n - 1.0) * (n - 2.0)) * total)
-        }
+            Err(e) => Operand::error(e),
+        },
         Err(e) => Operand::error(e),
     }),
     f("SKEW.P", 1, None, |ctx, a| match collect_numbers(ctx, a) {
         Ok(values) if values.is_empty() => Operand::error(CellError::Div0),
-        Ok(values) => {
-            let m = mean(&values);
-            let Ok(s) = variance(&values, 0).map(f64::sqrt) else {
-                return Operand::error(CellError::Div0);
-            };
-            if s == 0.0 {
-                return Operand::error(CellError::Div0);
-            }
-            let n = values.len() as f64;
-            number(values.iter().map(|v| ((v - m) / s).powi(3)).sum::<f64>() / n)
-        }
+        Ok(values) => match standardised_moments(&values, 0, 3) {
+            Ok(total) => number(total / values.len() as f64),
+            Err(e) => Operand::error(e),
+        },
         Err(e) => Operand::error(e),
     }),
     f("KURT", 1, None, |ctx, a| match collect_numbers(ctx, a) {
         Ok(values) if values.len() < 4 => Operand::error(CellError::Div0),
-        Ok(values) => {
-            let n = values.len() as f64;
-            let m = mean(&values);
-            let Ok(s) = variance(&values, 1).map(f64::sqrt) else {
-                return Operand::error(CellError::Div0);
-            };
-            if s == 0.0 {
-                return Operand::error(CellError::Div0);
+        Ok(values) => match standardised_moments(&values, 1, 4) {
+            Ok(total) => {
+                let n = values.len() as f64;
+                let scale = n * (n + 1.0) / ((n - 1.0) * (n - 2.0) * (n - 3.0));
+                let correction = 3.0 * (n - 1.0).powi(2) / ((n - 2.0) * (n - 3.0));
+                number(scale * total - correction)
             }
-            let total: f64 = values.iter().map(|v| ((v - m) / s).powi(4)).sum();
-            let scale = n * (n + 1.0) / ((n - 1.0) * (n - 2.0) * (n - 3.0));
-            let correction = 3.0 * (n - 1.0).powi(2) / ((n - 2.0) * (n - 3.0));
-            number(scale * total - correction)
-        }
+            Err(e) => Operand::error(e),
+        },
         Err(e) => Operand::error(e),
     }),
     // --- other means --------------------------------------------------------
@@ -571,28 +566,13 @@ pub const FUNCTIONS: &[Function] = &[
     array_fn("COVARIANCE.P", 2, Some(2), |ctx, a| covariance(ctx, a, 0)),
     array_fn("COVAR", 2, Some(2), |ctx, a| covariance(ctx, a, 0)),
     array_fn("COVARIANCE.S", 2, Some(2), |ctx, a| covariance(ctx, a, 1)),
-    array_fn("SLOPE", 2, Some(2), |ctx, a| {
-        // Excel takes the dependent variable first.
-        let (ys, xs) = match paired(ctx, &a[0], &a[1]) {
-            Ok(v) => v,
-            Err(e) => return Operand::error(e),
-        };
-        let (sxy, sxx, _) = co_moment(&xs, &ys);
-        if sxx == 0.0 {
-            return Operand::error(CellError::Div0);
-        }
-        number(sxy / sxx)
+    array_fn("SLOPE", 2, Some(2), |ctx, a| match least_squares(ctx, &a[0], &a[1]) {
+        Ok((slope, _)) => number(slope),
+        Err(e) => Operand::error(e),
     }),
-    array_fn("INTERCEPT", 2, Some(2), |ctx, a| {
-        let (ys, xs) = match paired(ctx, &a[0], &a[1]) {
-            Ok(v) => v,
-            Err(e) => return Operand::error(e),
-        };
-        let (sxy, sxx, _) = co_moment(&xs, &ys);
-        if sxx == 0.0 {
-            return Operand::error(CellError::Div0);
-        }
-        number(mean(&ys) - sxy / sxx * mean(&xs))
+    array_fn("INTERCEPT", 2, Some(2), |ctx, a| match least_squares(ctx, &a[0], &a[1]) {
+        Ok((_, intercept)) => number(intercept),
+        Err(e) => Operand::error(e),
     }),
     array_fn("FORECAST", 3, Some(3), |ctx, a| forecast(ctx, a)),
     array_fn("FORECAST.LINEAR", 3, Some(3), |ctx, a| forecast(ctx, a)),
@@ -614,6 +594,35 @@ pub const FUNCTIONS: &[Function] = &[
 ];
 
 /// The shared body of the variance and standard-deviation family.
+/// Which end of the sorted values `kth` counts from.
+enum End {
+    Largest,
+    Smallest,
+}
+
+/// The k-th value from one end of a sorted set — `LARGE` and `SMALL`.
+///
+/// The two differ by the index they finally read and nothing else: the same
+/// argument, the same sort, the same out-of-range rule. Written out twice, a
+/// fix to the range check had two places to reach and would silently have been
+/// applied to one.
+fn kth(ctx: &EvalCtx, args: &[Operand], end: End) -> Operand {
+    args!(k = arg_num(ctx, args, 1));
+    match sorted_numbers(ctx, &args[..1]) {
+        Ok(values) => {
+            let k = k.trunc() as usize;
+            if k < 1 || k > values.len() {
+                return Operand::error(CellError::Num);
+            }
+            number(match end {
+                End::Largest => values[values.len() - k],
+                End::Smallest => values[k - 1],
+            })
+        }
+        Err(e) => Operand::error(e),
+    }
+}
+
 fn spread(
     ctx: &EvalCtx,
     args: &[Operand],
@@ -772,14 +781,8 @@ fn covariance(ctx: &EvalCtx, a: &[Operand], ddof: usize) -> Operand {
 
 fn forecast(ctx: &EvalCtx, a: &[Operand]) -> Operand {
     args!(x = arg_num(ctx, a, 0));
-    let (ys, xs) = match paired(ctx, &a[1], &a[2]) {
-        Ok(v) => v,
-        Err(e) => return Operand::error(e),
-    };
-    let (sxy, sxx, _) = co_moment(&xs, &ys);
-    if sxx == 0.0 {
-        return Operand::error(CellError::Div0);
+    match least_squares(ctx, &a[1], &a[2]) {
+        Ok((slope, intercept)) => number(intercept + slope * x),
+        Err(e) => Operand::error(e),
     }
-    let slope = sxy / sxx;
-    number(mean(&ys) + slope * (x - mean(&xs)))
 }

@@ -125,4 +125,4 @@ export class StatusBar extends BasePlugin {
   }
 }
 
-registerPlugin(StatusBar as never);
+registerPlugin(StatusBar);

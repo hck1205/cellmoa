@@ -106,16 +106,31 @@ describe('accessibility, direction and theming', () => {
     const grid = await makeGrid();
     const root = grid.view!.root;
     expect(root.getAttribute('role')).toBe('grid');
-    expect(root.getAttribute('aria-rowcount')).toBe('4');
-    expect(root.getAttribute('aria-colcount')).toBe('3');
+    // Counted the way the indexes below are counted: the header row and the
+    // header column are a row and a column. Three data rows plus a header row,
+    // and two data columns plus a header column.
+    expect(root.getAttribute('aria-rowcount')).toBe('5');
+    expect(root.getAttribute('aria-colcount')).toBe('4');
 
     const cell = grid.view?.elementAt(1, 2);
     expect(cell?.getAttribute('role')).toBe('gridcell');
     // One-based, and counted in the whole table rather than in the window.
-    expect(cell?.getAttribute('aria-colindex')).toBe('3');
-    expect(cell?.parentElement?.getAttribute('aria-rowindex')).toBe('2');
+    // The cell at visual (1, 2) sits in the fourth column — one header column
+    // and two before it — and the third row, one header row and one above it.
+    expect(cell?.getAttribute('aria-colindex')).toBe('4');
+    expect(cell?.parentElement?.getAttribute('aria-rowindex')).toBe('3');
     expect(root.querySelector('th.cm-col-header')?.getAttribute('role')).toBe('columnheader');
     expect(root.querySelector('th.cm-row-header')?.getAttribute('role')).toBe('rowheader');
+    // A header cell says what it heads, which is what lets a screen reader
+    // read the right label out beside the cell.
+    expect(root.querySelector('th.cm-row-header')?.getAttribute('scope')).toBe('row');
+    expect(root.querySelector('th.cm-col-header')?.getAttribute('scope')).toBe('col');
+    expect(root.querySelector('th.cm-row-header')?.getAttribute('aria-colindex')).toBe('1');
+    // The header row is a row, and it is row 1. It lives in the same `tbody` as
+    // the data — the reference uses a `thead` — so it is found through its
+    // cells rather than through the section.
+    const headerRow = root.querySelector('th.cm-col-header')?.parentElement;
+    expect(headerRow?.getAttribute('aria-rowindex')).toBe('1');
   });
 
   it('leaves the markup off when it was told to', async () => {
@@ -405,5 +420,40 @@ describe('the areas around the grid', () => {
     buttons()[2]?.click();
     expect(pager()?.querySelector('.cm-pagination-counter')?.textContent).toBe('2 / 3');
     expect(buttons()[0]?.disabled).toBe(false);
+  });
+});
+
+describe('a column that declares a title asks for a header', () => {
+  it('draws the header row from `columns[].title` with no `colHeaders` beside it', async () => {
+    // The guide's Column headers page configures exactly this. `getColHeader`
+    // already returned the title; `hasColHeaders` only looked at `colHeaders`,
+    // so nothing ever asked for a header row and the titles were computed into
+    // nowhere. The reference draws them.
+    const grid = await makeGrid({
+      startRows: 2,
+      startCols: 2,
+      columns: [{ title: 'ID' }, { title: 'Name' }],
+    });
+    grid.render();
+
+    expect(grid.hasColHeaders()).toBe(true);
+    const headers = [...grid.view!.root.querySelectorAll('th.cm-col-header')].map((th) =>
+      th.textContent?.trim(),
+    );
+    expect(headers).toEqual(['ID', 'Name']);
+  });
+
+  it('still draws nothing when colHeaders is off, whatever the columns say', async () => {
+    // `colHeaders: false` is an instruction, not an absence.
+    const grid = await makeGrid({
+      startRows: 2,
+      startCols: 2,
+      colHeaders: false,
+      columns: [{ title: 'ID' }, { title: 'Name' }],
+    });
+    grid.render();
+
+    expect(grid.hasColHeaders()).toBe(false);
+    expect(grid.view!.root.querySelector('th.cm-col-header')).toBeNull();
   });
 });

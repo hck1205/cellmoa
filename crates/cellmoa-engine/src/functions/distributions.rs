@@ -49,7 +49,8 @@ fn t_cdf(x: f64, df: f64) -> f64 {
 }
 
 fn t_pdf(x: f64, df: f64) -> f64 {
-    let normaliser = ln_gamma((df + 1.0) / 2.0) - ln_gamma(df / 2.0) - 0.5 * (df * std::f64::consts::PI).ln();
+    let normaliser =
+        ln_gamma((df + 1.0) / 2.0) - ln_gamma(df / 2.0) - 0.5 * (df * std::f64::consts::PI).ln();
     (normaliser - (df + 1.0) / 2.0 * (1.0 + x * x / df).ln()).exp()
 }
 
@@ -115,7 +116,6 @@ pub const FUNCTIONS: &[Function] = &[
             Ok(gamma(x))
         })
     }),
-
     // --- normal -----------------------------------------------------------
     f("NORM.DIST", 4, Some(4), |ctx, a| normal_dist(ctx, a)),
     f("NORMDIST", 4, Some(4), |ctx, a| normal_dist(ctx, a)),
@@ -143,7 +143,6 @@ pub const FUNCTIONS: &[Function] = &[
     }),
     f("LOGNORM.INV", 3, Some(3), |ctx, a| lognormal_inv(ctx, a)),
     f("LOGINV", 3, Some(3), |ctx, a| lognormal_inv(ctx, a)),
-
     // --- discrete ---------------------------------------------------------
     f("BINOM.DIST", 4, Some(4), |ctx, a| binom_dist(ctx, a)),
     f("BINOMDIST", 4, Some(4), |ctx, a| binom_dist(ctx, a)),
@@ -165,7 +164,6 @@ pub const FUNCTIONS: &[Function] = &[
     f("HYPGEOMDIST", 4, Some(4), |ctx, a| hypgeom(ctx, a, false)),
     f("POISSON.DIST", 3, Some(3), |ctx, a| poisson(ctx, a)),
     f("POISSON", 3, Some(3), |ctx, a| poisson(ctx, a)),
-
     // --- continuous --------------------------------------------------------
     f("EXPON.DIST", 3, Some(3), |ctx, a| exponential(ctx, a)),
     f("EXPONDIST", 3, Some(3), |ctx, a| exponential(ctx, a)),
@@ -192,7 +190,6 @@ pub const FUNCTIONS: &[Function] = &[
     }),
     f("BETA.INV", 3, Some(5), |ctx, a| beta_inv(ctx, a)),
     f("BETAINV", 3, Some(5), |ctx, a| beta_inv(ctx, a)),
-
     // --- test distributions -------------------------------------------------
     f("CHISQ.DIST", 3, Some(3), |ctx, a| {
         args!(x = arg_num(ctx, a, 0), df = arg_num(ctx, a, 1), cdf = cumulative(ctx, a, 2));
@@ -237,15 +234,9 @@ pub const FUNCTIONS: &[Function] = &[
     }),
     f("F.DIST.RT", 3, Some(3), |ctx, a| f_rt(ctx, a)),
     f("FDIST", 3, Some(3), |ctx, a| f_rt(ctx, a)),
-    f("F.INV", 3, Some(3), |ctx, a| {
-        args!(p = arg_num(ctx, a, 0), d1 = arg_num(ctx, a, 1), d2 = arg_num(ctx, a, 2));
-        match invert_cdf(p, 0.0, 1.0, |x| f_cdf(x, d1, d2)) {
-            Some(x) => number(x),
-            None => Operand::error(CellError::Num),
-        }
-    }),
-    f("F.INV.RT", 3, Some(3), |ctx, a| f_inv_rt(ctx, a)),
-    f("FINV", 3, Some(3), |ctx, a| f_inv_rt(ctx, a)),
+    f("F.INV", 3, Some(3), |ctx, a| f_inv(ctx, a, false)),
+    f("F.INV.RT", 3, Some(3), |ctx, a| f_inv(ctx, a, true)),
+    f("FINV", 3, Some(3), |ctx, a| f_inv(ctx, a, true)),
     f("T.DIST", 3, Some(3), |ctx, a| {
         args!(x = arg_num(ctx, a, 0), df = arg_num(ctx, a, 1), cdf = cumulative(ctx, a, 2));
         if df < 1.0 {
@@ -276,7 +267,6 @@ pub const FUNCTIONS: &[Function] = &[
     f("T.INV", 2, Some(2), |ctx, a| t_inv(ctx, a)),
     f("T.INV.2T", 2, Some(2), |ctx, a| t_inv_two_tailed(ctx, a)),
     f("TINV", 2, Some(2), |ctx, a| t_inv_two_tailed(ctx, a)),
-
     // --- confidence and tests ------------------------------------------------
     f("CONFIDENCE.NORM", 3, Some(3), |ctx, a| confidence_norm(ctx, a)),
     f("CONFIDENCE", 3, Some(3), |ctx, a| confidence_norm(ctx, a)),
@@ -421,10 +411,8 @@ fn negbinom(ctx: &EvalCtx, a: &[Operand], has_cumulative: bool) -> Operand {
         return Operand::error(CellError::Num);
     }
     let pmf = |f: f64| {
-        (ln_choose(f + successes - 1.0, successes - 1.0)
-            + successes * p.ln()
-            + f * (1.0 - p).ln())
-        .exp()
+        (ln_choose(f + successes - 1.0, successes - 1.0) + successes * p.ln() + f * (1.0 - p).ln())
+            .exp()
     };
     probability(if cdf {
         (0..=failures.trunc() as i64).map(|f| pmf(f as f64)).sum()
@@ -452,11 +440,7 @@ fn hypgeom(ctx: &EvalCtx, a: &[Operand], has_cumulative: bool) -> Operand {
         }
         (ln_choose(big_k, k) + ln_choose(big_n - big_k, n - k) - ln_choose(big_n, n)).exp()
     };
-    probability(if cdf {
-        (0..=k as i64).map(|i| pmf(i as f64)).sum()
-    } else {
-        pmf(k)
-    })
+    probability(if cdf { (0..=k as i64).map(|i| pmf(i as f64)).sum() } else { pmf(k) })
 }
 
 fn poisson(ctx: &EvalCtx, a: &[Operand]) -> Operand {
@@ -468,6 +452,10 @@ fn poisson(ctx: &EvalCtx, a: &[Operand]) -> Operand {
     probability(if cdf {
         // The upper incomplete gamma is the Poisson tail exactly.
         gamma_q(k + 1.0, lambda)
+    } else if lambda == 0.0 {
+        // A mean of zero is a legal argument that puts all the mass on zero,
+        // but the logarithmic form below would ask for ln(0) to say so.
+        f64::from(k == 0.0)
     } else {
         (k * lambda.ln() - lambda - ln_gamma(k + 1.0)).exp()
     })
@@ -605,9 +593,20 @@ fn f_rt(ctx: &EvalCtx, a: &[Operand]) -> Operand {
     probability(1.0 - f_cdf(x, d1, d2))
 }
 
-fn f_inv_rt(ctx: &EvalCtx, a: &[Operand]) -> Operand {
+/// The F quantile, from the left tail or the right.
+///
+/// The degrees of freedom are checked here for the same reason F.DIST checks
+/// them: below one there is no distribution, and the incomplete beta underneath
+/// answers with a NaN that the bisection then treats as a bracket it has
+/// already closed, so a missing check surfaces as a plausible-looking zero
+/// rather than as the `#NUM!` Excel gives.
+fn f_inv(ctx: &EvalCtx, a: &[Operand], right_tail: bool) -> Operand {
     args!(p = arg_num(ctx, a, 0), d1 = arg_num(ctx, a, 1), d2 = arg_num(ctx, a, 2));
-    match invert_cdf(1.0 - p, 0.0, 1.0, |x| f_cdf(x, d1, d2)) {
+    if d1 < 1.0 || d2 < 1.0 {
+        return Operand::error(CellError::Num);
+    }
+    let target = if right_tail { 1.0 - p } else { p };
+    match invert_cdf(target, 0.0, 1.0, |x| f_cdf(x, d1, d2)) {
         Some(x) => number(x),
         None => Operand::error(CellError::Num),
     }
@@ -757,8 +756,7 @@ fn t_test(ctx: &EvalCtx, a: &[Operand]) -> Operand {
             }
             let n = differences.len() as f64;
             let mean = differences.iter().sum::<f64>() / n;
-            let variance =
-                differences.iter().map(|d| (d - mean).powi(2)).sum::<f64>() / (n - 1.0);
+            let variance = differences.iter().map(|d| (d - mean).powi(2)).sum::<f64>() / (n - 1.0);
             if variance == 0.0 {
                 return Operand::error(CellError::Div0);
             }
@@ -779,8 +777,7 @@ fn t_test(ctx: &EvalCtx, a: &[Operand]) -> Operand {
             if se == 0.0 {
                 return Operand::error(CellError::Div0);
             }
-            let df = se * se
-                / ((v1 / n1).powi(2) / (n1 - 1.0) + (v2 / n2).powi(2) / (n2 - 1.0));
+            let df = se * se / ((v1 / n1).powi(2) / (n1 - 1.0) + (v2 / n2).powi(2) / (n2 - 1.0));
             ((m1 - m2) / se.sqrt(), df)
         }
     };

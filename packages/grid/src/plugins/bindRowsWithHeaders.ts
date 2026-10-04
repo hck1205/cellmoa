@@ -59,4 +59,4 @@ export class BindRowsWithHeaders extends BasePlugin {
   }
 }
 
-registerPlugin(BindRowsWithHeaders as never);
+registerPlugin(BindRowsWithHeaders);

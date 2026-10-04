@@ -13,10 +13,19 @@ use crate::ast::{BinaryOp, ColRef, Expr, Ref, RefKind, RowRef, SheetSpec, UnaryO
 use crate::lexer::{tokenize, ParseError, TokKind, Token};
 use cellmoa_core::reference::{letters_to_col, CellRef, RangeRef, MAX_ROWS};
 
+/// How deeply expressions may nest before the parser refuses to go further.
+///
+/// The descent is recursive, so a formula from an untrusted file can otherwise
+/// run the thread out of stack — and a stack overflow aborts the process rather
+/// than returning the [`ParseError`] every caller is prepared for. Excel itself
+/// stops at 64 levels of nested calls, so nothing a spreadsheet produced comes
+/// near this ceiling.
+const MAX_DEPTH: usize = 128;
+
 /// Parses a formula, with or without a leading `=`.
 pub fn parse(src: &str) -> Result<Expr, ParseError> {
     let body = src.strip_prefix('=').unwrap_or(src);
-    let mut parser = Parser { toks: tokenize(body)?, pos: 0 };
+    let mut parser = Parser { toks: tokenize(body)?, pos: 0, depth: 0 };
     let expr = parser.parse_expr()?;
     match parser.peek().kind {
         TokKind::Eof => Ok(expr),
@@ -39,6 +48,9 @@ enum Atom {
 struct Parser {
     toks: Vec<Token>,
     pos: usize,
+    /// How many expressions are open above the one being parsed, checked
+    /// against [`MAX_DEPTH`].
+    depth: usize,
 }
 
 impl Parser {
@@ -71,8 +83,22 @@ impl Parser {
         }
     }
 
+    /// Every nested construct — a parenthesised group, an argument list, an
+    /// array literal — comes back through here, so this is the one place the
+    /// depth has to be counted.
     fn parse_expr(&mut self) -> Result<Expr, ParseError> {
-        self.parse_comparison()
+        self.enter()?;
+        let expr = self.parse_comparison();
+        self.depth -= 1;
+        expr
+    }
+
+    fn enter(&mut self) -> Result<(), ParseError> {
+        self.depth += 1;
+        if self.depth > MAX_DEPTH {
+            return Err(ParseError::new("formula nests too deeply", self.peek().start));
+        }
+        Ok(())
     }
 
     fn parse_comparison(&mut self) -> Result<Expr, ParseError> {
@@ -155,8 +181,12 @@ impl Parser {
             _ => return self.parse_intersection(),
         };
         self.bump();
-        let expr = self.parse_unary()?;
-        Ok(Expr::Unary { op, expr: Box::new(expr) })
+        // A run of signs such as `---1` recurses without passing through
+        // `parse_expr`, so it needs its own share of the same budget.
+        self.enter()?;
+        let expr = self.parse_unary();
+        self.depth -= 1;
+        Ok(Expr::Unary { op, expr: Box::new(expr?) })
     }
 
     /// A space between two references means their intersection.
@@ -178,9 +208,9 @@ impl Parser {
     fn parse_range(&mut self) -> Result<Expr, ParseError> {
         let mut lhs = self.parse_atom()?;
         while self.peek().kind == TokKind::Colon {
-            self.bump();
+            let at = self.bump().start;
             let rhs = self.parse_atom()?;
-            lhs = Atom::Done(join_range(lhs, rhs)?);
+            lhs = Atom::Done(join_range(lhs, rhs, at)?);
         }
         Ok(self.settle(lhs))
     }
@@ -327,11 +357,16 @@ fn binary(op: BinaryOp, lhs: Expr, rhs: Expr) -> Expr {
 ///
 /// Falls back to a dynamic range operator for things like `A1:INDEX(B:B,2)`,
 /// where the endpoint is only known at evaluation time.
-fn join_range(lhs: Atom, rhs: Atom) -> Result<Expr, ParseError> {
+fn join_range(lhs: Atom, rhs: Atom, at: usize) -> Result<Expr, ParseError> {
     let (left, right) = (endpoint(lhs), endpoint(rhs));
     // The sheet qualifier on the left endpoint governs the whole range:
-    // `Sheet1!A1:B2` means `Sheet1!A1:Sheet1!B2`.
+    // `Sheet1!A1:B2` means `Sheet1!A1:Sheet1!B2`. A qualifier on the right may
+    // therefore only repeat it — dropping a different one, as this used to,
+    // silently turns `Sheet1!A1:Sheet2!B2` into a range over other cells.
     let sheet = left.sheet();
+    if right.sheet().is_some_and(|right| Some(&right) != sheet.as_ref()) {
+        return Err(ParseError::new("both ends of a range must be on the same sheet", at));
+    }
     Ok(match (left, right) {
         (End::Cell { cell: a, .. }, End::Cell { cell: b, .. }) => {
             Expr::Ref(Ref { sheet, kind: RefKind::Range(RangeRef::new(a, b)) })
@@ -349,6 +384,12 @@ fn join_range(lhs: Atom, rhs: Atom) -> Result<Expr, ParseError> {
 }
 
 /// One side of a `:`, classified as far as syntax allows.
+///
+/// The classification is provisional, because what an endpoint means depends on
+/// the other side: the `A` in `A:C` is a whole column, but the `A` in `A1:A` is
+/// not a column and not anything else either. Each variant therefore carries
+/// `alone`, the expression the endpoint stands for when the two sides turn out
+/// not to pair up — widening it to `A:A` instead would rewrite the formula.
 enum End {
     Cell {
         sheet: Option<SheetSpec>,
@@ -358,11 +399,13 @@ enum End {
     Col {
         sheet: Option<SheetSpec>,
         col: ColRef,
+        alone: Expr,
     },
     /// A bare row number such as the `1` in `1:3`.
     Row {
         sheet: Option<SheetSpec>,
         row: RowRef,
+        alone: Expr,
     },
     /// Anything else — a function call, a name, a parenthesised expression.
     Other(Expr),
@@ -381,8 +424,7 @@ impl End {
     fn into_expr(self) -> Expr {
         match self {
             End::Cell { sheet, cell } => Expr::Ref(Ref { sheet, kind: RefKind::Cell(cell) }),
-            End::Col { sheet, col } => Expr::Ref(Ref { sheet, kind: RefKind::Cols(col, col) }),
-            End::Row { sheet, row } => Expr::Ref(Ref { sheet, kind: RefKind::Rows(row, row) }),
+            End::Col { alone, .. } | End::Row { alone, .. } => alone,
             End::Other(expr) => expr,
         }
     }
@@ -395,20 +437,21 @@ fn endpoint(atom: Atom) -> End {
         }
         // A plain integer is a relative row endpoint: the `1` in `1:3`.
         Atom::Done(Expr::Number(n)) => match row_from_number(n) {
-            Some(row) => End::Row { sheet: None, row },
+            Some(row) => End::Row { sheet: None, row, alone: Expr::Number(n) },
             None => End::Other(Expr::Number(n)),
         },
         Atom::Done(expr) => End::Other(expr),
         Atom::Partial(p) => {
+            let alone = match &p.sheet {
+                Some(sheet) => Expr::Name(format!("{sheet}!{}", p.body)),
+                None => Expr::Name(p.body.clone()),
+            };
             if let Some(col) = col_from_text(&p.body) {
-                End::Col { sheet: p.sheet, col }
+                End::Col { sheet: p.sheet, col, alone }
             } else if let Some(row) = row_from_absolute_text(&p.body) {
-                End::Row { sheet: p.sheet, row }
+                End::Row { sheet: p.sheet, row, alone }
             } else {
-                End::Other(match p.sheet {
-                    Some(sheet) => Expr::Name(format!("{sheet}!{}", p.body)),
-                    None => Expr::Name(p.body),
-                })
+                End::Other(alone)
             }
         }
     }
@@ -689,6 +732,51 @@ mod tests {
         assert!(parse("A1 B1)").is_err());
         let err = parse("1+*2").unwrap_err();
         assert_eq!(err.position, 2);
+    }
+
+    #[test]
+    fn nesting_is_bounded_instead_of_overflowing_the_stack() {
+        // A hostile file can nest as deeply as it likes; the descent is
+        // recursive, so the only safe answer is an error, not a crash.
+        for open in ["(", "SUM(", "{", "-"] {
+            let close = match open {
+                "(" | "SUM(" => ")",
+                "{" => "}",
+                _ => "",
+            };
+            let src = format!("{}1{}", open.repeat(5000), close.repeat(5000));
+            assert!(parse(&src).is_err(), "5000 levels of `{open}` should be rejected, not fatal");
+        }
+        // The limit is well clear of anything a spreadsheet would produce.
+        assert!(parse(&format!("{}1{}", "(".repeat(64), ")".repeat(64))).is_ok());
+    }
+
+    #[test]
+    fn a_range_whose_endpoints_disagree_keeps_its_source_text() {
+        // `A1:A` is not a range Excel accepts, but widening the bare `A` into
+        // `A:A` on the way out rewrites the formula into something else again.
+        for src in ["A1:A", "A:1", "1:A", "A1:1", "A:A:A", "1:1:1", "A:XFE", "0:1"] {
+            assert_eq!(p(src).to_string(), src, "round trip of `{src}`");
+        }
+    }
+
+    #[test]
+    fn a_second_sheet_qualifier_inside_a_range_must_agree_with_the_first() {
+        // Keeping only the left qualifier silently pointed `Sheet1!A1:Sheet2!B2`
+        // at `Sheet1!A1:B2`, which is a different set of cells.
+        assert!(parse("Sheet1!A1:Sheet2!B2").is_err());
+        assert!(parse("Sheet1!A:Sheet2!C").is_err());
+        // Repeating the same qualifier is what Excel itself writes, and it
+        // collapses to the single-qualifier form.
+        assert_eq!(p("Sheet1!A1:Sheet1!B2").to_string(), "Sheet1!A1:B2");
+    }
+
+    #[test]
+    fn no_malformed_input_makes_the_parser_panic() {
+        for src in crate::lexer::MALFORMED {
+            // The contract is a `Result`, never a panic; either arm is fine.
+            let _ = parse(src);
+        }
     }
 
     #[test]

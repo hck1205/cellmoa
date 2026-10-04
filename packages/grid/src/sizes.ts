@@ -18,6 +18,24 @@ export class SizeMap {
   #overrides = new Map<number, number>();
   /** Prefix sums, built lazily and only while overrides exist. */
   #offsets: number[] | null = null;
+  /**
+   * Which indexes take no room.
+   *
+   * A hidden row is not a row of height zero as far as anything else is
+   * concerned — it keeps its size, its data and its place — so this is a
+   * question the owner answers rather than a size stored here. Without it the
+   * map had no way to know, and hiding a row changed nothing on screen: the
+   * renderer walks these sizes, and every hidden row was still a full one.
+   */
+  #hidden: ((index: number) => boolean) | null = null;
+  /**
+   * Whether anything is hidden at all.
+   *
+   * Asked separately from the per-index question because the fast paths below
+   * need it, and answering them by walking every index would be the opposite
+   * of a fast path. A grid with nothing hidden must keep taking the shortcut.
+   */
+  #anyHidden: (() => boolean) | null = null;
 
   constructor(count: number, defaultSize: number) {
     this.#count = Math.max(count, 0);
@@ -42,13 +60,45 @@ export class SizeMap {
     this.#offsets = null;
   }
 
-  /** Whether anything has been resized away from the default. */
+  /**
+   * Whether every index is the same size.
+   *
+   * The three measurements below take a shortcut when it is, and the shortcut
+   * is arithmetic on the default size — so a hidden index, which is zero and
+   * not the default, has to disqualify it just as a resized one does.
+   */
   get isUniform(): boolean {
-    return this.#overrides.size === 0;
+    if (this.#overrides.size > 0) {
+      return false;
+    }
+    // Nothing hidden means every index really is the default size, and the
+    // shortcut is correct — which is the common case and worth keeping.
+    return this.#anyHidden ? !this.#anyHidden() : this.#hidden === null;
+  }
+
+  /**
+   * Tells the map which indexes are hidden.
+   *
+   * Passing `null` stops asking. The answer is read on every measurement
+   * rather than cached, because what is hidden changes without the sizes
+   * changing — the cached offsets are dropped here so the next read rebuilds.
+   */
+  hides(predicate: ((index: number) => boolean) | null, anyHidden?: () => boolean): void {
+    this.#hidden = predicate;
+    this.#anyHidden = predicate ? (anyHidden ?? null) : null;
+    this.#offsets = null;
+  }
+
+  /** Drops the cached offsets, for an owner whose hidden set has changed. */
+  remeasure(): void {
+    this.#offsets = null;
   }
 
   /** The size of one index. */
   sizeOf(index: number): number {
+    if (this.#hidden?.(index)) {
+      return 0;
+    }
     return this.#overrides.get(index) ?? this.#default;
   }
 

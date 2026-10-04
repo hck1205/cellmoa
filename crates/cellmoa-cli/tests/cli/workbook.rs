@@ -1,122 +1,13 @@
-//! End-to-end tests of the command line.
-//!
-//! Exit codes are the part a pipeline depends on, so they are what these check:
-//! 0 for success, 1 for a check that failed or a difference found, 2 for a
-//! usage error. Getting those wrong turns a red build green.
+//! The commands that open a .xlsx: eval, calc, get, export, verify, the
+//! workbook form of diff, fingerprint and replay.
 
-use cellmoa_core::model::{Cell, CellContent, Workbook};
-use cellmoa_core::value::Value;
-use cellmoa_xlsx::Package;
-use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
-
-/// A directory this test can write into, removed when the test finishes.
-struct Scratch(PathBuf);
-
-impl Scratch {
-    fn new(name: &str) -> Scratch {
-        let path = std::env::temp_dir().join(format!("cellmoa-cli-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&path);
-        std::fs::create_dir_all(&path).expect("scratch directory");
-        Scratch(path)
-    }
-
-    fn join(&self, name: &str) -> PathBuf {
-        self.0.join(name)
-    }
-}
-
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
-fn cellmoa(arguments: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_cellmoa"))
-        .args(arguments)
-        .output()
-        .expect("the binary should run")
-}
-
-fn stdout(output: &Output) -> String {
-    String::from_utf8_lossy(&output.stdout).to_string()
-}
-
-fn code(output: &Output) -> i32 {
-    output.status.code().expect("the process should exit normally")
-}
-
-/// Writes a small workbook and returns its path.
-fn write_workbook(path: &Path, cells: &[(u32, u32, &str)]) {
-    let mut workbook = Workbook::new();
-    let id = workbook.add_sheet("Sheet1");
-    let sheet = workbook.sheet_mut(id).unwrap();
-    for (col, row, input) in cells {
-        let cell = match input.strip_prefix('=') {
-            Some(formula) => {
-                Cell { content: CellContent::formula(formula), value: Value::Blank, style: None }
-            }
-            None => match input.parse::<f64>() {
-                Ok(n) => Cell::literal(Value::Number(n)),
-                Err(_) => Cell::literal(Value::Text(input.to_string())),
-            },
-        };
-        sheet.set(*col, *row, cell);
-    }
-    Package::new(workbook).save(path).expect("save should succeed");
-}
-
-#[test]
-fn help_and_version_succeed() {
-    assert_eq!(code(&cellmoa(&["--help"])), 0);
-    assert!(stdout(&cellmoa(&["--help"])).contains("usage: cellmoa"));
-    assert_eq!(code(&cellmoa(&["--version"])), 0);
-}
-
-#[test]
-fn an_unknown_command_is_a_usage_error() {
-    let output = cellmoa(&["frobnicate"]);
-    assert_eq!(code(&output), 2);
-    assert!(String::from_utf8_lossy(&output.stderr).contains("unknown command"));
-}
-
-#[test]
-fn a_typo_in_an_option_is_reported_rather_than_ignored() {
-    let scratch = Scratch::new("typo");
-    let file = scratch.join("book.xlsx");
-    write_workbook(&file, &[(0, 0, "1")]);
-    let output = cellmoa(&["calc", file.to_str().unwrap(), "--jsn"]);
-    assert_eq!(code(&output), 2, "a mistyped option must not be silently dropped");
-}
-
-#[test]
-fn a_missing_file_is_a_usage_error_not_a_panic() {
-    let output = cellmoa(&["calc", "/nonexistent/nowhere.xlsx"]);
-    assert_eq!(code(&output), 2);
-}
+use super::support::*;
 
 #[test]
 fn eval_computes_a_formula() {
     let output = cellmoa(&["eval", "SUM(1,2)*3"]);
     assert_eq!(code(&output), 0);
     assert_eq!(stdout(&output).trim(), "9");
-}
-
-#[test]
-fn calc_recalculates_the_formulas_in_a_file() {
-    let scratch = Scratch::new("calc");
-    let input = scratch.join("in.xlsx");
-    let output_path = scratch.join("out.xlsx");
-    // The formula is stored with no cached result; calc has to compute it.
-    write_workbook(&input, &[(0, 0, "21"), (1, 0, "=A1*2")]);
-
-    let output =
-        cellmoa(&["calc", input.to_str().unwrap(), "--out", output_path.to_str().unwrap()]);
-    assert_eq!(code(&output), 0, "{}", String::from_utf8_lossy(&output.stderr));
-
-    let recalculated = cellmoa(&["get", output_path.to_str().unwrap(), "B1"]);
-    assert_eq!(stdout(&recalculated).trim(), "42");
 }
 
 #[test]
@@ -191,7 +82,10 @@ fn diff_exits_one_when_the_workbooks_differ() {
 
     let output = cellmoa(&["diff", before.to_str().unwrap(), after.to_str().unwrap()]);
     assert_eq!(code(&output), 0);
-    assert!(stdout(&output).contains("no differences"));
+    // "no differences" is news about the data, not data: on stdout it would
+    // arrive as a row for whatever reads the pipe.
+    assert!(stderr(&output).contains("no differences"));
+    assert_eq!(stdout(&output), "", "stdout carries data or nothing");
 
     write_workbook(&after, &[(0, 0, "2")]);
     let output = cellmoa(&["diff", before.to_str().unwrap(), after.to_str().unwrap()]);
@@ -235,23 +129,6 @@ fn the_fingerprint_is_stable_and_content_addressed() {
 }
 
 #[test]
-fn functions_lists_the_whole_catalogue() {
-    let output = cellmoa(&["functions", "--json"]);
-    assert_eq!(code(&output), 0);
-    let parsed: serde_json::Value = serde_json::from_str(&stdout(&output)).expect("valid JSON");
-    assert!(parsed["count"].as_u64().unwrap() >= 400);
-    let names: Vec<&str> = parsed["functions"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|f| f["name"].as_str().unwrap())
-        .collect();
-    assert!(names.contains(&"SUM"));
-    assert!(names.contains(&"VLOOKUP"));
-    assert!(names.contains(&"XIRR"));
-}
-
-#[test]
 fn replay_rebuilds_a_workbook_from_a_journal() {
     let scratch = Scratch::new("replay");
     // A journal recorded against an empty workbook.
@@ -286,7 +163,7 @@ fn replay_rebuilds_a_workbook_from_a_journal() {
     let output =
         cellmoa(&["replay", journal.to_str().unwrap(), "--out", rebuilt.to_str().unwrap()]);
     assert_eq!(code(&output), 0, "{}", String::from_utf8_lossy(&output.stderr));
-    assert!(stdout(&output).contains("replayed 3 commit(s)"), "{}", stdout(&output));
+    assert!(stderr(&output).contains("replayed 3 commit(s)"), "{}", stderr(&output));
 
     // The formula was replayed and then recalculated.
     assert_eq!(stdout(&cellmoa(&["get", rebuilt.to_str().unwrap(), "B1"])).trim(), "42");
@@ -304,4 +181,15 @@ fn replaying_onto_the_wrong_workbook_is_refused() {
     let output = cellmoa(&["replay", journal.to_str().unwrap()]);
     assert_eq!(code(&output), 2);
     assert!(String::from_utf8_lossy(&output.stderr).contains("fingerprint"));
+}
+
+#[test]
+fn diff_without_a_key_still_compares_two_workbooks() {
+    let scratch = Scratch::new("reconboth2");
+    let before = scratch.join("before.xlsx");
+    let after = scratch.join("after.xlsx");
+    write_workbook(&before, &[(0, 0, "1")]);
+    write_workbook(&after, &[(0, 0, "2")]);
+    let output = cellmoa(&["diff", before.to_str().unwrap(), after.to_str().unwrap()]);
+    assert_eq!(code(&output), 1, "{}", stderr(&output));
 }

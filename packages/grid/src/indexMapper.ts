@@ -34,6 +34,16 @@ export class IndexMapper {
   #visualByPhysical = new Map<number, number>();
   #renderableByVisual = new Map<number, number>();
   #dirty = true;
+  /**
+   * How many times the map has changed.
+   *
+   * Anything that derives from the order or the hidden set — the size map's
+   * prefix sums, most of all — needs to know when to throw its own cache away.
+   * Counting here rather than announcing it from each mutation means a new
+   * mutation cannot forget: it already has to mark the map dirty to work at
+   * all, and that is the same moment.
+   */
+  #version = 0;
 
   constructor(length = 0) {
     this.setLength(length);
@@ -45,9 +55,15 @@ export class IndexMapper {
     this.#trimmed.clear();
     this.#hidden.clear();
     this.#dirty = true;
+    this.#version += 1;
   }
 
   /** How many indexes exist, trimmed ones included. */
+  /** Bumped on every change, so a derived cache can tell it is stale. */
+  get version(): number {
+    return this.#version;
+  }
+
   get length(): number {
     return this.#sequence.length;
   }
@@ -75,6 +91,7 @@ export class IndexMapper {
   setSequence(sequence: number[]): void {
     this.#sequence = [...sequence];
     this.#dirty = true;
+    this.#version += 1;
   }
 
   /** The physical index at a visual position, or `null` past the end. */
@@ -122,6 +139,7 @@ export class IndexMapper {
       this.#trimmed.add(index);
     }
     this.#dirty = true;
+    this.#version += 1;
   }
 
   /** Removes indexes from the trimmed set. */
@@ -134,6 +152,7 @@ export class IndexMapper {
       }
     }
     this.#dirty = true;
+    this.#version += 1;
   }
 
   /** Hides physical indexes: still counted, not drawn. */
@@ -142,6 +161,7 @@ export class IndexMapper {
       this.#hidden.add(index);
     }
     this.#dirty = true;
+    this.#version += 1;
   }
 
   /** Removes indexes from the hidden set. */
@@ -154,6 +174,7 @@ export class IndexMapper {
       }
     }
     this.#dirty = true;
+    this.#version += 1;
   }
 
   isTrimmed(physical: number): boolean {
@@ -170,6 +191,11 @@ export class IndexMapper {
   }
 
   /** The hidden physical indexes, in order. */
+  /** Whether anything is hidden at all, without building the list. */
+  get hasHidden(): boolean {
+    return this.#hidden.size > 0;
+  }
+
   getHidden(): number[] {
     return [...this.#hidden].sort((a, b) => a - b);
   }
@@ -209,6 +235,7 @@ export class IndexMapper {
     notMoved.splice(destination, 0, ...physicalMoved);
     this.#sequence = notMoved;
     this.#dirty = true;
+    this.#version += 1;
   }
 
   /**
@@ -230,6 +257,7 @@ export class IndexMapper {
     const insertAt = this.#sequence.findIndex((physical) => physical >= at + count);
     this.#sequence.splice(insertAt === -1 ? this.#sequence.length : insertAt, 0, ...added);
     this.#dirty = true;
+    this.#version += 1;
   }
 
   /** Removes physical indexes, closing the gap they leave. */
@@ -244,6 +272,7 @@ export class IndexMapper {
     this.#trimmed = new Set([...this.#trimmed].filter((i) => !removed.has(i)).map(shift));
     this.#hidden = new Set([...this.#hidden].filter((i) => !removed.has(i)).map(shift));
     this.#dirty = true;
+    this.#version += 1;
   }
 
   /** Rebuilds the derived views, if anything changed since the last one. */

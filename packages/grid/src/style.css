@@ -15,11 +15,14 @@
   --cm-selected-bg: rgba(52, 120, 246, 0.1);
   --cm-current-border: #3478f6;
   --cm-error-fg: #c0392b;
+  --cm-invalid-bg: #ffe6e6;
   --cm-readonly-fg: #999;
   --cm-agent-marker: #7a5af8;
   --cm-comment-bg: #fffbe6;
   --cm-comment-marker: #c08a00;
   --cm-search-bg: rgba(255, 210, 0, 0.35);
+  --cm-header-current-bg: #e8e8e8;
+  --cm-header-active-bg: #d4e2fb;
   --cm-notification-accent: #3478f6;
   --cm-loading-bg: rgba(255, 255, 255, 0.72);
   --cm-diff-changed-bg: rgba(255, 196, 0, 0.18);
@@ -97,6 +100,53 @@
   color: var(--cm-readonly-fg);
 }
 
+/*
+ * A cell whose value was refused.
+ *
+ * The class was put on the cell and no rule ever read it, so a rejected value
+ * looked exactly like an accepted one — validation that runs, marks, and shows
+ * nothing. `!important` because the mark has to survive the selection
+ * background, which is the case where it matters most.
+ */
+.cm-grid .htInvalid {
+  background-color: var(--cm-invalid-bg) !important;
+}
+
+/*
+ * Alignment, which `setAlignment` and the context menu apply by class name.
+ *
+ * These are the reference's own class names, and they were being written onto
+ * the cell with nothing to read them — so choosing "center" from the menu
+ * changed the markup and not the text.
+ */
+.cm-grid .htLeft {
+  text-align: left;
+}
+
+.cm-grid .htCenter {
+  text-align: center;
+}
+
+.cm-grid .htRight {
+  text-align: right;
+}
+
+.cm-grid .htJustify {
+  text-align: justify;
+}
+
+.cm-grid .htTop {
+  vertical-align: top;
+}
+
+.cm-grid .htMiddle {
+  vertical-align: middle;
+}
+
+.cm-grid .htBottom {
+  vertical-align: bottom;
+}
+
 .cm-grid .cm-selected {
   background: var(--cm-selected-bg);
 }
@@ -171,7 +221,28 @@
 }
 
 /* The fold control on a collapsible nested header. */
-.cm-grid .cm-collapse {
+.cm-grid /* The edge a hidden row or column sits behind, so `indicators` shows where. */
+.cm-grid th.cm-after-hidden {
+  box-shadow: inset 0 2px 0 var(--cm-border);
+}
+
+.cm-grid th.cm-before-hidden {
+  box-shadow: inset 0 -2px 0 var(--cm-border);
+}
+
+.cm-grid th.cm-col-header.cm-after-hidden {
+  box-shadow: inset 2px 0 0 var(--cm-border);
+}
+
+.cm-grid th.cm-col-header.cm-before-hidden {
+  box-shadow: inset -2px 0 0 var(--cm-border);
+}
+
+.cm-pagination-size {
+  margin-inline-start: 8px;
+}
+
+.cm-collapse {
   float: right;
   width: 14px;
   height: 14px;
@@ -184,6 +255,37 @@
   background: var(--cm-cell-bg);
   color: var(--cm-header-fg);
   cursor: pointer;
+}
+
+/* Text that does not fit, cut with an ellipsis rather than wrapped. */
+.cm-grid .cm-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A header the selection passes through, and one whose whole line is selected. */
+.cm-grid .ht__highlight {
+  background: var(--cm-header-current-bg);
+}
+
+.cm-grid .ht__active_highlight {
+  background: var(--cm-header-active-bg);
+  font-weight: 600;
+}
+
+/* Text selection inside cells, off unless `fragmentSelection` asks for it. */
+.cm-grid .cm-text-select,
+.cm-grid .cm-text-select-cell {
+  user-select: text;
+}
+
+/* One option in an editor's list. `visibleRows` counts these, so the height
+   here and the number the editor uses have to agree. */
+.cm-grid .cm-editor-item,
+.cm-grid .cm-editor-option {
+  height: 22px;
+  box-sizing: border-box;
 }
 
 /* The pop-up menu, shared by the context menu and the dropdown menu. */
@@ -260,6 +362,72 @@
   justify-content: center;
 }
 
+/* The two the reference documents. `solid` is the default. */
+.cm-dialog-overlay[data-background='solid'] {
+  background: var(--cm-cell-bg);
+}
+
+.cm-dialog-overlay[data-background='semi-transparent'] {
+  background: rgb(0 0 0 / 45%);
+}
+
+.cm-dialog-overlay[data-animation='on'] {
+  animation: cm-fade-in 120ms ease-out;
+}
+
+@keyframes cm-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+/* Someone who asked their system for less motion meant it. */
+@media (prefers-reduced-motion: reduce) {
+  .cm-dialog-overlay[data-animation='on'] {
+    animation: none;
+  }
+}
+
+/* `contentBackground: false` is for a dialog that draws its own surface. */
+.cm-dialog[data-content-background='false'] {
+  border: none;
+  background: none;
+  box-shadow: none;
+}
+
+.cm-dialog-title {
+  margin: 0 0 8px;
+  font-weight: 600;
+}
+
+.cm-dialog-description {
+  margin: 0;
+}
+
+.cm-dialog-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.cm-notification-title {
+  font-weight: 600;
+}
+
+.cm-empty-state-title {
+  font-weight: 600;
+}
+
+.cm-empty-state-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 .cm-dialog-overlay[data-background='dark'] {
   background: rgba(0, 0, 0, 0.45);
 }
@@ -291,22 +459,45 @@
   margin-top: 16px;
 }
 
-/* Transient messages, stacked in a corner. */
+/* Transient messages, stacked in whichever corner `position` names. */
 .cm-notifications {
   position: absolute;
-  right: 12px;
-  bottom: 12px;
   z-index: 150;
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.cm-notifications[data-position='top-start'] {
+  top: 12px;
+  left: 12px;
+  align-items: flex-start;
+}
+
+.cm-notifications[data-position='top-end'] {
+  top: 12px;
+  right: 12px;
+  align-items: flex-end;
+}
+
+.cm-notifications[data-position='bottom-start'] {
+  bottom: 12px;
+  left: 12px;
+  align-items: flex-start;
+}
+
+.cm-notifications[data-position='bottom-end'] {
+  bottom: 12px;
+  right: 12px;
   align-items: flex-end;
 }
 
 .cm-notification {
+  /* A column, because a toast with a title needs the title on its own line. */
   display: flex;
+  flex-direction: column;
   gap: 8px;
-  align-items: center;
+  align-items: stretch;
   max-width: 320px;
   padding: 8px 12px;
   border: 1px solid var(--cm-border);
@@ -636,6 +827,8 @@
     --cm-comment-bg: #2b2b1f;
     --cm-comment-marker: #d0a000;
     --cm-search-bg: rgba(255, 210, 0, 0.22);
+    --cm-header-current-bg: #333;
+    --cm-header-active-bg: #2a3f63;
     --cm-notification-accent: #5a96ff;
     --cm-loading-bg: rgba(26, 26, 26, 0.72);
     --cm-diff-changed-bg: rgba(255, 196, 0, 0.14);

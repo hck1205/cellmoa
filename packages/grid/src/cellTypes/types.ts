@@ -76,10 +76,42 @@ export interface CellTypeDefinition {
   renderer: CellRenderer;
   editor: CellEditor | null;
   validator: CellValidator | null;
+  /**
+   * Settings the type brings with it.
+   *
+   * A `password` column is not copyable and a `dropdown` is strict, and in both
+   * cases that is a property of the *type* rather than something every caller
+   * should have to remember. They are defaults: any layer that says otherwise
+   * wins, so `{ type: 'password', copyable: true }` is still copyable.
+   *
+   * Without this the editor had to patch `strict` into the settings as it went
+   * past, which is how the editor and the validator came to disagree about what
+   * strict meant.
+   */
+  meta?: GridSettings;
 }
 
 /** Shorthand for a value that passed. */
 export const VALID: ValidationResult = { valid: true };
+
+/**
+ * Reads whatever a validator returned as a verdict.
+ *
+ * The registered validators answer with a `ValidationResult`, and a validator
+ * somebody wrote themselves usually answers with a boolean — that is the shape
+ * Handsontable's own `callback(true)` teaches. Both have to mean the same
+ * thing, and they have to mean it at every entry point: a validator that
+ * rejects a value when a cell is edited but accepts it when `validateCells`
+ * runs is worse than one that never worked.
+ */
+export function asVerdict(result: unknown): ValidationResult {
+  if (typeof result === 'object' && result !== null && 'valid' in result) {
+    const verdict = result as ValidationResult;
+    return { valid: Boolean(verdict.valid), ...(verdict.reason ? { reason: verdict.reason } : {}) };
+  }
+  // `undefined` is a validator that returned nothing, which is not a refusal.
+  return { valid: result !== false };
+}
 
 /** Shorthand for a value that did not. */
 export function invalid(reason: string): ValidationResult {

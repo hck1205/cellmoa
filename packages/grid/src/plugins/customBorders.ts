@@ -43,6 +43,11 @@ export const DEFAULT_BORDER: BorderEdge = { width: 1, color: '#000' };
 export class CustomBorders extends BasePlugin {
   static override readonly pluginName: string = 'customBorders';
 
+  /** The second setting changes how the first is drawn. */
+  static override get settingKeys(): string[] {
+    return ['customBorders', 'customBordersProgressive'];
+  }
+
   override isEnabled(): boolean {
     const settings = this.grid.getSettings().customBorders;
     return settings === true || Array.isArray(settings);
@@ -51,13 +56,10 @@ export class CustomBorders extends BasePlugin {
   protected override onEnable(): void {
     const settings = this.grid.getSettings().customBorders;
     if (Array.isArray(settings)) {
-      for (const spec of settings as BorderSpec[]) {
-        this.#applySpec(spec);
-      }
+      this.#build(settings as BorderSpec[]);
     }
     this.addHook(
-      'afterRenderer',
-      (_value: unknown, td: HTMLTableCellElement, row: number, col: number) => {
+      'afterRenderer', (td: HTMLTableCellElement, row: number, col: number) => {
         const border = this.getBorder(row, col);
         if (!border) {
           return;
@@ -148,6 +150,9 @@ export class CustomBorders extends BasePlugin {
       }
     }
     this.grid.render();
+    // Every path that changes a border ends here or in clearBorders, so those
+    // are the two places the change is worth announcing from.
+    this.grid.hooks.notify('afterCustomBordersUpdate', this.getBorders());
   }
 
   /** Takes the borders off the selection, or off everything. */
@@ -157,9 +162,44 @@ export class CustomBorders extends BasePlugin {
         this.grid.removeCellMeta(row, col, 'border');
       }
       this.grid.render();
+      this.grid.hooks.notify('afterCustomBordersUpdate', this.getBorders());
       return;
     }
     this.setBorders('none');
+  }
+
+  /**
+   * Applies the configured borders.
+   *
+   * A very large configuration blocks the first paint if it is all built up
+   * front, so `customBordersProgressive` builds it in batches after the grid is
+   * on screen. The trade is real and goes both ways — the borders appear a
+   * moment late — so it is a setting rather than a rule.
+   */
+  #build(specs: BorderSpec[]): void {
+    if (this.grid.getSettings().customBordersProgressive !== true) {
+      for (const spec of specs) {
+        this.#applySpec(spec);
+      }
+      return;
+    }
+    const batch = 200;
+    let index = 0;
+    const step = (): void => {
+      if (!this.isPluginEnabled()) {
+        return;
+      }
+      for (const spec of specs.slice(index, index + batch)) {
+        this.#applySpec(spec);
+      }
+      index += batch;
+      if (index < specs.length) {
+        setTimeout(step, 0);
+      } else {
+        this.grid.render();
+      }
+    };
+    setTimeout(step, 0);
   }
 
   #applySpec(spec: BorderSpec): void {
@@ -200,4 +240,4 @@ export class CustomBorders extends BasePlugin {
   }
 }
 
-registerPlugin(CustomBorders as never);
+registerPlugin(CustomBorders);

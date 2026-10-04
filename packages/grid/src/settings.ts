@@ -11,9 +11,111 @@
  * global defaults.
  */
 
-import { CellMap } from './cellMap.js';
 
+import type { Grid } from './grid.js';
+import type { CellRenderer } from './cellTypes/types.js';
+import type { Sanitizer } from './sanitize.js';
 import type { HookHandler } from './hooks.js';
+import type { RegisteredTheme } from './themes/index.js';
+
+/**
+ * One row of a `nestedRows` tree.
+ *
+ * Declared here rather than imported from the plugin: a setting's type has to
+ * be reachable without pulling in the code that acts on it, or every consumer
+ * of `GridSettings` loads every plugin.
+ */
+export interface NestedRow {
+  row: number;
+  children?: NestedRow[];
+}
+
+/**
+ * The shapes a `dataProvider` configuration is made of.
+ *
+ * They live here rather than in the plugin for the same reason `NestedRow`
+ * does: a setting's type has to be reachable without pulling in the code that
+ * acts on it. The plugin imports them back — a plugin may depend on the
+ * settings, and the settings may not depend on a plugin.
+ */
+
+/** How the rows should be ordered. */
+export interface SortDescriptor {
+  /** The column's name, which is what a server can act on. */
+  prop: string | number;
+  order: 'asc' | 'desc';
+}
+
+/** One column's filter, as the source receives it. */
+export interface FilterDescriptor {
+  prop: string | number;
+  conditions: Array<{ name: string; args: unknown[] }>;
+  operation?: 'conjunction' | 'disjunction';
+}
+
+/** What the grid asks the source for. */
+export interface QueryParameters {
+  /** 1-based. */
+  page: number;
+  pageSize: number;
+  sort: SortDescriptor | null;
+  filters: FilterDescriptor[] | null;
+}
+
+/**
+ * A fetch's options, which are the query plus what the source must not see.
+ *
+ * `skipLoading` says the fetch is one the grid started for its own reasons —
+ * after a sort, or after a write went through — so the overlay should not flash
+ * over a table the reader is already looking at. It never reaches `fetchRows`:
+ * how the grid draws is not the source's business.
+ */
+export interface FetchOptions extends Partial<QueryParameters> {
+  skipLoading?: boolean;
+}
+
+/** What the source answers with. */
+export interface FetchResult {
+  rows: string[][];
+  totalRows: number;
+}
+
+/** One row's worth of changes, as `onRowsUpdate` receives them. */
+export interface RowUpdate {
+  id: unknown;
+  changes: Record<string, string>;
+  rowData?: string[];
+}
+
+/** What `onRowsCreate` receives. */
+export interface RowsCreate {
+  position: 'above' | 'below';
+  referenceRowId?: unknown;
+  rowsAmount: number;
+}
+
+export type MutationOperation = 'create' | 'update' | 'remove';
+
+export interface DataProviderSettings {
+  /**
+   * Names a row.
+   *
+   * A string reads that column; a function decides. Without one the grid has
+   * nothing stable to send a server — a visual index changes when the page
+   * does — so writing is refused rather than sent against the wrong row.
+   */
+  rowId?: string | ((row: number, values: string[]) => unknown);
+  /** Fetches a page. `signal` aborts when this request is overtaken. */
+  fetchRows?: (
+    query: QueryParameters,
+    context: { signal: AbortSignal },
+  ) => Promise<FetchResult> | FetchResult;
+  onRowsCreate?: (payload: RowsCreate) => Promise<unknown> | unknown;
+  onRowsUpdate?: (rows: RowUpdate[]) => Promise<unknown> | unknown;
+  onRowsRemove?: (ids: unknown[]) => Promise<unknown> | unknown;
+  /** Called when a fetch throws, so a host with its own error UI can use it. */
+  onError?: (error: unknown, query: QueryParameters) => void;
+}
 
 /** A cell's coordinates in the visual grid. */
 export interface Coords {
@@ -66,6 +168,7 @@ export const SETTING_NAMES = [
   'layoutDirection', 'licenseKey', 'loading', 'locale',
   'manualColumnFreeze', 'manualColumnMove', 'manualColumnResize', 'manualRowMove',
   'manualRowResize', 'maxCols', 'maxRows', 'maxSelections',
+  'isEmptyCol', 'isEmptyRow',
   'mergeCells', 'minCols', 'minRowHeights', 'minRows',
   'minSpareCols', 'minSpareRows', 'moveCells', 'multiColumnSorting',
   'navigableHeaders', 'nestedHeaders', 'nestedRows', 'noWordWrapClassName',
@@ -112,8 +215,14 @@ export type CellType =
   | 'multiSelect'
   | 'password'
   | 'handsontable'
+  // Both spellings of the three the reference renames: the documented names
+  // are the hyphenated ones, and a configuration written from the guide has to
+  // type-check as well as resolve.
   | 'intlDate'
-  | 'intlTime';
+  | 'intl-date'
+  | 'intlTime'
+  | 'intl-time'
+  | 'multiselect';
 
 /** A function that decides a cell's settings from its position. */
 export type CellsFunction = (row: number, col: number, prop?: string | number) => GridSettings;
@@ -159,7 +268,19 @@ export interface GridSettings {
   // --- behaviour --------------------------------------------------------
   readOnly?: boolean;
   editor?: string | false;
-  renderer?: string;
+  /**
+   * A registered renderer's name, or the function itself.
+   *
+   * The runtime has always accepted both — `getCellRenderer` and the draw path
+   * each check `typeof meta.renderer === 'function'` — but this said `string`,
+   * so the working half was unreachable from TypeScript without a cast.
+   *
+   * The signature is not the reference's. A renderer here is called with one
+   * context object, `({ row, col, td, cell, meta })`; Handsontable calls one
+   * with positional arguments, `(instance, td, row, col, prop, value,
+   * cellProperties)`. A renderer written for one does not run under the other.
+   */
+  renderer?: string | CellRenderer;
   validator?: unknown;
   type?: CellType;
   allowInvalid?: boolean;
@@ -182,7 +303,7 @@ export interface GridSettings {
   enterBeginsEditing?: boolean;
   enterMoves?: Coords | ((event: KeyboardEvent) => Coords);
   tabMoves?: Coords | ((event: KeyboardEvent) => Coords);
-  outsideClickDeselects?: boolean;
+  outsideClickDeselects?: boolean | ((target: HTMLElement) => boolean);
   selectionMode?: 'single' | 'range' | 'multiple';
   disableVisualSelection?: boolean | string | string[];
   fragmentSelection?: boolean | 'cell';
@@ -207,7 +328,8 @@ export interface GridSettings {
   hiddenRows?: unknown;
   trimRows?: boolean | number[];
   nestedHeaders?: unknown;
-  nestedRows?: boolean;
+  /** `true` for the defaults, or the tree of parents and children. */
+  nestedRows?: boolean | NestedRow[];
   collapsibleColumns?: unknown;
   columnSummary?: unknown;
   autofill?: unknown;
@@ -233,7 +355,14 @@ export interface GridSettings {
   multipleSelectionHandles?: unknown;
   /** The order of the elements in the slots around the grid. */
   layout?: { top?: string[]; bottom?: string[] };
-  dataProvider?: unknown;
+  /**
+   * Where the rows come from, when they come from somewhere else.
+   *
+   * Typed rather than `unknown` so that writing `fetchRows` gets the query and
+   * the abort signal typed, and a misspelt callback is a compile error rather
+   * than a callback that is never called.
+   */
+  dataProvider?: DataProviderSettings;
 
   // Settings with no Handsontable counterpart.
   /** Show who changed each cell, and mark the ones an agent touched. */
@@ -252,8 +381,34 @@ export interface GridSettings {
 
   // --- appearance -------------------------------------------------------
   themeName?: string;
-  theme?: string;
+  /** A registered theme's name, or the theme itself. */
+  theme?: string | RegisteredTheme;
+  parsePastedValue?: boolean;
+  filterSelectedItems?: boolean;
+  searchInput?: boolean;
+  maxSelections?: number;
+  preserveNumericLiteral?: boolean;
+  sourceSortFunction?: (a: string, b: string) => number;
+  enterCommits?: boolean;
+  title?: string;
+  preventWheel?: boolean;
+  valueGetter?: (value: string, row: number, col: number) => unknown;
+  valueFormatter?: (value: unknown, row: number, col: number) => unknown;
+  valueParser?: (value: string, row: number, col: number) => unknown;
+  valueSetter?: (value: string, row: number, col: number) => unknown;
+  dataDotNotation?: boolean;
+  initialState?: GridSettings;
+  injectCoreCss?: boolean;
+  licenseKey?: string;
+  observeDOMVisibility?: boolean;
+  customBordersProgressive?: boolean;
+  viewportRowRenderingThreshold?: number | 'auto';
+  viewportColumnRenderingThreshold?: number | 'auto';
+  sourceDataValidator?: (value: unknown, row: number, col: number) => boolean;
+  sourceDataWarningMessage?: string;
   tableClassName?: string | string[];
+  /** Caps the grid at its parent's size in one direction. */
+  preventOverflow?: 'horizontal' | 'vertical' | false;
   currentRowClassName?: string;
   currentColClassName?: string;
   currentHeaderClassName?: string;
@@ -264,7 +419,7 @@ export interface GridSettings {
   placeholderCellClassName?: string;
   noWordWrapClassName?: string;
   headerClassName?: string;
-  textEllipsis?: number;
+  textEllipsis?: boolean;
 
   // --- internationalisation ---------------------------------------------
   language?: string;
@@ -280,9 +435,41 @@ export interface GridSettings {
   ariaTags?: boolean;
 
   // --- type-specific -----------------------------------------------------
-  numericFormat?: { pattern?: string; culture?: string };
-  dateFormat?: string;
-  timeFormat?: string;
+  /**
+   * How a numeric cell is formatted.
+   *
+   * `Intl.NumberFormatOptions`, not Handsontable's `{ pattern, culture }`.
+   * Handsontable formats through numbro; this grid formats through `Intl`,
+   * which every browser already has — so a grid does not ship a second number
+   * formatter to say `$1,234.50`. The type used to say `{ pattern, culture }`
+   * while the renderer read `Intl` options, which made the documented usage a
+   * compile error.
+   */
+  /**
+   * Cleans HTML before it reaches the DOM.
+   *
+   * No sanitizer ships with this grid, as none ships with the reference since
+   * v18: a bundled one goes stale, and only the caller knows what their content
+   * may contain. `source` says where the content is going, so one function can
+   * be stricter about a paste than about a cell it rendered itself.
+   */
+  /**
+   * What counts as an empty row or column, when the default does not.
+   *
+   * The default asks whether every cell's source value is `''`. A grid whose
+   * rows carry an id, or a spacer column, is never empty by that rule, and
+   * `minSpareRows` and the empty-data state both read it — so the reference
+   * lets the caller answer instead. `this` is the grid.
+   */
+  isEmptyRow?: (this: Grid, row: number) => boolean;
+  isEmptyCol?: (this: Grid, col: number) => boolean;
+
+  sanitizer?: Sanitizer;
+
+  numericFormat?: Intl.NumberFormatOptions;
+  /** `Intl.DateTimeFormatOptions`, for the same reason. */
+  dateFormat?: Intl.DateTimeFormatOptions;
+  timeFormat?: Intl.DateTimeFormatOptions;
   defaultDate?: string;
   correctFormat?: boolean;
   source?: unknown[] | ((query: string, callback: (items: unknown[]) => void) => void);
@@ -372,156 +559,3 @@ export const DEFAULT_SETTINGS: GridSettings = {
 export const DEFAULT_ROW_HEIGHT = 23;
 export const DEFAULT_COLUMN_WIDTH = 50;
 export const DEFAULT_ROW_HEADER_WIDTH = 50;
-
-/**
- * Resolves settings through the four layers.
- *
- * Kept as a class rather than a bare function because resolution is on the hot
- * path — every rendered cell asks for its settings — and the per-cell answers
- * are worth caching between renders.
- */
-export class MetaManager {
-  #global: GridSettings;
-  #table: GridSettings = {};
-  #columns = new Map<number, GridSettings>();
-  #cells = new CellMap<GridSettings>();
-  /** Cleared whenever anything above the cell layer changes. */
-  #cache = new CellMap<GridSettings>();
-
-  constructor(defaults: GridSettings = DEFAULT_SETTINGS) {
-    this.#global = { ...defaults };
-  }
-
-  /** The settings given for the grid as a whole. */
-  get table(): GridSettings {
-    return this.#table;
-  }
-
-  /** Applies grid-wide settings, replacing what was there before. */
-  update(settings: GridSettings): void {
-    Object.assign(this.#table, settings);
-    if (Array.isArray(settings.columns)) {
-      this.#columns.clear();
-      settings.columns.forEach((column, index) => this.#columns.set(index, { ...column }));
-    }
-    // `cell` is a list of per-cell overrides given up front.
-    if (Array.isArray(settings.cell)) {
-      for (const entry of settings.cell) {
-        const { row, col, ...rest } = entry;
-        this.setCell(row, col, rest);
-      }
-    }
-    this.#cache.clear();
-  }
-
-  /** Settings for one column. */
-  setColumn(index: number, settings: GridSettings): void {
-    this.#columns.set(index, { ...(this.#columns.get(index) ?? {}), ...settings });
-    this.#cache.clear();
-  }
-
-  /** Settings for one cell. */
-  setCell(row: number, col: number, settings: GridSettings): void {
-    this.#cells.set(row, col, { ...(this.#cells.get(row, col) ?? {}), ...settings });
-    this.#cache.delete(row, col);
-  }
-
-  /** Removes one setting from a cell, so it inherits again. */
-  removeCell(row: number, col: number, name?: string): void {
-    if (name === undefined) {
-      this.#cells.delete(row, col);
-    } else {
-      const existing = this.#cells.get(row, col);
-      if (existing) {
-        delete existing[name];
-      }
-    }
-    this.#cache.delete(row, col);
-  }
-
-  /**
-   * Moves the per-cell overrides when rows or columns are inserted or deleted.
-   *
-   * Without this a comment or a `readOnly` would stay at row 5 while the cell
-   * it described moved to row 6 — the note would end up on someone else's
-   * number, which is worse than losing it.
-   */
-  shift(axis: 'row' | 'col', at: number, count: number): void {
-    const moved = new CellMap<GridSettings>();
-    for (const [row, col, settings] of this.#cells) {
-      const index = axis === 'row' ? row : col;
-      let target = index;
-      if (index >= at) {
-        if (count < 0 && index < at - count) {
-          // The cell itself was deleted, and so is anything said about it.
-          continue;
-        }
-        target = index + count;
-      }
-      if (axis === 'row') {
-        moved.set(target, col, settings);
-      } else {
-        moved.set(row, target, settings);
-      }
-    }
-    this.#cells = moved;
-    this.#cache.clear();
-  }
-
-  /** Forgets every per-cell override. */
-  clearCells(): void {
-    this.#cells.clear();
-    this.#cache.clear();
-  }
-
-  /**
-   * The settings in force for one cell.
-   *
-   * The layers are merged narrowest-last, so a value set on the cell beats one
-   * set on the column, which beats one set on the grid.
-   */
-  forCell(row: number, col: number): GridSettings {
-    const cached = this.#cache.get(row, col);
-    if (cached) {
-      return cached;
-    }
-    const resolved: GridSettings = { ...this.#global, ...this.#table };
-
-    const columns = this.#table.columns;
-    if (typeof columns === 'function') {
-      Object.assign(resolved, columns(col) ?? {});
-    }
-    const column = this.#columns.get(col);
-    if (column) {
-      Object.assign(resolved, column);
-    }
-    // The `cells` function is consulted after the column so that it can
-    // override a column-wide decision for one row.
-    if (typeof this.#table.cells === 'function') {
-      Object.assign(resolved, this.#table.cells(row, col) ?? {});
-    }
-    const cell = this.#cells.get(row, col);
-    if (cell) {
-      Object.assign(resolved, cell);
-    }
-
-    this.#cache.set(row, col, resolved);
-    return resolved;
-  }
-
-  /** The settings in force for a column, without consulting any row. */
-  forColumn(col: number): GridSettings {
-    const resolved: GridSettings = { ...this.#global, ...this.#table };
-    const columns = this.#table.columns;
-    if (typeof columns === 'function') {
-      Object.assign(resolved, columns(col) ?? {});
-    }
-    Object.assign(resolved, this.#columns.get(col) ?? {});
-    return resolved;
-  }
-
-  /** Invalidates the per-cell cache. */
-  invalidate(): void {
-    this.#cache.clear();
-  }
-}

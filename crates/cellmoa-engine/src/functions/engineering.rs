@@ -31,13 +31,15 @@ fn to_base(value: f64, radix: u32, digits: u32, places: Option<f64>) -> Result<S
     if value < -half || value >= half {
         return Err(CellError::Num);
     }
-    let magnitude =
-        if value < 0.0 { (value + (1u64 << bits) as f64) as u64 } else { value as u64 };
+    let magnitude = if value < 0.0 { (value + (1u64 << bits) as f64) as u64 } else { value as u64 };
     let mut out = String::new();
     let mut n = magnitude;
     while n > 0 {
         let digit = (n % radix as u64) as u32;
-        out.insert(0, char::from_digit(digit, radix).expect("digit fits the radix").to_ascii_uppercase());
+        out.insert(
+            0,
+            char::from_digit(digit, radix).expect("digit fits the radix").to_ascii_uppercase(),
+        );
         n /= radix as u64;
     }
     if out.is_empty() {
@@ -91,9 +93,7 @@ impl Complex {
         let bytes = body.as_bytes();
         let mut split = None;
         for i in (1..bytes.len()).rev() {
-            if (bytes[i] == b'+' || bytes[i] == b'-')
-                && !matches!(bytes[i - 1], b'e' | b'E')
-            {
+            if (bytes[i] == b'+' || bytes[i] == b'-') && !matches!(bytes[i - 1], b'e' | b'E') {
                 split = Some(i);
                 break;
             }
@@ -183,7 +183,11 @@ fn arg_complex(ctx: &EvalCtx, a: &[Operand], i: usize) -> Result<Complex, CellEr
 }
 
 /// A one-argument complex function.
-fn complex1(ctx: &EvalCtx, a: &[Operand], f: impl Fn(Complex) -> Result<Complex, CellError>) -> Operand {
+fn complex1(
+    ctx: &EvalCtx,
+    a: &[Operand],
+    f: impl Fn(Complex) -> Result<Complex, CellError>,
+) -> Operand {
     match arg_complex(ctx, a, 0).and_then(f) {
         Ok(z) => Operand::text(z.text()),
         Err(e) => Operand::error(e),
@@ -328,14 +332,12 @@ pub const FUNCTIONS: &[Function] = &[
     f("OCT2HEX", 1, Some(2), |ctx, a| base_convert(ctx, a, 8, 16)),
     f("HEX2BIN", 1, Some(2), |ctx, a| base_convert(ctx, a, 16, 2)),
     f("HEX2OCT", 1, Some(2), |ctx, a| base_convert(ctx, a, 16, 8)),
-
     // --- bitwise ------------------------------------------------------------
     f("BITAND", 2, Some(2), |ctx, a| bitwise(ctx, a, |x, y| x & y)),
     f("BITOR", 2, Some(2), |ctx, a| bitwise(ctx, a, |x, y| x | y)),
     f("BITXOR", 2, Some(2), |ctx, a| bitwise(ctx, a, |x, y| x ^ y)),
     f("BITLSHIFT", 2, Some(2), |ctx, a| shift(ctx, a, true)),
     f("BITRSHIFT", 2, Some(2), |ctx, a| shift(ctx, a, false)),
-
     // --- comparison and error functions -------------------------------------
     f("DELTA", 1, Some(2), |ctx, a| {
         args!(x = arg_num(ctx, a, 0), y = opt_num(ctx, a, 1, 0.0));
@@ -359,7 +361,6 @@ pub const FUNCTIONS: &[Function] = &[
     f("ERF.PRECISE", 1, Some(1), |ctx, a| num1(ctx, a, erf)),
     f("ERFC", 1, Some(1), |ctx, a| num1(ctx, a, erfc)),
     f("ERFC.PRECISE", 1, Some(1), |ctx, a| num1(ctx, a, erfc)),
-
     // --- complex numbers ----------------------------------------------------
     f("COMPLEX", 2, Some(3), |ctx, a| {
         args!(re = arg_num(ctx, a, 0), im = arg_num(ctx, a, 1));
@@ -382,23 +383,19 @@ pub const FUNCTIONS: &[Function] = &[
             Ok(Complex::new(acc.re + z.re, acc.im + z.im, acc.suffix))
         })
     }),
-    f("IMSUB", 2, Some(2), |ctx, a| {
-        match (arg_complex(ctx, a, 0), arg_complex(ctx, a, 1)) {
-            (Ok(x), Ok(y)) => Operand::text(Complex::new(x.re - y.re, x.im - y.im, x.suffix).text()),
-            (Err(e), _) | (_, Err(e)) => Operand::error(e),
-        }
+    f("IMSUB", 2, Some(2), |ctx, a| match (arg_complex(ctx, a, 0), arg_complex(ctx, a, 1)) {
+        (Ok(x), Ok(y)) => Operand::text(Complex::new(x.re - y.re, x.im - y.im, x.suffix).text()),
+        (Err(e), _) | (_, Err(e)) => Operand::error(e),
     }),
     f("IMPRODUCT", 1, None, |ctx, a| {
         complex_fold(ctx, a, Complex::new(1.0, 0.0, 'i'), |acc, z| Ok(acc.mul(z)))
     }),
-    f("IMDIV", 2, Some(2), |ctx, a| {
-        match (arg_complex(ctx, a, 0), arg_complex(ctx, a, 1)) {
-            (Ok(x), Ok(y)) => match x.div(y) {
-                Ok(z) => Operand::text(z.text()),
-                Err(e) => Operand::error(e),
-            },
-            (Err(e), _) | (_, Err(e)) => Operand::error(e),
-        }
+    f("IMDIV", 2, Some(2), |ctx, a| match (arg_complex(ctx, a, 0), arg_complex(ctx, a, 1)) {
+        (Ok(x), Ok(y)) => match x.div(y) {
+            Ok(z) => Operand::text(z.text()),
+            Err(e) => Operand::error(e),
+        },
+        (Err(e), _) | (_, Err(e)) => Operand::error(e),
     }),
     f("IMPOWER", 2, Some(2), |ctx, a| {
         args!(n = arg_num(ctx, a, 1));
@@ -410,7 +407,11 @@ pub const FUNCTIONS: &[Function] = &[
     f("IMLOG10", 1, Some(1), |ctx, a| {
         complex1(ctx, a, |z| {
             let l = z.ln()?;
-            Ok(Complex::new(l.re / std::f64::consts::LN_10, l.im / std::f64::consts::LN_10, z.suffix))
+            Ok(Complex::new(
+                l.re / std::f64::consts::LN_10,
+                l.im / std::f64::consts::LN_10,
+                z.suffix,
+            ))
         })
     }),
     f("IMLOG2", 1, Some(1), |ctx, a| {
@@ -420,10 +421,14 @@ pub const FUNCTIONS: &[Function] = &[
         })
     }),
     f("IMSIN", 1, Some(1), |ctx, a| {
-        complex1(ctx, a, |z| Ok(Complex::new(z.re.sin() * z.im.cosh(), z.re.cos() * z.im.sinh(), z.suffix)))
+        complex1(ctx, a, |z| {
+            Ok(Complex::new(z.re.sin() * z.im.cosh(), z.re.cos() * z.im.sinh(), z.suffix))
+        })
     }),
     f("IMCOS", 1, Some(1), |ctx, a| {
-        complex1(ctx, a, |z| Ok(Complex::new(z.re.cos() * z.im.cosh(), -z.re.sin() * z.im.sinh(), z.suffix)))
+        complex1(ctx, a, |z| {
+            Ok(Complex::new(z.re.cos() * z.im.cosh(), -z.re.sin() * z.im.sinh(), z.suffix))
+        })
     }),
     f("IMTAN", 1, Some(1), |ctx, a| {
         complex1(ctx, a, |z| {
@@ -433,10 +438,14 @@ pub const FUNCTIONS: &[Function] = &[
         })
     }),
     f("IMSINH", 1, Some(1), |ctx, a| {
-        complex1(ctx, a, |z| Ok(Complex::new(z.re.sinh() * z.im.cos(), z.re.cosh() * z.im.sin(), z.suffix)))
+        complex1(ctx, a, |z| {
+            Ok(Complex::new(z.re.sinh() * z.im.cos(), z.re.cosh() * z.im.sin(), z.suffix))
+        })
     }),
     f("IMCOSH", 1, Some(1), |ctx, a| {
-        complex1(ctx, a, |z| Ok(Complex::new(z.re.cosh() * z.im.cos(), z.re.sinh() * z.im.sin(), z.suffix)))
+        complex1(ctx, a, |z| {
+            Ok(Complex::new(z.re.cosh() * z.im.cos(), z.re.sinh() * z.im.sin(), z.suffix))
+        })
     }),
     f("IMSEC", 1, Some(1), |ctx, a| {
         complex1(ctx, a, |z| {
@@ -469,7 +478,6 @@ pub const FUNCTIONS: &[Function] = &[
             Complex::new(1.0, 0.0, z.suffix).div(sinh)
         })
     }),
-
     // --- unit conversion ----------------------------------------------------
     f("CONVERT", 3, Some(3), |ctx, a| {
         args!(value = arg_num(ctx, a, 0), from = arg_text(ctx, a, 1), to = arg_text(ctx, a, 2));

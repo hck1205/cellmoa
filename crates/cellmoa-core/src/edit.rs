@@ -251,8 +251,21 @@ impl Document {
         // Applying the inverses in reverse order then unwinds correctly.
         let mut inverse = Vec::with_capacity(ops.len());
         for op in &ops {
-            inverse.push(self.invert(op)?);
-            self.perform(op);
+            match self.invert(op) {
+                Ok(reversal) => {
+                    inverse.push(reversal);
+                    self.perform(op);
+                }
+                // A commit is all or nothing. Rolling the earlier ops back is
+                // what makes that true: leaving them applied would put changes
+                // in the document that no commit records and no undo can reach.
+                Err(err) => {
+                    for reversal in inverse.iter().rev() {
+                        self.perform(reversal);
+                    }
+                    return Err(err);
+                }
+            }
         }
         inverse.reverse();
 
@@ -278,12 +291,19 @@ impl Document {
                 !self.commits[i].undone && only_by.is_none_or(|id| self.commits[i].actor.id == id)
             })
             .ok_or(EditError::NothingToUndo)?;
-        let index = self.undo_stack.remove(pos);
+        let index = self.undo_stack[pos];
         let inverse = self.commits[index].inverse.clone();
-        self.commits[index].undone = true;
         let undo_index = self.commits.len();
+        // The books are only closed once the reversal has actually been
+        // applied. An inverse that can no longer be computed must leave the
+        // history exactly as it was, not a commit marked undone that is still
+        // in force and a redo entry pointing at a commit that was never
+        // written.
+        self.apply_full(actor, inverse, None, CommitKind::Undo(index), None, None)?;
+        self.undo_stack.remove(pos);
+        self.commits[index].undone = true;
         self.redo_stack.push((index, undo_index));
-        self.apply_full(actor, inverse, None, CommitKind::Undo(index), None, None)
+        Ok(&self.commits[undo_index])
     }
 
     /// Re-applies the most recently undone commit, optionally restricted to one
@@ -297,11 +317,14 @@ impl Document {
                     && only_by.is_none_or(|id| self.commits[orig].actor.id == id)
             })
             .ok_or(EditError::NothingToRedo)?;
-        let (orig, undo_index) = self.redo_stack.remove(pos);
+        let (orig, undo_index) = self.redo_stack[pos];
         let ops = self.commits[undo_index].inverse.clone();
+        let redo_index = self.commits.len();
+        self.apply_full(actor, ops, None, CommitKind::Redo(orig), None, None)?;
+        self.redo_stack.remove(pos);
         self.commits[orig].undone = false;
         self.undo_stack.push(orig);
-        self.apply_full(actor, ops, None, CommitKind::Redo(orig), None, None)
+        Ok(&self.commits[redo_index])
     }
 
     /// Computes the op that reverses `op` against the current state.
@@ -316,8 +339,18 @@ impl Document {
                 // before the op runs.
                 Op::RemoveSheet { sheet: self.workbook.sheet_count() as SheetId }
             }
-            Op::RemoveSheet { sheet } => Op::RestoreSheet { sheet: *sheet },
-            Op::RestoreSheet { sheet } => Op::RemoveSheet { sheet: *sheet },
+            // The inverse puts the sheet back into the state it is in now,
+            // rather than assuming the op is about to change that state.
+            // Removing a sheet that is already gone changes nothing, and the
+            // reversal of a no-op has to be a no-op too — the naive opposite
+            // would resurrect a sheet some earlier commit deleted, or delete a
+            // live one this commit never touched.
+            Op::RemoveSheet { sheet } | Op::RestoreSheet { sheet } => {
+                match self.workbook.sheet(*sheet) {
+                    Some(_) => Op::RestoreSheet { sheet: *sheet },
+                    None => Op::RemoveSheet { sheet: *sheet },
+                }
+            }
             Op::RenameSheet { sheet, .. } => {
                 let name = self
                     .workbook
@@ -586,6 +619,78 @@ mod tests {
         // Redo brings back the same sheet rather than appending another one.
         assert_eq!(d.workbook.sheet_by_name("Data").map(|s| s.id), Some(1));
         assert_eq!(d.workbook.sheets().count(), 2);
+    }
+
+    #[test]
+    fn removing_a_sheet_is_reversible() {
+        let mut d = doc();
+        d.apply(Actor::human("u1"), vec![set(0, 0, 1)], None).unwrap();
+        d.apply(Actor::human("u1"), vec![Op::RemoveSheet { sheet: 0 }], None).unwrap();
+        assert_eq!(d.workbook.sheets().count(), 0);
+        d.undo(Actor::human("u1"), None).unwrap();
+        assert_eq!(d.workbook.sheets().count(), 1);
+        // The cells came back with the sheet.
+        assert_eq!(d.workbook.value(CellAddr::new(0, 0, 0)), Value::number(1));
+        d.redo(Actor::human("u1"), None).unwrap();
+        assert_eq!(d.workbook.sheets().count(), 0);
+    }
+
+    #[test]
+    fn undoing_a_removal_that_removed_nothing_leaves_the_sheet_alone() {
+        let mut d = doc();
+        d.apply(Actor::human("u1"), vec![Op::RemoveSheet { sheet: 0 }], None).unwrap();
+        // The sheet is already gone, so this commit changes nothing.
+        d.apply(Actor::agent("a1"), vec![Op::RemoveSheet { sheet: 0 }], None).unwrap();
+        d.undo(Actor::human("u1"), Some("a1")).unwrap();
+        assert_eq!(d.workbook.sheets().count(), 0, "undoing a no-op resurrected the sheet");
+    }
+
+    #[test]
+    fn undoing_a_restore_that_restored_nothing_leaves_the_sheet_alone() {
+        let mut d = doc();
+        // Sheet1 is already live, so this commit changes nothing.
+        d.apply(Actor::human("u1"), vec![Op::RestoreSheet { sheet: 0 }], None).unwrap();
+        d.undo(Actor::human("u1"), None).unwrap();
+        assert_eq!(d.workbook.sheets().count(), 1, "undoing a no-op deleted a live sheet");
+    }
+
+    #[test]
+    fn a_commit_that_cannot_be_inverted_applies_none_of_itself() {
+        let mut d = doc();
+        let err = d
+            .apply(
+                Actor::human("u1"),
+                vec![
+                    set(0, 0, 1),
+                    Op::AddSheet { name: "Data".into() },
+                    Op::RenameSheet { sheet: 99, name: "Nope".into() },
+                ],
+                None,
+            )
+            .unwrap_err();
+        assert_eq!(err, EditError::UnknownSheet(99));
+        // The first two ops ran before the third was refused; none of it may
+        // survive, because nothing records that they happened.
+        assert_eq!(d.workbook.value(CellAddr::new(0, 0, 0)), Value::Blank);
+        assert_eq!(d.workbook.sheets().count(), 1);
+        assert_eq!(d.revision(), 0);
+        assert!(d.commits().is_empty());
+    }
+
+    #[test]
+    fn an_undo_that_cannot_be_computed_leaves_the_history_intact() {
+        let mut d = doc();
+        d.apply(Actor::agent("a1"), vec![Op::RenameSheet { sheet: 0, name: "Q1".into() }], None)
+            .unwrap();
+        d.apply(Actor::human("u1"), vec![Op::RemoveSheet { sheet: 0 }], None).unwrap();
+
+        // The rename cannot be reversed while the sheet is tombstoned.
+        assert_eq!(d.undo(Actor::human("u1"), Some("a1")).unwrap_err(), EditError::UnknownSheet(0));
+
+        assert_eq!(d.commits().len(), 2);
+        assert!(!d.commits()[0].undone);
+        assert_eq!(d.undoable().count(), 2);
+        assert_eq!(d.redo(Actor::human("u1"), None).unwrap_err(), EditError::NothingToRedo);
     }
 
     #[test]

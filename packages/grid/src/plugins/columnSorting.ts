@@ -89,23 +89,21 @@ export class ColumnSorting extends BasePlugin {
     }
     // Clicking a header cycles ascending, descending, off — the order every
     // spreadsheet uses.
-    this.addHook('afterOnCellMouseDown', (_value: unknown, event: MouseEvent, coords: unknown) => {
+    this.addHook('afterOnCellMouseDown', (event: MouseEvent, coords: unknown) => {
       const target = event?.target as HTMLElement | undefined;
       if (!target || !target.classList.contains('cm-col-header')) {
         return;
       }
-      if (this.options<SortSettings>().headerAction === false) {
+      const col = Number(target.dataset.col);
+      if (!Number.isFinite(col) || !this.#respondsToHeader(col)) {
         return;
       }
-      const col = Number(target.dataset.col);
-      if (Number.isFinite(col)) {
-        this.toggleSort(col);
-      }
+      this.toggleSort(col);
       void coords;
     });
     this.addHook('modifyColHeader', (label: string, col: number) => {
       const config = this.sortState.find((entry) => entry.column === col);
-      if (!config) {
+      if (!config || this.options<SortSettings>().indicator === false) {
         return label;
       }
       // An arrow in the header, so the sort is visible without a legend.
@@ -115,6 +113,23 @@ export class ColumnSorting extends BasePlugin {
 
   protected override onDisable(): void {
     this.clearSort();
+  }
+
+  /**
+   * Whether clicking a column's header sorts it.
+   *
+   * The guide makes one column unsortable by writing `headerAction: false`
+   * inside that column's own entry in `columns`, so the column has the last
+   * word and the plugin-level setting is only what a column that says nothing
+   * inherits. Reading the plugin-level setting alone made the option all or
+   * nothing, and the documented per-column form did nothing at all.
+   */
+  #respondsToHeader(col: number): boolean {
+    const own = this.grid.getColumnMeta(col)[this.pluginName];
+    if (typeof own === 'object' && own !== null && 'headerAction' in own) {
+      return (own as SortSettings).headerAction !== false;
+    }
+    return this.options<SortSettings>().headerAction !== false;
   }
 
   /** The current sort, or an empty list. */
@@ -149,7 +164,7 @@ export class ColumnSorting extends BasePlugin {
     }
     this.sortState = this.limit(wanted);
     this.#apply();
-    this.grid.hooks.run('afterColumnSort', undefined, this.getSortConfig(), wanted);
+    this.grid.hooks.notify('afterColumnSort', this.getSortConfig(), wanted);
     this.grid.render();
   }
 
@@ -255,5 +270,5 @@ export class MultiColumnSorting extends ColumnSorting {
   }
 }
 
-registerPlugin(ColumnSorting as never);
-registerPlugin(MultiColumnSorting as never);
+registerPlugin(ColumnSorting);
+registerPlugin(MultiColumnSorting);

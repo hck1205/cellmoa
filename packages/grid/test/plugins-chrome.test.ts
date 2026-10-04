@@ -9,7 +9,6 @@ import type {
   Notification,
   StretchColumns,
 } from '../src/plugins/index.js';
-import { DEFAULT_EMPTY_MESSAGE, DEFAULT_FILTERED_MESSAGE } from '../src/plugins/index.js';
 import { mountGrid } from './helpers.js';
 import type { MountOptions } from './helpers.js';
 
@@ -119,7 +118,7 @@ describe('the notification plugin', () => {
     plugin.showMessage({ message: 'first', timeout: 0 });
     plugin.showMessage({ message: 'second', timeout: 0, type: 'error' });
 
-    expect(plugin.getQueueSize()).toBe(2);
+    expect(plugin.getVisibleCount()).toBe(2);
     expect(grid.view?.wrapper.querySelectorAll('.cm-notification')).toHaveLength(2);
     expect(grid.view?.wrapper.querySelector('.cm-notification--error')).not.toBeNull();
   });
@@ -129,7 +128,7 @@ describe('the notification plugin', () => {
     const plugin = grid.getPlugin('notification') as unknown as Notification;
     plugin.showMessage({ id: 'save', message: 'saving', timeout: 0 });
     plugin.showMessage({ id: 'save', message: 'saved', timeout: 0 });
-    expect(plugin.getQueueSize()).toBe(1);
+    expect(plugin.getVisibleCount()).toBe(1);
     expect(grid.view?.wrapper.querySelector('.cm-notification-text')?.textContent).toBe('saved');
   });
 
@@ -225,14 +224,14 @@ describe('the emptyDataState plugin', () => {
     const grid = await makeGrid({ emptyDataState: true, startRows: 0, minRows: 0 });
     const plugin = grid.getPlugin('emptyDataState') as unknown as EmptyDataState;
     expect(plugin.getReason()).toBe('empty');
-    expect(plugin.getMessage('empty')).toBe(DEFAULT_EMPTY_MESSAGE);
+    expect(plugin.getMessage('empty').title).toBe('No data available');
 
     const filtered = await makeGrid({ emptyDataState: true, minRows: 0, startRows: 3 });
     filtered.setDataAtCell(0, 0, 'x');
     filtered.rowIndex.trim([0, 1, 2]);
     const filteredPlugin = filtered.getPlugin('emptyDataState') as unknown as EmptyDataState;
     expect(filteredPlugin.getReason()).toBe('filtered');
-    expect(filteredPlugin.getMessage('filtered')).toBe(DEFAULT_FILTERED_MESSAGE);
+    expect(filteredPlugin.getMessage('filtered').title).toBe('No results found');
   });
 
   it('shows the message it was configured with', async () => {
@@ -284,7 +283,7 @@ describe('sizing plugins', () => {
   });
 
   it('gives the spare width to the last column', async () => {
-    const grid = await makeGrid({ stretchH: 'last', autoColumnSize: false }, 600);
+    const grid = await makeGrid({ ...{ stretchH: 'last', autoColumnSize: false }, viewport: { width: 600, height: 400 } });
     const plugin = grid.getPlugin('stretchColumns') as unknown as StretchColumns;
     const before = grid.getColWidth(2);
     plugin.recalculate();
@@ -298,7 +297,7 @@ describe('sizing plugins', () => {
   });
 
   it('shares the spare width out in proportion', async () => {
-    const grid = await makeGrid({ stretchH: 'all', autoColumnSize: false }, 600);
+    const grid = await makeGrid({ ...{ stretchH: 'all', autoColumnSize: false }, viewport: { width: 600, height: 400 } });
     const plugin = grid.getPlugin('stretchColumns') as unknown as StretchColumns;
     plugin.recalculate();
     // Every column grew, and they all started the same width so they stay equal.
@@ -307,7 +306,7 @@ describe('sizing plugins', () => {
   });
 
   it('gives the widths back when it is switched off', async () => {
-    const grid = await makeGrid({ stretchH: 'last', autoColumnSize: false }, 600);
+    const grid = await makeGrid({ ...{ stretchH: 'last', autoColumnSize: false }, viewport: { width: 600, height: 400 } });
     const before = grid.getColWidth(2);
     const plugin = grid.getPlugin('stretchColumns') as unknown as StretchColumns;
     plugin.recalculate();
@@ -319,5 +318,50 @@ describe('sizing plugins', () => {
     const grid = await makeGrid({ manualResize: true });
     expect(grid.isPluginEnabled('manualRowResize')).toBe(true);
     expect(grid.isPluginEnabled('manualColumnResize')).toBe(true);
+  });
+});
+
+describe('HTML that reaches the DOM', () => {
+  it('runs the sanitizer for a dialog, not only for cells', async () => {
+    // The dialog assigned `innerHTML` outright, so a grid configured exactly as
+    // the security guide says still had one unguarded way in.
+    const seen: Array<[string, string]> = [];
+    const grid = await makeGrid({
+      dialog: true,
+      sanitizer: (content: string, source: string) => {
+        seen.push([content, source]);
+        return content.replace(/<script[\s\S]*?<\/script>/g, '');
+      },
+    });
+    (grid.getPlugin('dialog') as unknown as Dialog).show({
+      content: 'safe<script>steal()</script>',
+      contentType: 'html',
+    });
+
+    expect(seen).toEqual([['safe<script>steal()</script>', 'Dialog']]);
+    const box = grid.view!.overlay.querySelector('.cm-dialog');
+    expect(box?.innerHTML).toBe('safe');
+    expect(box?.querySelector('script')).toBeNull();
+  });
+
+  it('tells the sanitizer where the content is going', async () => {
+    const sources: string[] = [];
+    const grid = await makeGrid({
+      allowHtml: true,
+      sanitizer: (content: string, source: string) => {
+        sources.push(source);
+        return content;
+      },
+    });
+    grid.setDataAtCell(0, 0, '<b>bold</b>');
+    grid.render();
+    expect(sources).toContain('innerHTML');
+  });
+
+  it('writes plain text with no sanitizer configured, as it always did', async () => {
+    const grid = await makeGrid({ dialog: true });
+    (grid.getPlugin('dialog') as unknown as Dialog).show({ content: '<i>x</i>' });
+    const box = grid.view!.overlay.querySelector('.cm-dialog');
+    expect(box?.textContent).toContain('<i>x</i>');
   });
 });

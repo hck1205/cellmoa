@@ -20,8 +20,6 @@ use std::sync::OnceLock;
 /// makes that mistake unrepresentable.
 macro_rules! categories {
     ($($name:ident),+ $(,)?) => {
-        $(pub mod $name;)+
-
         /// Every category's catalogue, in registration order.
         fn catalogues() -> &'static [&'static [Function]] {
             &[$($name::FUNCTIONS),+]
@@ -32,6 +30,23 @@ macro_rules! categories {
         const CATEGORY_NAMES: &[&str] = &[$(stringify!($name)),+];
     };
 }
+
+// Declared here rather than inside `categories!`, because rustfmt cannot expand
+// a macro to find them: for as long as the `pub mod` lines lived in there,
+// `cargo fmt --check` descended into none of these files and reported success
+// over whatever they contained. `every_category_file_is_declared` below is what
+// now keeps a new file from being written and never listed.
+pub mod database;
+pub mod date;
+pub mod distributions;
+pub mod engineering;
+pub mod financial;
+pub mod info;
+pub mod logical;
+pub mod lookup;
+pub mod math;
+pub mod stats;
+pub mod text;
 
 categories!(
     math,
@@ -75,6 +90,24 @@ pub struct Function {
     pub call: Call,
 }
 
+/// The one place a `Function` is built.
+///
+/// The four declarations below each wrote the struct out in full, which meant
+/// each of them chose `volatile: false` and `array_context: false` on its own.
+/// A fifth flag would have been four separate decisions about what the default
+/// should be, and only one of them has to be wrong for a category of functions
+/// to quietly behave differently from the rest.
+const fn declare(
+    name: &'static str,
+    min_args: usize,
+    max_args: Option<usize>,
+    volatile: bool,
+    array_context: bool,
+    call: Call,
+) -> Function {
+    Function { name, min_args, max_args, volatile, array_context, call }
+}
+
 /// Declares an ordinary function.
 pub const fn f(
     name: &'static str,
@@ -82,14 +115,7 @@ pub const fn f(
     max_args: Option<usize>,
     call: fn(&mut EvalCtx, &[Operand]) -> Operand,
 ) -> Function {
-    Function {
-        name,
-        min_args,
-        max_args,
-        volatile: false,
-        array_context: false,
-        call: Call::Eager(call),
-    }
+    declare(name, min_args, max_args, false, false, Call::Eager(call))
 }
 
 /// Declares a volatile function.
@@ -99,14 +125,7 @@ pub const fn volatile(
     max_args: Option<usize>,
     call: fn(&mut EvalCtx, &[Operand]) -> Operand,
 ) -> Function {
-    Function {
-        name,
-        min_args,
-        max_args,
-        volatile: true,
-        array_context: false,
-        call: Call::Eager(call),
-    }
+    declare(name, min_args, max_args, true, false, Call::Eager(call))
 }
 
 /// Declares a function whose arguments are evaluated as arrays.
@@ -116,14 +135,7 @@ pub const fn array_fn(
     max_args: Option<usize>,
     call: fn(&mut EvalCtx, &[Operand]) -> Operand,
 ) -> Function {
-    Function {
-        name,
-        min_args,
-        max_args,
-        volatile: false,
-        array_context: true,
-        call: Call::Eager(call),
-    }
+    declare(name, min_args, max_args, false, true, Call::Eager(call))
 }
 
 /// Declares a function that receives its arguments unevaluated.
@@ -133,14 +145,7 @@ pub const fn lazy(
     max_args: Option<usize>,
     call: fn(&mut EvalCtx, &[Expr]) -> Operand,
 ) -> Function {
-    Function {
-        name,
-        min_args,
-        max_args,
-        volatile: false,
-        array_context: false,
-        call: Call::Lazy(call),
-    }
+    declare(name, min_args, max_args, false, false, Call::Lazy(call))
 }
 
 /// Every category's catalogue, in registration order.
@@ -349,6 +354,42 @@ mod tests {
         }
     }
 
+    /// Every category file is declared, listed, and reachable.
+    ///
+    /// The module declarations used to be generated from the `categories!` list,
+    /// which made "declared but not registered" unrepresentable — at the cost of
+    /// hiding every one of these files from rustfmt. Reading the directory gives
+    /// the same guarantee without the cost: a file added here and forgotten in
+    /// the list fails, and so does a name in the list with no file behind it.
+    #[test]
+    fn every_category_file_is_declared() {
+        // Not categories: this module itself, and the matcher that exports no
+        // functions of its own.
+        const NOT_A_CATEGORY: &[&str] = &["mod", "criteria"];
+
+        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/src/functions");
+        let mut found: Vec<String> = std::fs::read_dir(dir)
+            .expect("the functions directory is where this file is")
+            .filter_map(|entry| {
+                let path = entry.ok()?.path();
+                if path.extension()? != "rs" {
+                    return None;
+                }
+                let stem = path.file_stem()?.to_str()?.to_string();
+                (!NOT_A_CATEGORY.contains(&stem.as_str())).then_some(stem)
+            })
+            .collect();
+        found.sort();
+
+        let mut listed: Vec<String> = CATEGORY_NAMES.iter().map(|n| n.to_string()).collect();
+        listed.sort();
+
+        assert_eq!(
+            found, listed,
+            "a category file is not in `categories!`, or the other way round"
+        );
+    }
+
     #[test]
     fn lookup_is_case_insensitive_and_strips_the_xlfn_prefix() {
         assert!(lookup("sum").is_some());
@@ -379,5 +420,49 @@ mod tests {
                 assert!(max >= function.min_args, "{} has max < min", function.name);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod declaration_tests {
+    use super::*;
+
+    fn nothing(_: &mut EvalCtx, _: &[Operand]) -> Operand {
+        Operand::Value(cellmoa_core::Value::Blank)
+    }
+
+    fn nothing_lazy(_: &mut EvalCtx, _: &[Expr]) -> Operand {
+        Operand::Value(cellmoa_core::Value::Blank)
+    }
+
+    /// The four declarations now share one constructor, so the thing worth
+    /// checking is that each still asks for the flags its name promises. A
+    /// transposed pair of booleans in `declare` would compile, and would make
+    /// every volatile function stop recomputing — or every ordinary one start.
+    #[test]
+    fn each_declaration_sets_the_flags_its_name_promises() {
+        let ordinary = f("X", 0, None, nothing);
+        assert!(!ordinary.volatile && !ordinary.array_context);
+        assert!(matches!(ordinary.call, Call::Eager(_)));
+
+        let vol = volatile("X", 0, None, nothing);
+        assert!(vol.volatile && !vol.array_context);
+
+        let arr = array_fn("X", 0, None, nothing);
+        assert!(!arr.volatile && arr.array_context);
+
+        let lz = lazy("X", 0, None, nothing_lazy);
+        assert!(!lz.volatile && !lz.array_context);
+        assert!(matches!(lz.call, Call::Lazy(_)));
+    }
+
+    /// Arity and name travel through `declare` untouched — a positional
+    /// constructor is exactly where two `usize`s get swapped.
+    #[test]
+    fn name_and_arity_survive_the_shared_constructor() {
+        let one = f("CONCAT", 1, Some(3), nothing);
+        assert_eq!(one.name, "CONCAT");
+        assert_eq!(one.min_args, 1);
+        assert_eq!(one.max_args, Some(3));
     }
 }

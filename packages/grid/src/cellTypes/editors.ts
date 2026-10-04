@@ -7,7 +7,17 @@
  * whether it came from a keyboard or a file.
  */
 
+import { isStrictList, matchOptions, optionsOf } from './options.js';
 import type { CellEditor, EditorContext, EditorInstance } from './types.js';
+
+/**
+ * How tall one option is, for sizing the list.
+ *
+ * `visibleRows` counts options, and the browser cannot be asked how tall they
+ * are before they exist — so the height comes from a number here and the CSS
+ * that draws them has to agree with it.
+ */
+const LIST_ROW_HEIGHT = 22;
 
 /** Places an element over the cell being edited. */
 function position(element: HTMLElement, context: EditorContext): void {
@@ -69,7 +79,10 @@ export const textEditor: CellEditor = (context) => {
         return true;
       }
       if (event.key === 'Enter' || event.key === 'Tab') {
-        // Alt+Enter is a line break in a spreadsheet, not a commit.
+        // Alt+Enter asks for a line break, not a commit. A single-line input
+        // has nowhere to put one — `type: 'textarea'` is the editor that has —
+        // but writing the cell on a keystroke that meant something else would
+        // still be wrong.
         if (event.key === 'Enter' && event.altKey) {
           return false;
         }
@@ -84,10 +97,41 @@ export const textEditor: CellEditor = (context) => {
   return instance;
 };
 
-/** A password editor: the same, with the characters masked. */
+/**
+ * A password editor: the same, with the characters masked.
+ *
+ * `hashRevealDelay` shows each character for a moment before masking it, the
+ * way a phone keyboard does — enough to see that the right key was pressed
+ * without leaving the value on the screen.
+ */
 export const passwordEditor: CellEditor = (context) => {
   const instance = textEditor(context);
-  (instance.element as HTMLInputElement).type = 'password';
+  const input = instance.element as HTMLInputElement;
+  input.type = 'password';
+
+  const delay = context.meta.hashRevealDelay;
+  if (typeof delay === 'number' && delay > 0) {
+    let hide: ReturnType<typeof setTimeout> | null = null;
+    input.addEventListener('input', () => {
+      input.type = 'text';
+      if (hide !== null) {
+        clearTimeout(hide);
+      }
+      hide = setTimeout(() => {
+        input.type = 'password';
+        hide = null;
+      }, delay);
+    });
+    const close = instance.close.bind(instance);
+    instance.close = () => {
+      // The timer outlives the element it was going to change, so it has to be
+      // cancelled here or it fires against a detached input.
+      if (hide !== null) {
+        clearTimeout(hide);
+      }
+      close();
+    };
+  }
   return instance;
 };
 
@@ -113,8 +157,8 @@ export const textareaEditor: CellEditor = (context) => {
         context.cancel();
         return true;
       }
-      // In a multi-line editor plain Enter inserts a line; only a modified one
-      // commits.
+      // A modified Enter is left to the textarea, which is the only way to put
+      // a line into a cell that is meant to hold a paragraph.
       if (event.key === 'Enter' && !event.altKey && !event.ctrlKey && !event.metaKey) {
         context.commit(area.value, moveFor(event));
         return true;
@@ -128,28 +172,12 @@ export const textareaEditor: CellEditor = (context) => {
   };
 };
 
-/** The values a list editor offers. */
-function optionsOf(context: EditorContext): string[] {
-  const source = context.meta.source;
-  if (Array.isArray(source)) {
-    return source.map(String);
-  }
-  const selectOptions = context.meta.selectOptions;
-  if (Array.isArray(selectOptions)) {
-    return selectOptions.map(String);
-  }
-  if (selectOptions && typeof selectOptions === 'object') {
-    return Object.values(selectOptions as Record<string, unknown>).map(String);
-  }
-  return [];
-}
-
 /** A native `<select>`, for a short fixed list. */
 export const selectEditor: CellEditor = (context) => {
   const document = context.parent.ownerDocument;
   const select = document.createElement('select');
   select.className = 'cm-editor cm-editor--select';
-  for (const option of optionsOf(context)) {
+  for (const option of optionsOf(context.meta)) {
     const element = document.createElement('option');
     element.value = option;
     element.textContent = option;
@@ -180,105 +208,115 @@ export const selectEditor: CellEditor = (context) => {
 };
 
 /**
- * A text input with a list beneath it.
+ * A text input with a list beneath it, in the flavour the named type asks for.
  *
  * `strict` decides whether a value outside the list is refused; `filter`
  * decides whether typing narrows the list. Both are Handsontable's options and
  * both matter: a strict, unfiltered dropdown and a loose, filtered autocomplete
- * are different controls that happen to share an implementation.
+ * are different controls that happen to share an implementation. The type is
+ * carried in rather than baked into the settings so that the editor and the
+ * validator read `strict` through the same function — an editor that patched
+ * the setting on its way past was how the two came to disagree.
  */
-export const autocompleteEditor: CellEditor = (context) => {
-  const document = context.parent.ownerDocument;
-  const wrapper = document.createElement('div');
-  wrapper.className = 'cm-editor cm-editor--autocomplete';
-  position(wrapper, context);
-  wrapper.style.height = 'auto';
+function listEditor(type: string): CellEditor {
+  return (context) => {
+    const document = context.parent.ownerDocument;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'cm-editor cm-editor--autocomplete';
+    position(wrapper, context);
+    wrapper.style.height = 'auto';
 
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.className = 'cm-editor-input';
-  input.value = context.value;
-  input.style.width = '100%';
-  wrapper.appendChild(input);
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'cm-editor-input';
+    input.value = context.value;
+    input.style.width = '100%';
+    wrapper.appendChild(input);
 
-  const list = document.createElement('ul');
-  list.className = 'cm-editor-list';
-  wrapper.appendChild(list);
-  context.parent.appendChild(wrapper);
+    const list = document.createElement('ul');
+    list.className = 'cm-editor-list';
+    wrapper.appendChild(list);
+    context.parent.appendChild(wrapper);
 
-  const all = optionsOf(context);
-  const shouldFilter = context.meta.filter !== false;
-  const caseSensitive = context.meta.filteringCaseSensitive === true;
-  let highlighted = -1;
-  let visible: string[] = [];
+    const all = optionsOf(context.meta);
+    // The list is trimmed to the cell's width by default, which truncates long
+    // options; `trimDropdown: false` lets it grow to fit the longest one.
+    if (context.meta.trimDropdown === false) {
+      wrapper.style.width = 'auto';
+      wrapper.style.minWidth = `${context.rect.width}px`;
+      list.style.width = 'max-content';
+    }
+    // Past this many options the list scrolls rather than growing off the screen.
+    const rows = context.meta.visibleRows;
+    const visibleRows = typeof rows === 'number' ? rows : 10;
+    list.style.maxHeight = `${visibleRows * LIST_ROW_HEIGHT}px`;
+    list.style.overflowY = 'auto';
+    let highlighted = -1;
+    let visible: string[] = [];
 
-  const draw = (): void => {
-    const query = input.value;
-    visible = shouldFilter && query !== ''
-      ? all.filter((option) =>
-          caseSensitive
-            ? option.includes(query)
-            : option.toLowerCase().includes(query.toLowerCase()),
-        )
-      : all;
-    list.replaceChildren();
-    visible.forEach((option, index) => {
-      const item = document.createElement('li');
-      item.textContent = option;
-      item.className = index === highlighted ? 'cm-editor-item is-highlighted' : 'cm-editor-item';
-      item.addEventListener('mousedown', (event) => {
-        event.preventDefault();
-        context.commit(option);
+    const draw = (): void => {
+      visible = matchOptions(all, input.value, context.meta);
+      list.replaceChildren();
+      visible.forEach((option, index) => {
+        const item = document.createElement('li');
+        item.textContent = option;
+        item.className =
+          index === highlighted ? 'cm-editor-item is-highlighted' : 'cm-editor-item';
+        item.addEventListener('mousedown', (event) => {
+          event.preventDefault();
+          context.commit(option);
+        });
+        list.appendChild(item);
       });
-      list.appendChild(item);
+    };
+    input.addEventListener('input', () => {
+      highlighted = -1;
+      draw();
     });
-  };
-  input.addEventListener('input', () => {
-    highlighted = -1;
     draw();
-  });
-  draw();
 
-  const chosen = (): string =>
-    highlighted >= 0 && visible[highlighted] !== undefined ? visible[highlighted]! : input.value;
+    const chosen = (): string =>
+      highlighted >= 0 && visible[highlighted] !== undefined ? visible[highlighted]! : input.value;
 
-  return {
-    element: input,
-    getValue: chosen,
-    focus: () => {
-      input.focus();
-      input.setSelectionRange(input.value.length, input.value.length);
-    },
-    close: () => wrapper.remove(),
-    handleKey(event) {
-      if (event.key === 'Escape') {
-        context.cancel();
-        return true;
-      }
-      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-        const step = event.key === 'ArrowDown' ? 1 : -1;
-        highlighted = Math.min(Math.max(highlighted + step, -1), visible.length - 1);
-        draw();
-        return true;
-      }
-      if (event.key === 'Enter' || event.key === 'Tab') {
-        const value = chosen();
-        // In strict mode a value that is not on the list is refused rather
-        // than written.
-        if (context.meta.strict === true && !all.includes(value)) {
+    return {
+      element: input,
+      getValue: chosen,
+      focus: () => {
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+      },
+      close: () => wrapper.remove(),
+      handleKey(event) {
+        if (event.key === 'Escape') {
+          context.cancel();
           return true;
         }
-        context.commit(value, moveFor(event));
-        return true;
-      }
-      return false;
-    },
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+          const step = event.key === 'ArrowDown' ? 1 : -1;
+          highlighted = Math.min(Math.max(highlighted + step, -1), visible.length - 1);
+          draw();
+          return true;
+        }
+        if (event.key === 'Enter' || event.key === 'Tab') {
+          const value = chosen();
+          // In strict mode a value that is not on the list is refused rather
+          // than written.
+          if (isStrictList(context.meta, type) && !all.includes(value)) {
+            return true;
+          }
+          context.commit(value, moveFor(event));
+          return true;
+        }
+        return false;
+      },
+    };
   };
-};
+}
 
-/** A dropdown is an autocomplete that insists on its list. */
-export const dropdownEditor: CellEditor = (context) =>
-  autocompleteEditor({ ...context, meta: { ...context.meta, strict: true } });
+export const autocompleteEditor: CellEditor = listEditor('autocomplete');
+
+/** A dropdown is an autocomplete whose list is closed unless the column opens it. */
+export const dropdownEditor: CellEditor = listEditor('dropdown');
 
 /** Several values at once, held as a comma-separated string. */
 export const multiSelectEditor: CellEditor = (context) => {
@@ -294,37 +332,102 @@ export const multiSelectEditor: CellEditor = (context) => {
       .map((part) => part.trim())
       .filter(Boolean),
   );
-  const boxes: HTMLInputElement[] = [];
-  for (const option of optionsOf(context)) {
-    const label = document.createElement('label');
-    label.className = 'cm-editor-option';
-    const box = document.createElement('input');
-    box.type = 'checkbox';
-    box.value = option;
-    box.checked = chosen.has(option);
-    boxes.push(box);
-    label.append(box, document.createTextNode(option));
-    wrapper.appendChild(label);
+  const limit =
+    typeof context.meta.maxSelections === 'number' ? context.meta.maxSelections : Infinity;
+
+  let options = optionsOf(context.meta);
+  const sort = context.meta.sourceSortFunction;
+  if (typeof sort === 'function') {
+    options = [...options].sort(sort as (a: string, b: string) => number);
   }
+
+  // The search box is the only way through a long list, so it is on by default
+  // and `searchInput: false` is for a list short enough not to need one.
+  const search =
+    context.meta.searchInput === false ? null : document.createElement('input');
+  if (search) {
+    search.type = 'search';
+    search.className = 'cm-editor-input';
+    search.style.width = '100%';
+    wrapper.appendChild(search);
+  }
+
+  const list = document.createElement('div');
+  list.className = 'cm-editor-list';
+  const visibleRows = typeof context.meta.visibleRows === 'number' ? context.meta.visibleRows : 10;
+  list.style.maxHeight = `${visibleRows * LIST_ROW_HEIGHT}px`;
+  list.style.overflowY = 'auto';
+  wrapper.appendChild(list);
+
+  const boxes: HTMLInputElement[] = [];
+  const draw = (): void => {
+    const query = search?.value.trim().toLowerCase() ?? '';
+    boxes.length = 0;
+    list.replaceChildren();
+    for (const option of options) {
+      // A chosen option drops out of the search results — the box for it is
+      // above, and repeating it there makes the list read as duplicated.
+      const hideChosen =
+        query !== '' && context.meta.filterSelectedItems !== false && chosen.has(option);
+      if (hideChosen || (query !== '' && !option.toLowerCase().includes(query))) {
+        continue;
+      }
+      const label = document.createElement('label');
+      label.className = 'cm-editor-option';
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      box.value = option;
+      box.checked = chosen.has(option);
+      // At the limit, only the boxes already ticked can still be changed.
+      box.disabled = !box.checked && chosen.size >= limit;
+      box.addEventListener('change', () => {
+        if (box.checked) {
+          chosen.add(option);
+        } else {
+          chosen.delete(option);
+        }
+        draw();
+      });
+      boxes.push(box);
+      label.append(box, document.createTextNode(option));
+      list.appendChild(label);
+    }
+  };
+  search?.addEventListener('input', draw);
+  draw();
   context.parent.appendChild(wrapper);
 
-  const value = (): string =>
-    boxes
-      .filter((box) => box.checked)
-      .map((box) => box.value)
-      .join(', ');
+  /**
+   * What the editor would write.
+   *
+   * The `chosen` set is the record, not the boxes: `draw` rebuilds those from
+   * the options that survive the search, so reading the ticks back off them
+   * dropped every option the query had scrolled out of sight. Ticking three
+   * colours, typing in the search box and pressing Enter wrote one of them and
+   * lost the other two, with nothing on the screen to say so.
+   */
+  const value = (): string => [...chosen].join(', ');
 
   return {
     element: wrapper,
     getValue: value,
-    focus: () => boxes[0]?.focus(),
+    focus: () => (search ?? boxes[0])?.focus(),
     close: () => wrapper.remove(),
     handleKey(event) {
       if (event.key === 'Escape') {
         context.cancel();
         return true;
       }
-      if (event.key === 'Enter' || event.key === 'Tab') {
+      if (event.key === 'Enter') {
+        // `enterCommits: false` keeps the editor open, so several boxes can be
+        // ticked without it closing on the first Enter.
+        if (context.meta.enterCommits === false) {
+          return true;
+        }
+        context.commit(value(), moveFor(event));
+        return true;
+      }
+      if (event.key === 'Tab') {
         context.commit(value(), moveFor(event));
         return true;
       }
@@ -333,15 +436,54 @@ export const multiSelectEditor: CellEditor = (context) => {
   };
 };
 
-/** A native date input. */
-export const dateEditor: CellEditor = (context) => {
-  const instance = textEditor(context);
-  const input = instance.element as HTMLInputElement;
-  input.classList.add('cm-editor--date');
-  return instance;
-};
+/**
+ * What a native date or time input will hold.
+ *
+ * These are the forms the renderers format and the validators were written
+ * against, and they are also the only forms `input[type=date|time]` accepts —
+ * which is the whole reason the editor can be handed to the browser at all.
+ */
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const ISO_TIME = /^\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?$/;
 
-export const timeEditor: CellEditor = dateEditor;
+/**
+ * A native date or time editor, which is what opens the browser's picker.
+ *
+ * The input type is only switched over for a value the picker can actually
+ * hold. A native temporal input silently discards anything it cannot parse, so
+ * a formula, a half-typed date or a value that arrived from a file in some
+ * other form would be gone the instant the editor opened — and the cell would
+ * be blank with nothing to say why. Those keep the plain text field, where
+ * they can be read and corrected.
+ *
+ * `defaultDate` seeds an *empty* cell only. It does not fill cells in — a cell
+ * with no date in it holds no date, and pre-filling one would be inventing
+ * data the moment someone opened the editor and pressed Escape.
+ */
+function temporalEditor(type: 'date' | 'time', iso: RegExp): CellEditor {
+  return (context) => {
+    const seeded =
+      context.value === '' && typeof context.meta.defaultDate === 'string'
+        ? { ...context, value: context.meta.defaultDate }
+        : context;
+    const instance = textEditor(seeded);
+    const input = instance.element as HTMLInputElement;
+    input.classList.add(`cm-editor--${type}`);
+    if (input.value !== '' && !iso.test(input.value)) {
+      return instance;
+    }
+    input.type = type;
+    // A native temporal input has no text selection to place a caret in, and
+    // asking it for one throws, so the focus the text editor gave is all there
+    // is to do.
+    instance.focus = () => input.focus();
+    return instance;
+  };
+}
+
+export const dateEditor: CellEditor = temporalEditor('date', ISO_DATE);
+
+export const timeEditor: CellEditor = temporalEditor('time', ISO_TIME);
 
 /** A numeric editor: text, but the field is marked so a phone shows digits. */
 export const numericEditor: CellEditor = (context) => {

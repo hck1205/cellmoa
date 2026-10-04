@@ -4,6 +4,7 @@
 use crate::eval::{eval_to_value, EvalCtx};
 use crate::functions;
 use crate::graph::{Dep, DepGraph};
+use crate::operand::Array;
 use crate::resolve::{resolve, Resolved};
 use crate::structure::{Alter, AlterError};
 use cellmoa_core::edit::{Actor, CommitKind, Document, EditError, Op};
@@ -181,14 +182,39 @@ impl Engine {
     /// the sheet: far enough from the data that it cannot reference itself, and
     /// a definite position for the implicit intersection rule to work from.
     pub fn evaluate(&self, sheet: SheetId, formula: &str) -> Result<Value, String> {
+        let (expr, mut ctx) = self.detached(sheet, formula)?;
+        Ok(eval_to_value(&mut ctx, &expr))
+    }
+
+    /// Evaluates one formula and keeps the shape of the answer.
+    ///
+    /// `evaluate` collapses a result to a single value, which is right for a
+    /// cell — that is what a cell holds. But `FILTER(A:A, B:B>10)` has an
+    /// answer with a height, and a caller that means to spill it needs the
+    /// whole rectangle rather than its top-left corner.
+    pub fn evaluate_array(&self, sheet: SheetId, formula: &str) -> Result<Array, String> {
+        let (expr, mut ctx) = self.detached(sheet, formula)?;
+        Ok(crate::eval::eval(&mut ctx, &expr).to_array(&self.doc.workbook))
+    }
+
+    /// Parses a formula and builds a context to evaluate it in, away from any
+    /// cell.
+    ///
+    /// The corner is the point of it: the formula is evaluated as though it sat
+    /// in the bottom-right of the sheet, far enough from the data that it
+    /// cannot reference itself, and a definite position for the implicit
+    /// intersection rule to work from. Both public forms need exactly this,
+    /// and having it written twice meant the two could come to disagree about
+    /// where "away from the data" is.
+    fn detached(&self, sheet: SheetId, formula: &str) -> Result<(Expr, EvalCtx<'_>), String> {
         let expr = parse(formula).map_err(|e| e.to_string())?;
         let at = CellRef::new(
             cellmoa_core::reference::MAX_COLS - 1,
             cellmoa_core::reference::MAX_ROWS - 1,
         );
-        let mut ctx =
+        let ctx =
             EvalCtx::new(&self.doc.workbook, sheet, at).with_seed(self.seed).with_now(self.now);
-        Ok(eval_to_value(&mut ctx, &expr))
+        Ok((expr, ctx))
     }
 
     /// Applies several edits as one commit, then recalculates once.
@@ -225,6 +251,33 @@ impl Engine {
                 self.doc.apply(actor, ops, expected_revision)?;
             }
         }
+        let touched: Vec<CellAddr> = edits.iter().map(|(addr, _)| *addr).collect();
+        for &addr in &touched {
+            self.refresh_cell(addr);
+        }
+        self.recalculate_from(touched);
+        Ok(())
+    }
+
+    /// Writes literal cell contents as one commit, then recalculates once.
+    ///
+    /// [`Engine::apply`] takes text and reads it the way a person typing into
+    /// a cell would, so a leading `=` becomes a formula. That is right for
+    /// typing and wrong for loading: data arriving from a file was not typed
+    /// by anyone here, and reinterpreting it lets whoever wrote the file
+    /// decide what the document computes. This takes values that have already
+    /// been decided and stores them as they are.
+    pub fn apply_contents(
+        &mut self,
+        actor: Actor,
+        edits: Vec<(CellAddr, CellContent)>,
+        expected_revision: Option<u64>,
+    ) -> Result<(), EditError> {
+        let ops: Vec<Op> = edits
+            .iter()
+            .map(|(addr, content)| Op::SetCell { addr: *addr, content: content.clone() })
+            .collect();
+        self.doc.apply(actor, ops, expected_revision)?;
         let touched: Vec<CellAddr> = edits.iter().map(|(addr, _)| *addr).collect();
         for &addr in &touched {
             self.refresh_cell(addr);

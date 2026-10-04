@@ -7,6 +7,7 @@
  * from the second.
  */
 
+import { PHRASE } from '../i18n/keys.js';
 import { BasePlugin, registerPlugin } from './base.js';
 
 export interface LoadingOptions {
@@ -44,6 +45,13 @@ export class Loading extends BasePlugin {
 
   /** Shows the overlay, or notes another caller if it is already up. */
   show(options: LoadingOptions = {}): void {
+    // Announced on the transition rather than on every call: `during` nests, so
+    // a page that starts three fetches raises the overlay once and should say
+    // so once. `beforeLoadingShow` can refuse the first one.
+    const first = this.#depth === 0;
+    if (first && this.grid.hooks.allows('beforeLoadingShow', options) === false) {
+      return;
+    }
     this.#depth += 1;
     const view = this.grid.view;
     if (!view) {
@@ -68,22 +76,35 @@ export class Loading extends BasePlugin {
       this.#element = element;
     }
     this.update(options);
+    if (first) {
+      this.grid.hooks.notify('afterLoadingShow', options);
+    }
   }
 
-  /** Changes the message without disturbing the count. */
+  /**
+   * Changes the message without disturbing the count.
+   *
+   * The default comes from the dictionary rather than from here, so a grid set
+   * to another language does not cover itself with one English word at the
+   * moment it has nothing else to show.
+   */
   update(options: LoadingOptions): void {
     const text = this.#element?.querySelector('.cm-loading-message');
     if (text) {
-      text.textContent = options.message ?? 'Loading…';
+      text.textContent = options.message ?? this.grid.getTranslatedPhrase(PHRASE.LOADING_TITLE);
     }
   }
 
   /** Notes that one caller has finished, hiding the overlay when all have. */
   hide(): void {
+    if (this.#depth === 1 && this.grid.hooks.allows('beforeLoadingHide') === false) {
+      return;
+    }
     this.#depth = Math.max(this.#depth - 1, 0);
     if (this.#depth === 0) {
       this.#element?.remove();
       this.#element = null;
+      this.grid.hooks.notify('afterLoadingHide');
     }
   }
 
@@ -99,4 +120,4 @@ export class Loading extends BasePlugin {
   }
 }
 
-registerPlugin(Loading as never);
+registerPlugin(Loading);

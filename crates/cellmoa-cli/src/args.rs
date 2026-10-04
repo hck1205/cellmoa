@@ -12,7 +12,10 @@ use std::fmt;
 pub struct Args {
     pub command: String,
     pub positional: Vec<String>,
-    flags: BTreeMap<String, Option<String>>,
+    /// Every occurrence of every flag, in the order it was written. Repeats
+    /// matter: `--where a=1 --where b=2` means both, and keeping only the
+    /// last would drop half a filter without saying so.
+    flags: BTreeMap<String, Vec<Option<String>>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -21,6 +24,12 @@ pub enum ArgError {
     UnknownFlag(String),
     MissingValue(String),
 }
+
+/// Short options, and the long option each one stands for. A single-dash
+/// argument that is not in this table is rejected rather than being taken as
+/// a positional: `-q` silently becoming a filename is the kind of wrong that
+/// looks like it worked.
+pub type Aliases<'a> = &'a [(&'a str, &'a str)];
 
 impl fmt::Display for ArgError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -34,10 +43,12 @@ impl fmt::Display for ArgError {
 
 impl Args {
     /// Parses arguments. `value_flags` names the options that take a value;
-    /// anything else beginning with `--` is a switch.
-    pub fn parse(
+    /// anything else beginning with `--` is a switch. `aliases` gives the
+    /// long option each short option stands for.
+    pub fn parse_with(
         arguments: impl IntoIterator<Item = String>,
         value_flags: &[&str],
+        aliases: Aliases<'_>,
     ) -> Result<Args, ArgError> {
         let mut arguments = arguments.into_iter();
         let command = arguments.next().ok_or(ArgError::NoCommand)?;
@@ -45,20 +56,51 @@ impl Args {
         let mut flags = BTreeMap::new();
 
         while let Some(argument) = arguments.next() {
-            let Some(name) = argument.strip_prefix("--") else {
-                positional.push(argument);
-                continue;
+            let name = match argument.strip_prefix("--") {
+                Some(name) => name.to_string(),
+                // A bare `-` means stdin, which is a positional, not a flag.
+                None => match argument.strip_prefix('-') {
+                    None => {
+                        positional.push(argument);
+                        continue;
+                    }
+                    Some("") => {
+                        positional.push(argument);
+                        continue;
+                    }
+                    Some(short) => {
+                        // `-o=x` and `-o x` both reach here with `short`
+                        // holding everything after the dash.
+                        let (short, tail) = match short.split_once('=') {
+                            Some((s, v)) => (s, Some(v.to_string())),
+                            None => (short, None),
+                        };
+                        let long = aliases
+                            .iter()
+                            .find(|(s, _)| *s == short)
+                            .map(|(_, long)| *long)
+                            .ok_or_else(|| ArgError::UnknownFlag(format!("-{short}")))?;
+                        match tail {
+                            Some(value) => {
+                                push(&mut flags, long, Some(value));
+                                continue;
+                            }
+                            None => long.to_string(),
+                        }
+                    }
+                },
             };
+            let name = name.as_str();
             // `--flag=value` and `--flag value` are both accepted.
             if let Some((name, value)) = name.split_once('=') {
-                flags.insert(name.to_string(), Some(value.to_string()));
+                push(&mut flags, name, Some(value.to_string()));
                 continue;
             }
             if value_flags.contains(&name) {
                 let value = arguments.next().ok_or_else(|| ArgError::MissingValue(name.into()))?;
-                flags.insert(name.to_string(), Some(value));
+                push(&mut flags, name, Some(value));
             } else {
-                flags.insert(name.to_string(), None);
+                push(&mut flags, name, None);
             }
         }
         Ok(Args { command, positional, flags })
@@ -68,8 +110,19 @@ impl Args {
         self.flags.contains_key(flag)
     }
 
+    /// The last value given for a flag, for options where repeating is a
+    /// correction rather than an addition.
     pub fn value(&self, flag: &str) -> Option<&str> {
-        self.flags.get(flag).and_then(|v| v.as_deref())
+        self.flags.get(flag)?.last()?.as_deref()
+    }
+
+    /// Every value given for a flag, in the order written, for options where
+    /// repeating means "and also".
+    pub fn values(&self, flag: &str) -> Vec<&str> {
+        self.flags
+            .get(flag)
+            .map(|values| values.iter().filter_map(Option::as_deref).collect())
+            .unwrap_or_default()
     }
 
     /// Rejects any flag that is not in the given list, so a typo is reported
@@ -82,12 +135,16 @@ impl Args {
     }
 }
 
+fn push(flags: &mut BTreeMap<String, Vec<Option<String>>>, name: &str, value: Option<String>) {
+    flags.entry(name.to_string()).or_default().push(value);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn parse(line: &str) -> Result<Args, ArgError> {
-        Args::parse(line.split_whitespace().map(String::from), &["out", "expect"])
+        Args::parse_with(line.split_whitespace().map(String::from), &["out", "expect"], &[])
     }
 
     #[test]
@@ -124,7 +181,105 @@ mod tests {
     }
 
     #[test]
+    fn a_short_option_stands_for_its_long_form() {
+        let args = Args::parse_with(
+            "convert data.csv -t json -q".split_whitespace().map(String::from),
+            &["to"],
+            &[("t", "to"), ("q", "quiet")],
+        )
+        .unwrap();
+        assert_eq!(args.value("to"), Some("json"));
+        assert!(args.has("quiet"));
+        assert_eq!(args.positional, vec!["data.csv"]);
+    }
+
+    #[test]
+    fn a_short_option_can_be_written_with_an_equals_sign() {
+        let args = Args::parse_with(
+            "convert -o=out.csv".split_whitespace().map(String::from),
+            &["output"],
+            &[("o", "output")],
+        )
+        .unwrap();
+        assert_eq!(args.value("output"), Some("out.csv"));
+    }
+
+    #[test]
+    fn an_unknown_short_option_is_an_error_not_a_filename() {
+        // Taking `-q` as a positional would have it read as a path, and the
+        // command would fail somewhere far away from the actual mistake.
+        let parsed = Args::parse_with(
+            "convert -q".split_whitespace().map(String::from),
+            &[],
+            &[("t", "to")],
+        );
+        assert_eq!(parsed, Err(ArgError::UnknownFlag("-q".into())));
+    }
+
+    #[test]
+    fn a_bare_dash_is_stdin_and_stays_a_positional() {
+        let args = Args::parse_with(
+            "diff - baseline.csv".split_whitespace().map(String::from),
+            &[],
+            &[("q", "quiet")],
+        )
+        .unwrap();
+        assert_eq!(args.positional, vec!["-", "baseline.csv"]);
+    }
+
+    #[test]
+    fn a_negative_value_is_not_mistaken_for_an_option() {
+        let args = Args::parse_with(
+            "calc in.xlsx --now -1".split_whitespace().map(String::from),
+            &["now"],
+            &[],
+        )
+        .unwrap();
+        assert_eq!(args.value("now"), Some("-1"));
+    }
+
+    #[test]
     fn no_arguments_at_all() {
-        assert_eq!(Args::parse(Vec::new(), &[]), Err(ArgError::NoCommand));
+        assert_eq!(Args::parse_with(Vec::new(), &[], &[]), Err(ArgError::NoCommand));
+    }
+}
+
+#[cfg(test)]
+mod repeat_tests {
+    use super::*;
+
+    fn parse(line: &str) -> Args {
+        Args::parse_with(
+            line.split_whitespace().map(String::from),
+            &["where", "select", "out"],
+            &[],
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn a_repeated_flag_keeps_every_value_in_order() {
+        let args = parse("convert --where a=1 --where b=2");
+        assert_eq!(args.values("where"), vec!["a=1", "b=2"]);
+    }
+
+    #[test]
+    fn a_repeated_flag_still_answers_value_with_the_last_one() {
+        // Some options are corrections rather than additions: writing `--out`
+        // twice means the second one.
+        let args = parse("convert --out first.csv --out second.csv");
+        assert_eq!(args.value("out"), Some("second.csv"));
+    }
+
+    #[test]
+    fn a_flag_that_was_never_given_has_no_values() {
+        assert!(parse("convert").values("where").is_empty());
+    }
+
+    #[test]
+    fn a_switch_repeated_is_still_just_present() {
+        let args = parse("convert --headers --headers");
+        assert!(args.has("headers"));
+        assert!(args.values("headers").is_empty(), "a switch carries no value");
     }
 }

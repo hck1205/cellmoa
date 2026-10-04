@@ -102,6 +102,11 @@ export class DragToScroll extends BasePlugin {
    *
    * Zero inside, so a pointer within the view never scrolls it — only the
    * distance past an edge moves anything, and it moves it by exactly that far.
+   *
+   * That is deliberately not Handsontable's `interval`/`rampDistance` curve,
+   * which repeats a fixed scroll on a timer that speeds up the further out the
+   * pointer goes. Following the pointer directly needs no timer and no ramp to
+   * tune, so those two options have no meaning here and are not accepted.
    */
   check(x: number, y: number): void {
     const bounds = this.#boundaries;
@@ -126,7 +131,7 @@ export class DragToScroll extends BasePlugin {
   }
 }
 
-registerPlugin(DragToScroll as never);
+registerPlugin(DragToScroll);
 
 /**
  * Scrolling with a finger.
@@ -137,6 +142,11 @@ registerPlugin(DragToScroll as never);
  */
 export class TouchScroll extends BasePlugin {
   static override readonly pluginName: string = 'touchScroll';
+
+  /** Touch scrolling follows the whole layout, not one setting. */
+  static override get settingKeys(): boolean {
+    return true;
+  }
 
   #start: { x: number; y: number; scrollLeft: number; scrollTop: number } | null = null;
 
@@ -194,4 +204,4 @@ export class TouchScroll extends BasePlugin {
   }
 }
 
-registerPlugin(TouchScroll as never);
+registerPlugin(TouchScroll);

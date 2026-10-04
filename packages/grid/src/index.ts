@@ -33,6 +33,7 @@ export { Hooks, EXTRA_HOOK_NAMES, HOOK_NAMES, isHookName } from './hooks.js';
 export type { HookHandler, HookName } from './hooks.js';
 
 export { IndexMapper } from './indexMapper.js';
+export { MetaManager } from './metaManager.js';
 
 export { CellRange, Selection } from './selection.js';
 export type { SelectionMode, SelectionState } from './selection.js';
@@ -42,12 +43,26 @@ export {
   DEFAULT_ROW_HEADER_WIDTH,
   DEFAULT_ROW_HEIGHT,
   DEFAULT_SETTINGS,
-  MetaManager,
   SETTING_COUNT,
   SETTING_NAMES,
   isSettingName,
 } from './settings.js';
-export type { CellData, CellType, Coords, GridSettings } from './settings.js';
+export type {
+  CellData,
+  CellType,
+  // The type of the `cells` setting, and the type `isSettingName` narrows to.
+  // Both were spelled out in settings.ts and reachable from nowhere, so a
+  // TypeScript caller writing a `cells` function or using the guard had a type
+  // they could not name.
+  CellsFunction,
+  Coords,
+  GridSettings,
+  SettingName,
+} from './settings.js';
+// What a caller has to implement to supply their own `sanitizer`. The settings
+// used to spell the signature out again rather than referring to this, so the
+// two could have come to disagree about which sources exist.
+export type { SanitizeSource, Sanitizer } from './sanitize.js';
 
 export {
   cellTypeNames,
@@ -83,6 +98,9 @@ export {
 export type { KeyCombination, ShortcutCallback, ShortcutOptions } from './shortcuts.js';
 
 export { SizeMap } from './sizes.js';
+export { EDITOR_KEYS, coreKeymap, edgeTarget, mirror } from './keymap.js';
+export type { KeyActions } from './keymap.js';
+
 export { View } from './view.js';
 export type { CellRenderContext, ColHeaderCell, ViewModel, Viewport } from './view.js';
 
@@ -90,6 +108,24 @@ export { Menu, SEPARATOR, resolve } from './menu.js';
 export type { MenuHost, MenuItem, MenuSelection } from './menu.js';
 
 export { CellMap, CellSet } from './cellMap.js';
+export {
+  BUILT_IN_THEMES,
+  DENSITY_SCALE,
+  classicTheme,
+  getTheme,
+  horizonTheme,
+  mainTheme,
+  registerTheme,
+  themeNames,
+  unregisterTheme,
+} from './themes/index.js';
+export type {
+  ColorScheme,
+  DensityType,
+  RegisteredTheme,
+  ThemeDefinition,
+  ThemeTokens,
+} from './themes/index.js';
 export { LayoutManager, SLOT_ELEMENT_CLASS } from './layout.js';
 export type { LayoutSettings, SlotOptions, SlotSide } from './layout.js';
 
@@ -107,3 +143,7 @@ export {
 export type { Dictionary, Phrase } from './i18n/index.js';
 export { PHRASE } from './i18n/keys.js';
 export type { PhraseKey } from './i18n/keys.js';
+
+// The reference's type names, over this grid's types. See `types.ts` for what
+// each one is here, and for the places where the two genuinely differ.
+export type * from './types.js';

@@ -48,21 +48,34 @@ impl CellError {
         }
     }
 
+    /// Every variant, once.
+    ///
+    /// Both this crate's `parse` and the formula lexer's error-literal reader
+    /// need to walk the whole set. They each used to carry their own copy of
+    /// the list, and nothing tied the two together: a new variant added to the
+    /// enum would leave both arrays compiling unchanged, so the error would
+    /// stop being parseable and stop being lexable without a word from the
+    /// compiler. There is one list now, and it lives with the enum.
+    ///
+    /// A new variant belongs here as well as in `as_str`. The length is
+    /// written out so that adding one without extending the array does not
+    /// compile.
+    pub const ALL: [CellError; 10] = [
+        CellError::Div0,
+        CellError::NA,
+        CellError::Name,
+        CellError::Null,
+        CellError::Num,
+        CellError::Ref,
+        CellError::Value,
+        CellError::Cycle,
+        CellError::Spill,
+        CellError::Calc,
+    ];
+
     /// Parses an error literal such as `#DIV/0!`. Case-insensitive.
     pub fn parse(s: &str) -> Option<CellError> {
-        const ALL: [CellError; 10] = [
-            CellError::Div0,
-            CellError::NA,
-            CellError::Name,
-            CellError::Null,
-            CellError::Num,
-            CellError::Ref,
-            CellError::Value,
-            CellError::Cycle,
-            CellError::Spill,
-            CellError::Calc,
-        ];
-        ALL.into_iter().find(|e| e.as_str().eq_ignore_ascii_case(s))
+        CellError::ALL.into_iter().find(|e| e.as_str().eq_ignore_ascii_case(s))
     }
 }
 
@@ -335,5 +348,44 @@ mod tests {
             assert_eq!(CellError::parse(s).unwrap().as_str(), s);
         }
         assert_eq!(CellError::parse("#nope!"), None);
+    }
+
+    #[test]
+    fn no_error_literal_is_a_prefix_of_another() {
+        // The formula lexer walks `ALL` in order and takes the first literal
+        // the input starts with. That is only correct while no literal is a
+        // prefix of another — otherwise the order would decide the answer, and
+        // `#NUM` would swallow the start of a longer `#NUM…`. Nothing in the
+        // lexer enforces it, so it is checked here, where the list lives.
+        for a in CellError::ALL {
+            for b in CellError::ALL {
+                if a != b {
+                    assert!(
+                        !b.as_str().starts_with(a.as_str()),
+                        "{} is a prefix of {}: the lexer would read the shorter one",
+                        a.as_str(),
+                        b.as_str()
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn every_variant_as_str_reaches_all() {
+        // `as_str` is an exhaustive match, so a new variant has to be given a
+        // literal there. This says the same variant also has to be in `ALL` —
+        // it catches the half-finished addition where the error can be printed
+        // but neither parsed nor lexed.
+        for text in [
+            "#DIV/0!", "#N/A", "#NAME?", "#NULL!", "#NUM!", "#REF!", "#VALUE!", "#CYCLE!",
+            "#SPILL!", "#CALC!",
+        ] {
+            assert!(
+                CellError::ALL.iter().any(|e| e.as_str() == text),
+                "{text} is not in CellError::ALL"
+            );
+        }
+        assert_eq!(CellError::ALL.len(), 10);
     }
 }

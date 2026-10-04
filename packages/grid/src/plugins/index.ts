@@ -16,7 +16,13 @@ export type { HidingSettings } from './hiding.js';
 
 export { ManualColumnFreeze, ManualColumnMove, ManualRowMove } from './manualMove.js';
 
-export { AutoColumnSize, ManualColumnResize, ManualRowResize } from './manualResize.js';
+export {
+  AutoColumnSize,
+  AutoRowSize,
+  ManualColumnResize,
+  ManualRowResize,
+  StretchColumns,
+} from './manualResize.js';
 
 export { Autofill, extendSeries } from './autofill.js';
 export type { AutofillSettings } from './autofill.js';
@@ -28,13 +34,15 @@ export {
   CopyPaste,
   escapeClipboardValue,
   parseClipboardText,
+  parsePastedValue,
+  pasteExtent,
   toClipboardHtml,
   toClipboardText,
 } from './copyPaste.js';
 export type { CopyPasteSettings } from './copyPaste.js';
 
 export { MergeCells } from './mergeCells.js';
-export type { MergedArea } from './mergeCells.js';
+export type { MergeCellsSettings, MergedArea } from './mergeCells.js';
 export * from './undoRedo.js';
 export * from './search.js';
 export * from './columnSummary.js';
@@ -42,6 +50,8 @@ export * from './exportFile.js';
 export * from './nestedHeaders.js';
 export * from './collapsibleColumns.js';
 export * from './menuItems.js';
+export * from './menuPlugin.js';
+export * from './buildMenu.js';
 export * from './contextMenu.js';
 export * from './dropdownMenu.js';
 export * from './dialog.js';

@@ -327,3 +327,38 @@ describe('the dropdownMenu plugin', () => {
     expect(grid.getDataAtCell(0, 0)).toBe('apple');
   });
 });
+
+describe('what both menus share', () => {
+  it('runs the `callback` setting for either of them', async () => {
+    // The two menus used to be separate copies of the same code, and only one
+    // of them honoured `callback`. A dropdown menu that quietly ignored the
+    // setting looked exactly like a menu whose command did nothing.
+    for (const which of ['contextMenu', 'dropdownMenu'] as const) {
+      const seen: string[] = [];
+      const grid = await makeGrid({
+        startRows: 3,
+        startCols: 3,
+        [which]: { items: ['row_above'], callback: (key: string) => seen.push(key) },
+      });
+      const plugin = grid.getPlugin(which) as unknown as {
+        executeCommand(key: string): void;
+      };
+      grid.selectCell(1, 1);
+      plugin.executeCommand('row_above');
+      expect(seen).toEqual(['row_above']);
+    }
+  });
+
+  it('refuses a command the settings did not offer, in either of them', async () => {
+    for (const which of ['contextMenu', 'dropdownMenu'] as const) {
+      const grid = await makeGrid({ startRows: 3, startCols: 3, [which]: { items: ['row_above'] } });
+      const before = grid.countRows();
+      const plugin = grid.getPlugin(which) as unknown as {
+        executeCommand(key: string): void;
+      };
+      grid.selectCell(1, 1);
+      plugin.executeCommand('remove_row');
+      expect(grid.countRows()).toBe(before);
+    }
+  });
+});

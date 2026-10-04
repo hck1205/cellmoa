@@ -1,0 +1,3 @@
+# packages/grid is formatted by hand. See packages/grid/.prettierignore.
+packages/grid/src
+packages/grid/test

@@ -244,6 +244,16 @@ export class Selection {
       this.setCell({ row: 0, col: 0 });
       return true;
     }
+    // A grid shrinks under a live selection — removing rows does not move it,
+    // and a filter can take away the row it was on — and from outside the grid
+    // every delta lands outside it too. A move that only checked its target
+    // would then refuse every arrow key and leave the highlight stranded
+    // somewhere it is not even drawn, so coming back inside is the move.
+    const inside = this.#clamp(current);
+    if (inside.row !== current.row || inside.col !== current.col) {
+      this.setCell(inside);
+      return true;
+    }
     let row = current.row + rowDelta;
     let col = current.col + colDelta;
     const rows = this.#rowCount();

@@ -6,6 +6,7 @@
  * safe to call tens of thousands of times while a grid scrolls.
  */
 
+import { writeHtml } from '../sanitize.js';
 import type { CellRenderer, RenderContext } from './types.js';
 
 /** Applies what every renderer does, whatever the type. */
@@ -42,8 +43,7 @@ function write(td: HTMLTableCellElement, text: string, meta: RenderContext['meta
     td.textContent = text;
     return;
   }
-  const sanitizer = meta.sanitizer;
-  td.innerHTML = typeof sanitizer === 'function' ? String((sanitizer as (html: string) => string)(text)) : text;
+  writeHtml(td, text, meta.sanitizer, 'innerHTML');
 }
 
 /** The default: whatever the engine says the cell shows. */
@@ -86,11 +86,17 @@ const formatters = new Map<string, Intl.NumberFormat>();
  * own rendering is used, which is what makes an unformatted grid show exactly
  * what the workbook holds.
  */
-export function formatNumeric(
+function formatNumeric(
   text: string,
   value: unknown,
   meta: RenderContext['meta'],
 ): string {
+  // `preserveNumericLiteral` keeps what was typed when reading it as a number
+  // would lose something — `9.0` staying `9.0`, and a value past the
+  // safe-integer limit staying exact rather than rounding.
+  if (meta.preserveNumericLiteral === true && text !== '') {
+    return text;
+  }
   const format = meta.numericFormat as Intl.NumberFormatOptions | undefined;
   if (!format || typeof value !== 'number' || !Number.isFinite(value)) {
     return text;
@@ -108,7 +114,7 @@ export function formatNumeric(
     formatters.set(key, formatter);
   }
   return formatter.format(value);
-};
+}
 
 /**
  * Text, but always as HTML.
@@ -122,29 +128,90 @@ export const htmlRenderer: CellRenderer = (context) => {
   write(context.td, context.cell?.text ?? '', { ...context.meta, allowHtml: true });
 };
 
+/** A checkbox cell's two values, which are `true` and `false` unless set. */
+export function checkboxTemplates(meta: RenderContext['meta']): {
+  checked: unknown;
+  unchecked: unknown;
+} {
+  return { checked: meta.checkedTemplate ?? true, unchecked: meta.uncheckedTemplate ?? false };
+}
+
+/** Whether a cell's value is the one a template spells. */
+function isTemplate(value: unknown, template: unknown): boolean {
+  const same = String(value ?? '').toLowerCase() === String(template).toLowerCase();
+  return value === template || same;
+}
+
+/**
+ * Which of a checkbox cell's two templates its value matches, if either.
+ *
+ * The renderer draws from this and the grid's toggle writes from it, so there
+ * is one answer rather than two — and there were two: the renderer knew only
+ * about `checkedTemplate` and compared exactly, while the toggle read both and
+ * compared without regard to case. A cell holding `'YES'` against
+ * `checkedTemplate: 'yes'` therefore drew unchecked and then unchecked itself
+ * when it was pressed, which looks like a click that went missing.
+ *
+ * The comparison ignores case because a template says how the column spells
+ * its two states, not how the data that arrived happened to be typed.
+ */
+export function checkboxState(
+  value: unknown,
+  meta: RenderContext['meta'],
+): 'checked' | 'unchecked' | 'none' {
+  const { checked, unchecked } = checkboxTemplates(meta);
+  if (isTemplate(value, checked)) {
+    return 'checked';
+  }
+  return isTemplate(value, unchecked) ? 'unchecked' : 'none';
+}
+
+/**
+ * What a `label` puts beside the checkbox.
+ *
+ * `value` may be a function of the cell, which the documentation shows and
+ * which the renderer used to stringify instead of call — printing the
+ * function's own source into the cell.
+ */
+function checkboxLabel(label: Record<string, unknown>, context: RenderContext): string {
+  const given = label.value;
+  if (typeof given === 'function') {
+    const of = given as (row: number, col: number, prop: unknown, value: unknown) => unknown;
+    return String(of(context.row, context.col, context.meta.data, context.cell?.value) ?? '');
+  }
+  return given === undefined || given === null ? '' : String(given);
+}
+
 /** A checkbox, checked when the cell matches the checked template. */
 export const checkboxRenderer: CellRenderer = (context) => {
   applyCommon(context);
   const { td, cell, meta } = context;
-  const checkedTemplate = meta.checkedTemplate ?? true;
-  const value = cell?.value;
+  const state = checkboxState(cell?.value, meta);
 
   td.replaceChildren();
   const input = td.ownerDocument.createElement('input');
   input.type = 'checkbox';
   input.className = 'cm-checkbox';
-  input.checked = value === checkedTemplate || value === true || value === 'true';
+  input.checked = state === 'checked';
+  if (state === 'none') {
+    // A value that is neither template is drawn unchecked but marked, so that
+    // a cell nobody has answered stays distinct from one deliberately set to
+    // the unchecked value. The class name is the documented one, because that
+    // is what a stylesheet written against the reference targets.
+    input.classList.add('noValue');
+  }
   input.disabled = meta.readOnly === true;
   // The cell holds the truth; the input only shows it. Toggling goes through
   // the grid so that it is recorded like any other edit.
   input.tabIndex = -1;
   td.appendChild(input);
 
-  const label = meta.label as { value?: string; position?: string } | undefined;
-  if (label?.value) {
+  const label = meta.label as Record<string, unknown> | undefined;
+  const caption = label ? checkboxLabel(label, context) : '';
+  if (label && caption !== '') {
     const text = td.ownerDocument.createElement('span');
     text.className = 'cm-checkbox-label';
-    text.textContent = label.value;
+    text.textContent = caption;
     if (label.position === 'before') {
       td.insertBefore(text, input);
     } else {
@@ -164,26 +231,86 @@ export const autocompleteRenderer: CellRenderer = (context) => {
   context.td.classList.add('cm-autocomplete');
 };
 
-/** Hides the value behind a fixed number of symbols. */
+/** Hides the value behind a row of symbols. */
 export const passwordRenderer: CellRenderer = (context) => {
   applyCommon(context);
   const { td, cell, meta } = context;
   const text = cell?.text ?? '';
   const symbol = String(meta.hashSymbol ?? '*');
-  // A fixed length by default, so the mask does not leak how long the secret is.
+  // The mask is as long as the value, as Handsontable's is. `hashLength` fixes
+  // it instead, which is what hides how long the secret is — worth asking for,
+  // and not something to impose on a caller who only wanted the value covered.
   const length = typeof meta.hashLength === 'number' ? meta.hashLength : text.length;
   td.textContent = text === '' ? '' : symbol.repeat(Math.max(length, 0));
 };
 
-/** Dates and times render as text; the engine has already formatted them. */
+/**
+ * The cache behind `dateFormat` and `timeFormat`.
+ *
+ * Building an `Intl.DateTimeFormat` costs enough to show while scrolling, and
+ * a grid uses very few distinct ones.
+ */
+const dateFormatters = new Map<string, Intl.DateTimeFormat>();
+
+/**
+ * Formats an ISO value for display, when a format was configured.
+ *
+ * The source has to be ISO — `YYYY-MM-DD` for a date, `HH:mm[:ss]` for a time —
+ * because that is what sorts and compares correctly. Anything else is shown as
+ * it is rather than guessed at: a value that is not a date should not become
+ * one because a column said `type: 'date'`.
+ */
+export function formatTemporal(
+  text: string,
+  options: Intl.DateTimeFormatOptions | undefined,
+  locale: string | undefined,
+  kind: 'date' | 'time',
+): string {
+  if (!options || text === '') {
+    return text;
+  }
+  const iso = kind === 'date' ? text : `1970-01-01T${text}`;
+  const at = new Date(kind === 'date' ? `${text}T00:00:00` : iso);
+  if (Number.isNaN(at.getTime())) {
+    return text;
+  }
+  const key = `${locale ?? ''}:${kind}:${JSON.stringify(options)}`;
+  let formatter = dateFormatters.get(key);
+  if (!formatter) {
+    try {
+      formatter = new Intl.DateTimeFormat(locale, options);
+    } catch {
+      return text;
+    }
+    dateFormatters.set(key, formatter);
+  }
+  return formatter.format(at);
+}
+
 export const dateRenderer: CellRenderer = (context) => {
-  textRenderer(context);
-  context.td.classList.add('cm-date');
+  const { td, cell, meta } = context;
+  applyCommon(context);
+  const shown = formatTemporal(
+    cell?.text ?? '',
+    meta.dateFormat as Intl.DateTimeFormatOptions | undefined,
+    typeof meta.locale === 'string' ? meta.locale : undefined,
+    'date',
+  );
+  write(td, shown, meta);
+  td.classList.add('cm-date');
 };
 
 export const timeRenderer: CellRenderer = (context) => {
-  textRenderer(context);
-  context.td.classList.add('cm-time');
+  const { td, cell, meta } = context;
+  applyCommon(context);
+  const shown = formatTemporal(
+    cell?.text ?? '',
+    meta.timeFormat as Intl.DateTimeFormatOptions | undefined,
+    typeof meta.locale === 'string' ? meta.locale : undefined,
+    'time',
+  );
+  write(td, shown, meta);
+  td.classList.add('cm-time');
 };
 
 /** Several chosen values, shown as a comma-separated list. */

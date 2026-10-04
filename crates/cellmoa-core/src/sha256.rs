@@ -163,8 +163,12 @@ impl Sha256 {
 
     fn compress(&mut self, block: &[u8; 64]) {
         let mut schedule = [0u32; 64];
-        for (i, chunk) in block.chunks_exact(4).enumerate() {
-            schedule[i] = u32::from_be_bytes(chunk.try_into().expect("4 bytes"));
+        // `as_chunks` rather than `chunks_exact`, so the chunk arrives as
+        // `[u8; 4]` and not as a slice that has to be asserted back into one.
+        // The `expect("4 bytes")` that assertion needed was a panic the type
+        // system can rule out instead, and clippy began saying so in 1.99.
+        for (i, chunk) in block.as_chunks::<4>().0.iter().enumerate() {
+            schedule[i] = u32::from_be_bytes(*chunk);
         }
         for i in 16..64 {
             let s0 = schedule[i - 15].rotate_right(7)

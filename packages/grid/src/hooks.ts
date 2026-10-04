@@ -94,14 +94,12 @@ export const EXTRA_HOOK_NAMES = [
   'modifyColHeaderLevels',
   /** Replaces the column header's structure, for a nested header. */
   'modifyColHeaderRows',
+  /** A value arriving from a loader failed `sourceDataValidator`. */
+  'afterSourceDataValidate',
   /** A verification finished. */
   'afterVerify',
   /** A comparison against a snapshot finished. */
   'afterDiff',
-  /** A page of rows arrived from a data provider, or failed to. */
-  'beforeFetch',
-  'afterFetch',
-  'afterFetchError',
 ] as const;
 
 export type HookName = (typeof HOOK_NAMES)[number] | (typeof EXTRA_HOOK_NAMES)[number];
@@ -200,6 +198,37 @@ export class Hooks {
     }
     this.#compact(name);
     return current;
+  }
+
+  /**
+   * Announces that something happened, handing the handlers exactly what they
+   * were given.
+   *
+   * `run` threads a value through the handlers, which is what `modifyColWidth`
+   * and its kind need. A notification has no value to thread, and every caller
+   * of one was passing `undefined` into that slot — so a handler registered for
+   * `afterHideRows` was called with `(null, [1, 2])` rather than `([1, 2])`, and
+   * the argument a reader would reach for first was a placeholder the plugin
+   * never meant to send.
+   *
+   * Return values are ignored here on purpose: there is nothing to modify, and
+   * letting a handler return one would quietly make this a `run`.
+   */
+  notify(name: string, ...args: unknown[]): void {
+    const bucket = this.#buckets.get(name);
+    if (!bucket) {
+      return;
+    }
+    for (const registration of [...bucket]) {
+      if (registration.removed) {
+        continue;
+      }
+      registration.handler(...args);
+      if (registration.once) {
+        registration.removed = true;
+      }
+    }
+    this.#compact(name);
   }
 
   /**
